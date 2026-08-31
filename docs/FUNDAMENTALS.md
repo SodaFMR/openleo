@@ -113,7 +113,7 @@ Convert it to dBm and watts.
 
 #### Answer
 
-- dBm: `-124.805877641 + 30 = -94.805877641 dBm`
+- dBm: $-124.805877641+30=-94.805877641\,\mathrm{dBm}$
 - watts: $10^{-124.805877641/10}=3.3068\times10^{-13}\,\mathrm{W}$
 
 Checkpoint answers:
@@ -289,7 +289,7 @@ At `2026-08-30T06:18:50Z`, OpenLEO reports:
 - slant range: `473,676.7193 m`
 
 The ISS is high in the north-eastern sky. Its zenith distance is
-`90° - 61.5800° = 28.4200°`.
+$90^\circ-61.5800^\circ=28.4200^\circ$.
 
 The pass uses a 10° elevation mask. Sampled AOS and LOS are the first and last
 10-second grid samples meeting that mask; they are not interpolated continuous-time
@@ -506,7 +506,7 @@ The focused receiver-chain test uses:
 
 OpenLEO obtains:
 
-- received carrier: `10 + 20 - 161 - 2 = -133 dBW`
+- received carrier: $10+20-161-2=-133\,\mathrm{dBW}$
 - noise density: `-205.588867217 dBW/Hz`
 - `C/N0`: `72.588867217 dB-Hz`
 - SNR: `12.588867217 dB`
@@ -542,9 +542,9 @@ the new carrier power, `C/N0`, and SNR. All other values remain unchanged.
 
 #### Answer
 
-- carrier: `13 + 20 - 161 - 2 = -130 dBW`
-- `C/N0`: `-130 - (-205.588867) = 75.588867 dB-Hz`
-- SNR: `75.588867 - 10 log10(1e6) = 15.588867 dB`
+- carrier: $13+20-161-2=-130\,\mathrm{dBW}$
+- `C/N0`: $-130-(-205.588867)=75.588867\,\mathrm{dB\,Hz}$
+- SNR: $75.588867-10\log_{10}(10^6)=15.588867\,\mathrm{dB}$
 
 Each logarithmic carrier metric rises exactly 3 dB. The Shannon bound rises
 non-linearly because it is calculated after converting SNR back to a linear ratio.

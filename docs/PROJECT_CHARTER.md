@@ -353,7 +353,7 @@ Initial hand-check values include:
 - Doppler magnitude at 2.2 GHz and 6 km/s: approximately 44.0 kHz; and
 - `C/N0` for 10 dBW EIRP, 161 dB total loss, and 0 dB/K `G/T`:
   approximately 77.6 dB-Hz. The same `G/T` is obtained, for example, from
-  `G_rx = 23.0103 dBi` and `T_sys = 200 K`.
+  $G_{\mathrm{rx}}=23.0103\,\mathrm{dBi}$ and $T_{\mathrm{sys}}=200\,\mathrm{K}$.
 
 ## 11. Uncertainty policy
 

@@ -32,7 +32,7 @@ Tests use literal values calculated independently of production helpers for vacu
 delay, first-order Doppler, free-space path loss, receiver noise, and Shannon capacity.
 The charter receiver check uses 10 dBW EIRP, 161 dB path loss, 23.010299956639813 dBi
 receiver gain, 200 K system noise temperature, and zero miscellaneous loss to obtain
-`C/N0 = 77.59916717321767 dB-Hz`.
+$C/N_0=77.59916717321767\,\mathrm{dB\,Hz}$.
 
 The range-rate and Doppler sign checks encode the public convention: approach has
 negative range rate and positive downlink Doppler; departure has positive range rate
@@ -43,7 +43,8 @@ strictly increase.
 
 At the frozen pass's closest sampled approach, the reported radial range rate is
 compared with the central finite difference
-`(range[i+1] - range[i-1]) / 20 s`. The absolute tolerance is `0.5 m/s`, allowing the
+$\left(\rho_{i+1}-\rho_{i-1}\right)/(20\,\mathrm{s})$. The absolute tolerance is
+`0.5 m/s`, allowing the
 expected truncation error of a 10-second sample interval without reusing the engine's
 range-rate calculation.
 
