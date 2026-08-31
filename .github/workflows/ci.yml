@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
@@ -30,13 +33,13 @@ jobs:
             full-checks: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: ${{ matrix.python-version }}
 
-      - run: uv sync --locked --group dev
+      - run: uv sync --locked --group dev --extra plot
 
       - run: uv run ruff check src tests
 
@@ -70,5 +73,12 @@ jobs:
           print(f"sdist members clean: {archives[0]}")
           PY
 
+      - run: uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
+
+      - run: uv run openleo plot runs/iss --output runs/iss/pass-overview.svg
+
       - if: matrix.full-checks
-        run: uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
+        run: uv run openleo plot runs/iss --output docs/images/iss-cartagena-pass-overview.svg
+
+      - if: matrix.full-checks
+        run: git diff --exit-code -- docs/images/iss-cartagena-pass-overview.svg

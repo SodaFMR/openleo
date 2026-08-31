@@ -21,7 +21,7 @@ Prerequisites:
 Recommended setup:
 
 ```bash
-uv sync --group dev
+uv sync --locked --group dev --extra plot
 ```
 
 Standard Python fallback:
@@ -45,7 +45,7 @@ Windows PowerShell:
 Then install the package and development tools:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[plot]"
 python -m pip install build pytest pytest-cov ruff
 ```
 
@@ -53,14 +53,16 @@ python -m pip install build pytest pytest-cov ruff
 
 ```bash
 uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
+uv run openleo plot runs/iss --output runs/iss/pass-overview.svg
 ```
 
-The command exits with status 0 and writes:
+The commands exit with status 0 and write:
 
 - `runs/iss/trace.csv`
 - `runs/iss/summary.json`
+- `runs/iss/pass-overview.svg`
 
-It also prints stable labels suitable for CI:
+They also print stable labels suitable for CI:
 
 ```text
 scenario: iss-cartagena-s-band-free-space
@@ -69,6 +71,7 @@ sampled AOS: 2026-08-30T06:15:30Z
 sampled LOS: 2026-08-30T06:22:00Z
 trace: runs/iss/trace.csv
 summary: runs/iss/summary.json
+plot: runs/iss/pass-overview.svg
 ```
 
 `runs/` is ignored by Git so regenerated examples do not pollute commits.
@@ -77,6 +80,17 @@ The ISS pass geometry is sourced from the frozen CelesTrak GP record described i
 [THIRD_PARTY_DATA.md](THIRD_PARTY_DATA.md). All RF values in the example scenario
 are synthetic OpenLEO assumptions, not measurements of ISS hardware, Cartagena
 station hardware, commercial service, or achieved throughput.
+
+![ISS Cartagena pass overview: sky track, Doppler, C/N₀, and capacity upper bound](docs/images/iss-cartagena-pass-overview.svg)
+
+The figure reads the frozen `trace.csv` and `summary.json` artifacts; it does not
+recompute the pass. Its orbital geometry is frozen and its RF inputs are synthetic.
+It is free-space only, and its Shannon-Hartley curve is an upper bound, not throughput.
+Regenerate the committed figure after the command above with:
+
+```bash
+uv run openleo plot runs/iss --output docs/images/iss-cartagena-pass-overview.svg
+```
 
 Repository attributes force LF endings for frozen CSV and JSON inputs so their
 raw-byte fingerprints remain identical on Linux, macOS, and Windows.
@@ -157,12 +171,15 @@ Then read the source in this order:
 5. [src/openleo/simulation.py](src/openleo/simulation.py) for pass assembly and
    integration.
 6. [src/openleo/output.py](src/openleo/output.py) for deterministic CSV/JSON output.
-7. [src/openleo/cli.py](src/openleo/cli.py) for the `openleo run` command.
+7. [src/openleo/plotting.py](src/openleo/plotting.py) for static plots from completed
+   run artifacts.
+8. [src/openleo/cli.py](src/openleo/cli.py) for the `openleo run` and `openleo plot`
+   commands.
 
 ## Verification Commands
 
 ```bash
-uv sync --locked --group dev
+uv sync --locked --group dev --extra plot
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run pytest --cov=openleo --cov-report=term-missing --cov-report=xml --cov-fail-under=80
@@ -185,6 +202,8 @@ assert not invalid, f"invalid sdist members: {invalid}"
 print(f"sdist members clean: {archives[0]}")
 PY
 uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
+uv run openleo plot runs/iss --output runs/iss/pass-overview.svg
+uv run openleo plot runs/iss --output runs/iss/pass-overview.png
 uvx cffconvert --validate
 git diff --check
 ```
@@ -202,7 +221,8 @@ real RF link.
 
 ## Roadmap
 
-- v0.1: deterministic free-space pass trace, CLI, example, tests, and CI.
+- v0.1: deterministic free-space pass trace, static pass overview, CLI, example, tests,
+  and CI.
 - v0.2: propagation-model subsets and uncertainty/sensitivity reporting.
 - v0.3: adaptive link state with cited thresholds and useful-rate estimates.
 - v0.4: network-simulator trace export and fixed-versus-dynamic comparison.

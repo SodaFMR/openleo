@@ -1,3 +1,4 @@
+import builtins
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,59 @@ def test_main_help_uses_standard_argparse_exit(capsys) -> None:
 
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
-    assert "run" in captured.out
-    assert "scenario" in captured.out
-    assert "--output" in captured.out
+    assert "run a scenario" in captured.out
+    assert "render a completed pass overview" in captured.out
+    assert "openleo run SCENARIO.json --output DIRECTORY" in captured.out
+    assert "openleo plot RUN_DIRECTORY --output FILE.svg" in captured.out
+
+
+def test_main_plot_writes_svg_and_stable_success_label(tmp_path, capsys) -> None:
+    run_directory = tmp_path / "run"
+    output_path = tmp_path / "overview.svg"
+    assert main(["run", str(FROZEN_SCENARIO), "--output", str(run_directory)]) == 0
+    capsys.readouterr()
+
+    assert main(["plot", str(run_directory), "--output", str(output_path)]) == 0
+
+    assert output_path.is_file()
+    assert output_path.stat().st_size > 0
+    assert capsys.readouterr().out == f"plot: {output_path}\n"
+
+
+def test_main_plot_unsupported_suffix_returns_error_without_traceback(tmp_path, capsys) -> None:
+    run_directory = tmp_path / "run"
+    output_path = tmp_path / "overview.txt"
+    assert main(["run", str(FROZEN_SCENARIO), "--output", str(run_directory)]) == 0
+    capsys.readouterr()
+
+    assert main(["plot", str(run_directory), "--output", str(output_path)]) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.count("error:") == 1
+    assert "output_path must end in .svg or .png" in captured.err
+    assert "Traceback" not in captured.err
+    assert not output_path.exists()
+
+
+def test_main_plot_missing_matplotlib_returns_install_error(tmp_path, capsys, monkeypatch) -> None:
+    run_directory = tmp_path / "run"
+    output_path = tmp_path / "overview.svg"
+    assert main(["run", str(FROZEN_SCENARIO), "--output", str(run_directory)]) == 0
+    capsys.readouterr()
+    original_import = builtins.__import__
+
+    def block_matplotlib(name, *args, **kwargs):
+        if name == "matplotlib":
+            raise ModuleNotFoundError("No module named 'matplotlib'", name="matplotlib")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", block_matplotlib)
+
+    assert main(["plot", str(run_directory), "--output", str(output_path)]) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.count("error:") == 1
+    assert "install openleo-link[plot]" in captured.err
+    assert "Traceback" not in captured.err
