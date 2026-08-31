@@ -1,5 +1,6 @@
 import csv
 import json
+import re
 from math import hypot
 from pathlib import Path
 
@@ -59,6 +60,28 @@ def test_render_pass_overview_writes_svg_with_artifact_context(tmp_path: Path) -
     assert "test-pass" in svg
     assert LIMITATION in svg
     assert "a" * 64 in svg
+
+
+def test_render_pass_overview_svg_is_byte_stable(tmp_path: Path) -> None:
+    run = _write_run(tmp_path / "run")
+    first = tmp_path / "first.svg"
+    second = tmp_path / "second.svg"
+
+    render_pass_overview(run, first)
+    render_pass_overview(run, second)
+
+    assert first.read_bytes() == second.read_bytes()
+
+
+def test_render_pass_overview_reserves_space_for_the_limitation_footer(tmp_path: Path) -> None:
+    output = tmp_path / "pass-overview.svg"
+
+    render_pass_overview(_write_run(tmp_path / "run"), output)
+
+    svg = output.read_text(encoding="utf-8")
+    footer_y = _svg_text_y(svg, LIMITATION)
+    label_ys = _svg_text_ys(svg, "Minutes from sampled AOS")
+    assert footer_y - max(label_ys) >= 20
 
 
 def test_render_pass_overview_writes_png(tmp_path: Path) -> None:
@@ -124,3 +147,31 @@ def test_render_pass_overview_rejects_invalid_artifacts(
 
     with pytest.raises(ValueError, match=message):
         render_pass_overview(run, tmp_path / output_name)
+
+
+def test_render_pass_overview_rejects_oversized_summary_before_reading(tmp_path: Path) -> None:
+    run = _write_run(tmp_path / "run")
+    (run / "summary.json").write_bytes(b"x" * 10_000_001)
+
+    with pytest.raises(ValueError, match="summary.json exceeds 10000000 bytes"):
+        render_pass_overview(run, tmp_path / "pass-overview.svg")
+
+
+def test_render_pass_overview_rejects_more_than_100000_trace_rows(tmp_path: Path) -> None:
+    run = _write_run(tmp_path / "run")
+    row = "2026-08-30T06:15:30Z,20,10,1000,42,1000000\n"
+    (run / "trace.csv").write_text(",".join(FIELDS) + "\n" + row * 100_001, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="trace.csv exceeds 100000 rows"):
+        render_pass_overview(run, tmp_path / "pass-overview.svg")
+
+
+def _svg_text_ys(svg: str, text: str) -> list[float]:
+    pattern = rf'<text[^>]* y="([0-9.]+)"[^>]*>{re.escape(text)}</text>'
+    return [float(value) for value in re.findall(pattern, svg)]
+
+
+def _svg_text_y(svg: str, text: str) -> float:
+    values = _svg_text_ys(svg, text)
+    assert len(values) == 1
+    return values[0]

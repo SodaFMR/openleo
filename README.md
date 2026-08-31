@@ -85,6 +85,11 @@ station hardware, commercial service, or achieved throughput.
 The figure reads the frozen `trace.csv` and `summary.json` artifacts; it does not
 recompute the pass. Its orbital geometry is frozen and its RF inputs are synthetic.
 It is free-space only, and its Shannon-Hartley curve is an upper bound, not throughput.
+Regenerate the committed figure after the command above with:
+
+```bash
+uv run openleo plot runs/iss --output docs/images/iss-cartagena-pass-overview.svg
+```
 
 Repository attributes force LF endings for frozen CSV and JSON inputs so their
 raw-byte fingerprints remain identical on Linux, macOS, and Windows.

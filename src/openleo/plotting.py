@@ -6,7 +6,7 @@ import csv
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from itertools import pairwise
+from itertools import islice, pairwise
 from math import isfinite, pi
 from pathlib import Path
 from typing import Any
@@ -23,6 +23,8 @@ _LIMITATION = (
     "Frozen orbital geometry; synthetic RF inputs; free-space only; "
     "Shannon-Hartley upper bound, not throughput."
 )
+_MAX_ARTIFACT_BYTES = 10_000_000
+_MAX_TRACE_ROWS = 100_000
 
 
 @dataclass(frozen=True)
@@ -50,12 +52,12 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
     import matplotlib
 
     matplotlib.use("Agg")
-    matplotlib.rcParams["svg.fonttype"] = "none"
     from matplotlib import pyplot as plt
 
     start = rows[0].timestamp
     minutes = tuple((row.timestamp - start).total_seconds() / 60.0 for row in rows)
     figure = plt.figure(figsize=(12, 7), facecolor="white", layout="constrained")
+    figure.get_layout_engine().set(rect=(0.0, 0.08, 1.0, 1.0))
     grid = figure.add_gridspec(2, 2)
     polar = figure.add_subplot(grid[0, 0], projection="polar")
     doppler = figure.add_subplot(grid[0, 1])
@@ -97,8 +99,10 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
             f"openleo={summary['openleo_version']}; matplotlib={matplotlib.__version__}"
         ),
         "Creator": "OpenLEO",
+        "Date": None,
     }
-    figure.savefig(output, dpi=200 if suffix == ".png" else None, metadata=metadata)
+    with matplotlib.rc_context({"svg.fonttype": "none", "svg.hashsalt": "openleo-pass-overview"}):
+        figure.savefig(output, dpi=200 if suffix == ".png" else None, metadata=metadata)
     plt.close(figure)
     return output
 
@@ -112,6 +116,7 @@ def _line(axis: Any, minutes: tuple[float, ...], values: tuple[float, ...], labe
 
 def _read_summary(path: Path) -> dict[str, str | int]:
     try:
+        _check_artifact_size(path)
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"could not read summary.json: {exc}") from exc
@@ -158,20 +163,29 @@ def _summary_int(value: dict[str, Any], key: str) -> int:
 
 def _read_rows(path: Path) -> tuple[_Row, ...]:
     try:
+        _check_artifact_size(path)
         with path.open(encoding="utf-8", newline="") as file:
             reader = csv.DictReader(file)
             fields = reader.fieldnames or []
             for field in _TRACE_FIELDS:
                 if field not in fields:
                     raise ValueError(f"trace.csv missing required field: {field}")
-            rows = tuple(_parse_row(row) for row in reader)
+            raw_rows = tuple(islice(reader, _MAX_TRACE_ROWS + 1))
     except (OSError, UnicodeError, csv.Error) as exc:
         raise ValueError(f"could not read trace.csv: {exc}") from exc
+    if len(raw_rows) > _MAX_TRACE_ROWS:
+        raise ValueError(f"trace.csv exceeds {_MAX_TRACE_ROWS} rows")
+    rows = tuple(_parse_row(row) for row in raw_rows)
     if not rows:
         raise ValueError("trace.csv must contain at least one row")
     if any(left.timestamp >= right.timestamp for left, right in pairwise(rows)):
         raise ValueError("trace.csv timestamps must be strictly increasing")
     return rows
+
+
+def _check_artifact_size(path: Path) -> None:
+    if path.stat().st_size > _MAX_ARTIFACT_BYTES:
+        raise ValueError(f"{path.name} exceeds {_MAX_ARTIFACT_BYTES} bytes")
 
 
 def _parse_row(value: dict[str, str | None]) -> _Row:
