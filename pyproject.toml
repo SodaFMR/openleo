@@ -13,6 +13,9 @@ dependencies = [
     "skyfield>=1.55",
 ]
 
+[project.optional-dependencies]
+plot = ["matplotlib>=3.11"]
+
 [project.scripts]
 openleo = "openleo.cli:main"
 
