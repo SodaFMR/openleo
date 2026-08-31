@@ -84,6 +84,15 @@ def test_render_pass_overview_reserves_space_for_the_limitation_footer(tmp_path:
     assert footer_y - max(label_ys) >= 20
 
 
+def test_render_pass_overview_reserves_space_for_the_scenario_title(tmp_path: Path) -> None:
+    output = tmp_path / "pass-overview.svg"
+
+    render_pass_overview(_write_run(tmp_path / "run"), output)
+
+    svg = output.read_text(encoding="utf-8")
+    assert _svg_text_y(svg, "Sky track") - _svg_text_y(svg, "test-pass") >= 20
+
+
 def test_render_pass_overview_writes_png(tmp_path: Path) -> None:
     output = tmp_path / "pass-overview.png"
 
@@ -154,6 +163,51 @@ def test_render_pass_overview_rejects_oversized_summary_before_reading(tmp_path:
     (run / "summary.json").write_bytes(b"x" * 10_000_001)
 
     with pytest.raises(ValueError, match="summary.json exceeds 10000000 bytes"):
+        render_pass_overview(run, tmp_path / "pass-overview.svg")
+
+
+def test_render_pass_overview_accepts_a_trace_larger_than_the_summary_limit(
+    tmp_path: Path,
+) -> None:
+    run = _write_run(tmp_path / "run")
+    path = run / "trace.csv"
+    summary = json.loads((run / "summary.json").read_text(encoding="utf-8"))
+    summary.update(
+        row_count=100,
+        sampled_aos_utc="2026-08-30T06:00:00Z",
+        sampled_los_utc="2026-08-30T06:01:39Z",
+    )
+    (run / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+    path.write_text(
+        ",".join((*FIELDS, "padding"))
+        + "\n"
+        + "\n".join(
+            ",".join(
+                (
+                    f"2026-08-30T06:{index // 60:02}:{index % 60:02}Z",
+                    "20",
+                    "10",
+                    "1000",
+                    "42",
+                    "1000000",
+                    "x" * 110_000,
+                )
+            )
+            for index in range(100)
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    render_pass_overview(run, tmp_path / "pass-overview.svg")
+
+
+def test_render_pass_overview_rejects_oversized_trace_before_reading(tmp_path: Path) -> None:
+    run = _write_run(tmp_path / "run")
+    with (run / "trace.csv").open("r+b") as file:
+        file.truncate(50_000_001)
+
+    with pytest.raises(ValueError, match="trace.csv exceeds 50000000 bytes"):
         render_pass_overview(run, tmp_path / "pass-overview.svg")
 
 

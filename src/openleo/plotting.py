@@ -23,7 +23,8 @@ _LIMITATION = (
     "Frozen orbital geometry; synthetic RF inputs; free-space only; "
     "Shannon-Hartley upper bound, not throughput."
 )
-_MAX_ARTIFACT_BYTES = 10_000_000
+_MAX_SUMMARY_BYTES = 10_000_000
+_MAX_TRACE_BYTES = 50_000_000
 _MAX_TRACE_ROWS = 100_000
 
 
@@ -57,7 +58,7 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
     start = rows[0].timestamp
     minutes = tuple((row.timestamp - start).total_seconds() / 60.0 for row in rows)
     figure = plt.figure(figsize=(12, 7), facecolor="white", layout="constrained")
-    figure.get_layout_engine().set(rect=(0.0, 0.08, 1.0, 1.0))
+    figure.get_layout_engine().set(rect=(0.0, 0.08, 1.0, 0.90))
     grid = figure.add_gridspec(2, 2)
     polar = figure.add_subplot(grid[0, 0], projection="polar")
     doppler = figure.add_subplot(grid[0, 1])
@@ -86,10 +87,7 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
         tuple(row.capacity_bps / 1_000_000.0 for row in rows),
         "Capacity upper bound (Mbit/s)",
     )
-    figure.suptitle(
-        f"{summary['scenario_name']}\nScenario SHA-256: {summary['scenario_hash']}",
-        fontsize="large",
-    )
+    figure.suptitle(str(summary["scenario_name"]), fontsize="large")
     figure.text(0.5, 0.01, _LIMITATION, ha="center", fontsize="small")
     output.parent.mkdir(parents=True, exist_ok=True)
     metadata = {
@@ -116,7 +114,7 @@ def _line(axis: Any, minutes: tuple[float, ...], values: tuple[float, ...], labe
 
 def _read_summary(path: Path) -> dict[str, str | int]:
     try:
-        _check_artifact_size(path)
+        _check_artifact_size(path, _MAX_SUMMARY_BYTES)
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"could not read summary.json: {exc}") from exc
@@ -163,7 +161,7 @@ def _summary_int(value: dict[str, Any], key: str) -> int:
 
 def _read_rows(path: Path) -> tuple[_Row, ...]:
     try:
-        _check_artifact_size(path)
+        _check_artifact_size(path, _MAX_TRACE_BYTES)
         with path.open(encoding="utf-8", newline="") as file:
             reader = csv.DictReader(file)
             fields = reader.fieldnames or []
@@ -183,9 +181,9 @@ def _read_rows(path: Path) -> tuple[_Row, ...]:
     return rows
 
 
-def _check_artifact_size(path: Path) -> None:
-    if path.stat().st_size > _MAX_ARTIFACT_BYTES:
-        raise ValueError(f"{path.name} exceeds {_MAX_ARTIFACT_BYTES} bytes")
+def _check_artifact_size(path: Path, maximum: int) -> None:
+    if path.stat().st_size > maximum:
+        raise ValueError(f"{path.name} exceeds {maximum} bytes")
 
 
 def _parse_row(value: dict[str, str | None]) -> _Row:
