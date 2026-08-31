@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openleo-link"
+version = "0.1.0"
+description = "Reproducible time-varying link traces for LEO satellite research"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "skyfield>=1.55",
+]
+
+[project.scripts]
+openleo = "openleo.cli:main"
+
+[dependency-groups]
+dev = [
+    "build>=1.3",
+    "pytest>=8.4",
+    "pytest-cov>=6.2",
+    "ruff>=0.12",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openleo"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.coverage",
+    "/coverage.xml",
+    "/runs/",
+    "/dist/",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

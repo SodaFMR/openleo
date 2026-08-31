@@ -1,0 +1,111 @@
+# Contributing
+
+OpenLEO work is English-only for code, documentation, commit messages, issues, pull
+requests, examples, and generated artifacts intended for the repository.
+
+## Setup
+
+Recommended:
+
+```bash
+uv sync --group dev
+```
+
+Standard Python fallback:
+
+```bash
+python -m venv .venv
+```
+
+Activate the virtual environment:
+
+```bash
+source .venv/bin/activate
+```
+
+Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Then install the package and development tools:
+
+```bash
+python -m pip install -e .
+python -m pip install build pytest pytest-cov ruff
+```
+
+## Development Workflow
+
+Use focused branches named for the change, such as:
+
+- `feat/pass-trace`
+- `fix/reject-naive-timestamps`
+- `docs/link-budget-note`
+- `ci/platform-matrix`
+
+Use Conventional Commits:
+
+```text
+feat: add visible pass simulation
+fix: reject invalid RF bandwidth
+docs: explain synthetic RF assumptions
+test: cover CLI input errors
+ci: test supported Python versions
+```
+
+Behavior changes follow TDD:
+
+1. Add one failing test for the behavior.
+2. Run the focused test and confirm the expected failure.
+3. Implement the smallest correct change.
+4. Run the focused test again.
+5. Run the full verification commands before committing.
+
+Coverage must stay at or above 80%.
+
+## Scientific Provenance
+
+Read [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md) before changing scientific
+behavior.
+
+Every external scientific input must record its source URL, retrieval timestamp,
+terms or license URL, checksum when practical, units, and assumptions. Synthetic
+scenarios must be labelled synthetic even when their orbital geometry is sourced
+from public records.
+
+The frozen ISS example uses real/frozen CelesTrak GP geometry. Its RF values are
+synthetic OpenLEO assumptions. See [THIRD_PARTY_DATA.md](THIRD_PARTY_DATA.md).
+
+Do not claim PyPI publication, DOI, calibrated validation, peer-reviewed results,
+operator performance, achieved throughput, or commercial service behavior unless
+the repository contains the supporting release or evidence.
+
+## Required Checks
+
+Run these before opening a pull request:
+
+```bash
+uv sync --locked --group dev
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run pytest --cov=openleo --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+uv run python -m build
+uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
+git diff --check
+```
+
+Inspect `runs/iss/summary.json` when documentation or examples mention reference
+values. Leave `runs/` untracked.
+
+## Pull Requests
+
+Pull requests should state:
+
+- the scientific or software change;
+- assumptions and provenance;
+- tests and generated artifacts;
+- cross-platform impact;
+- limitations or deferred work; and
+- any data terms that apply.

@@ -1,0 +1,3 @@
+# Scientific input fingerprints cover raw bytes; keep them identical on every OS.
+examples/data/** text eol=lf
+examples/scenarios/** text eol=lf
