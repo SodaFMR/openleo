@@ -21,7 +21,7 @@ Prerequisites:
 Recommended setup:
 
 ```bash
-uv sync --group dev
+uv sync --locked --group dev --extra plot
 ```
 
 Standard Python fallback:
@@ -45,7 +45,7 @@ Windows PowerShell:
 Then install the package and development tools:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[plot]"
 python -m pip install build pytest pytest-cov ruff
 ```
 
@@ -53,12 +53,14 @@ python -m pip install build pytest pytest-cov ruff
 
 ```bash
 uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
+uv run openleo plot runs/iss --output runs/iss/pass-overview.svg
 ```
 
-The command exits with status 0 and writes:
+The commands exit with status 0 and write:
 
 - `runs/iss/trace.csv`
 - `runs/iss/summary.json`
+- `runs/iss/pass-overview.svg`
 
 It also prints stable labels suitable for CI:
 
@@ -77,6 +79,12 @@ The ISS pass geometry is sourced from the frozen CelesTrak GP record described i
 [THIRD_PARTY_DATA.md](THIRD_PARTY_DATA.md). All RF values in the example scenario
 are synthetic OpenLEO assumptions, not measurements of ISS hardware, Cartagena
 station hardware, commercial service, or achieved throughput.
+
+![ISS Cartagena pass overview: sky track, Doppler, C/N₀, and capacity upper bound](docs/images/iss-cartagena-pass-overview.svg)
+
+The figure reads the frozen `trace.csv` and `summary.json` artifacts; it does not
+recompute the pass. Its orbital geometry is frozen and its RF inputs are synthetic.
+It is free-space only, and its Shannon-Hartley curve is an upper bound, not throughput.
 
 Repository attributes force LF endings for frozen CSV and JSON inputs so their
 raw-byte fingerprints remain identical on Linux, macOS, and Windows.
@@ -157,12 +165,15 @@ Then read the source in this order:
 5. [src/openleo/simulation.py](src/openleo/simulation.py) for pass assembly and
    integration.
 6. [src/openleo/output.py](src/openleo/output.py) for deterministic CSV/JSON output.
-7. [src/openleo/cli.py](src/openleo/cli.py) for the `openleo run` command.
+7. [src/openleo/plotting.py](src/openleo/plotting.py) for static plots from completed
+   run artifacts.
+8. [src/openleo/cli.py](src/openleo/cli.py) for the `openleo run` and `openleo plot`
+   commands.
 
 ## Verification Commands
 
 ```bash
-uv sync --locked --group dev
+uv sync --locked --group dev --extra plot
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run pytest --cov=openleo --cov-report=term-missing --cov-report=xml --cov-fail-under=80
@@ -185,6 +196,8 @@ assert not invalid, f"invalid sdist members: {invalid}"
 print(f"sdist members clean: {archives[0]}")
 PY
 uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
+uv run openleo plot runs/iss --output runs/iss/pass-overview.svg
+uv run openleo plot runs/iss --output runs/iss/pass-overview.png
 uvx cffconvert --validate
 git diff --check
 ```

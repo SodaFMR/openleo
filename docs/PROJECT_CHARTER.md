@@ -701,6 +701,8 @@ reference.
 
 - implement and hand-validate FSPL, noise, `C/N0`, SNR, and theoretical capacity;
 - produce deterministic trace and summary files;
+- render a static pass overview directly from frozen trace and summary artifacts, with
+  frozen geometry, synthetic RF inputs, and theoretical-capacity limitations visible;
 - integrate theoretical capacity over the pass; and
 - run the same scenario across supported operating systems.
 
@@ -835,6 +837,8 @@ v0.1 is complete only when a new contributor on Linux, macOS, or Windows can:
 9. inspect the source distribution to exclude generated, local, absolute, or private
    worktree artifacts; and
 10. see the same required CI checks pass on the pull request.
+11. regenerate the documented static pass overview from the frozen CSV/JSON artifacts
+    without recomputing the scenario, while retaining its visible scientific limitations.
 
 The release must also have at least 80% coverage, no critical or high-severity review
 findings, an OSI-approved license, citation metadata, and an archived version tag.

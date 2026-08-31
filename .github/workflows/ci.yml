@@ -36,7 +36,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - run: uv sync --locked --group dev
+      - run: uv sync --locked --group dev --extra plot
 
       - run: uv run ruff check src tests
 
@@ -70,5 +70,12 @@ jobs:
           print(f"sdist members clean: {archives[0]}")
           PY
 
+      - run: uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
+
+      - run: uv run openleo plot runs/iss --output runs/iss/pass-overview.svg
+
       - if: matrix.full-checks
-        run: uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
+        run: uv run openleo plot runs/iss --output docs/images/iss-cartagena-pass-overview.svg
+
+      - if: matrix.full-checks
+        run: git diff --exit-code -- docs/images/iss-cartagena-pass-overview.svg
