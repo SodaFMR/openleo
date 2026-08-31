@@ -1,8 +1,10 @@
 import csv
 import json
+from math import hypot
 from pathlib import Path
 
 import pytest
+from matplotlib import pyplot as plt
 
 from openleo.plotting import render_pass_overview
 
@@ -65,6 +67,24 @@ def test_render_pass_overview_writes_png(tmp_path: Path) -> None:
     render_pass_overview(_write_run(tmp_path / "run"), output)
 
     assert output.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_render_pass_overview_places_zenith_at_the_polar_centre(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    figures = []
+    close = plt.close
+    monkeypatch.setattr(plt, "close", figures.append)
+
+    render_pass_overview(_write_run(tmp_path / "run"), tmp_path / "pass-overview.svg")
+
+    polar = next(axis for axis in figures[-1].axes if axis.name == "polar")
+    centre = polar.transAxes.transform((0.5, 0.5))
+    zenith = polar.transData.transform((0.0, 0.0))
+    horizon = polar.transData.transform((0.0, 90.0))
+    close(figures[-1])
+    assert hypot(*(zenith - centre)) < 1.0
+    assert hypot(*(horizon - centre)) > 1.0
 
 
 @pytest.mark.parametrize(

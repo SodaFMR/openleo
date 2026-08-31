@@ -73,7 +73,7 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
         row = rows[index]
         polar.scatter(row.azimuth_deg * pi / 180.0, 90.0 - row.elevation_deg, label=label)
     polar.set_title("Sky track")
-    polar.set_rlim(90.0, 0.0)
+    polar.set_rlim(0.0, 90.0)
     polar.legend(loc="lower left", bbox_to_anchor=(1.02, 0.0), fontsize="small")
 
     _line(doppler, minutes, tuple(row.doppler_hz / 1_000.0 for row in rows), "Doppler (kHz)")
