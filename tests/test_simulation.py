@@ -110,6 +110,17 @@ def test_load_orbit_rejects_multiple_gp_records(tmp_path) -> None:
         load_orbit(_source(path), load.timescale(builtin=True))
 
 
+def test_load_orbit_rejects_oversized_gp_csv_before_hashing_or_decoding(tmp_path) -> None:
+    path = tmp_path / "oversized-orbit.csv"
+    path.write_bytes(b" " * 1_000_001)
+
+    with pytest.raises(ValueError) as exc_info:
+        load_orbit(_source(path, "0" * 64), load.timescale(builtin=True))
+
+    assert str(path) in str(exc_info.value)
+    assert "GP CSV exceeds 1000000 bytes" in str(exc_info.value)
+
+
 def test_simulate_scenario_reproduces_frozen_pass() -> None:
     from openleo.simulation import simulate_scenario
 

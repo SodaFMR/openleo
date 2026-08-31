@@ -41,7 +41,7 @@ def _write_run(directory: Path) -> Path:
                 "schema_version": "1",
                 "scenario_name": "test-pass",
                 "provenance": {"scenario": {"sha256": "a" * 64}},
-                "versions": {"openleo-link": "0.1.0"},
+                "versions": {"openleo-link": "0.2.0a1"},
                 "row_count": 3,
                 "sampled_aos_utc": "2026-08-30T06:15:30Z",
                 "sampled_los_utc": "2026-08-30T06:17:30Z",
@@ -103,6 +103,47 @@ def test_render_pass_overview_writes_png(tmp_path: Path) -> None:
     x_dpi, y_dpi = _png_dpi(output.read_bytes())
     assert x_dpi == pytest.approx(200, abs=0.1)
     assert y_dpi == pytest.approx(200, abs=0.1)
+
+
+def test_render_pass_overview_uses_fixed_large_geometry_and_typography(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    figures = []
+    close = plt.close
+    monkeypatch.setattr(plt, "close", figures.append)
+
+    render_pass_overview(_write_run(tmp_path / "run"), tmp_path / "pass-overview.svg")
+
+    figure = figures[-1]
+    try:
+        assert tuple(figure.get_size_inches()) == pytest.approx((15.0, 9.0))
+        assert figure.get_layout_engine() is None
+        grid = figure.axes[0].get_subplotspec().get_gridspec()
+        assert (grid.left, grid.right, grid.bottom, grid.top) == pytest.approx(
+            (0.055, 0.965, 0.14, 0.87)
+        )
+        assert (grid.wspace, grid.hspace) == pytest.approx((0.27, 0.30))
+        assert figure._suptitle.get_fontsize() == 16
+        assert all(axis.title.get_fontsize() == 13 for axis in figure.axes)
+        assert all(
+            label.get_fontsize() == 11
+            for axis in figure.axes
+            for label in (axis.xaxis.label, axis.yaxis.label)
+            if label.get_text()
+        )
+        assert all(
+            label.get_fontsize() == 10
+            for axis in figure.axes
+            for label in (*axis.get_xticklabels(), *axis.get_yticklabels())
+        )
+        assert all(axis.lines[0].get_linewidth() == 2.0 for axis in figure.axes)
+        polar = next(axis for axis in figure.axes if axis.name == "polar")
+        assert all(tuple(collection.get_sizes()) == (55,) for collection in polar.collections)
+        assert all(text.get_fontsize() == 10 for text in polar.get_legend().get_texts())
+        footer = next(text for text in figure.texts if text.get_text() == LIMITATION)
+        assert footer.get_fontsize() == 10
+    finally:
+        close(figure)
 
 
 def test_render_pass_overview_places_zenith_at_the_polar_centre(

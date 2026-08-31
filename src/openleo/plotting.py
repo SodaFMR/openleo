@@ -64,17 +64,17 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
 
     start = rows[0].timestamp
     minutes = tuple((row.timestamp - start).total_seconds() / 60.0 for row in rows)
-    figure = plt.figure(figsize=(12, 7), facecolor="white", layout="none")
+    figure = plt.figure(figsize=(15, 9), facecolor="white", layout="none")
     try:
         grid = figure.add_gridspec(
             2,
             2,
-            left=0.06,
-            right=0.96,
-            bottom=0.15,
-            top=0.86,
-            wspace=0.25,
-            hspace=0.25,
+            left=0.055,
+            right=0.965,
+            bottom=0.14,
+            top=0.87,
+            wspace=0.27,
+            hspace=0.30,
         )
         polar = figure.add_subplot(grid[0, 0], projection="polar")
         doppler = figure.add_subplot(grid[0, 1])
@@ -86,6 +86,7 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
             tuple(row.azimuth_deg * pi / 180.0 for row in rows),
             tuple(90.0 - row.elevation_deg for row in rows),
             color="#0072B2",
+            linewidth=2.0,
         )
         maximum = max(range(len(rows)), key=lambda index: rows[index].elevation_deg)
         for index, label in (
@@ -94,11 +95,16 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
             (-1, "sampled LOS"),
         ):
             row = rows[index]
-            polar.scatter(row.azimuth_deg * pi / 180.0, 90.0 - row.elevation_deg, label=label)
-        polar.set_title("Sky track")
+            polar.scatter(
+                row.azimuth_deg * pi / 180.0,
+                90.0 - row.elevation_deg,
+                label=label,
+                s=55,
+            )
+        polar.set_title("Sky track", fontsize=13)
         polar.set_rlim(0.0, 90.0)
         polar.set_rgrids((20.0, 40.0, 60.0, 80.0), labels=("70°", "50°", "30°", "10°"))
-        polar.legend(loc="lower left", bbox_to_anchor=(1.02, 0.0), fontsize="small")
+        polar.legend(loc="lower left", bbox_to_anchor=(1.02, 0.0), fontsize=10)
 
         _line(
             doppler,
@@ -113,8 +119,11 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
             tuple(row.capacity_bps / 1_000_000.0 for row in rows),
             "Capacity upper bound (Mbit/s)",
         )
-        figure.suptitle(str(summary["scenario_name"]), fontsize="large")
-        figure.text(0.5, 0.01, _LIMITATION, ha="center", fontsize="small")
+        for axis in figure.axes:
+            axis.title.set_fontsize(13)
+            axis.tick_params(labelsize=10)
+        figure.suptitle(str(summary["scenario_name"]), fontsize=16)
+        figure.text(0.5, 0.01, _LIMITATION, ha="center", fontsize=10)
         output.parent.mkdir(parents=True, exist_ok=True)
         metadata = {
             "Title": str(summary["scenario_name"]),
@@ -135,9 +144,9 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
 
 
 def _line(axis: Any, minutes: tuple[float, ...], values: tuple[float, ...], label: str) -> None:
-    axis.plot(minutes, values, color="#D55E00")
-    axis.set_xlabel("Minutes from sampled AOS")
-    axis.set_ylabel(label)
+    axis.plot(minutes, values, color="#D55E00", linewidth=2.0)
+    axis.set_xlabel("Minutes from sampled AOS", fontsize=11)
+    axis.set_ylabel(label, fontsize=11)
     axis.grid()
 
 

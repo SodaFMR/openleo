@@ -88,17 +88,28 @@ Run these before opening a pull request:
 
 ```bash
 uv sync --locked --group dev --extra plot
+uv lock --check
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run pytest --cov=openleo --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 uv run python -m build
 uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
-uv run openleo plot runs/iss --output runs/iss/pass-overview.svg
+uv run openleo plot runs/iss --output docs/images/iss-cartagena-pass-overview.svg
+uv run openleo sensitivity examples/scenarios/iss_cartagena.json \
+  examples/sensitivity/iss_cartagena_oat.json --output runs/iss-sensitivity
+uv run openleo plot-sensitivity runs/iss-sensitivity \
+  --output docs/images/iss-cartagena-sensitivity-overview.svg
+uvx cffconvert --validate
+git diff --exit-code -- docs/images/iss-cartagena-pass-overview.svg \
+  docs/images/iss-cartagena-sensitivity-overview.svg
 git diff --check
 ```
 
-Inspect `runs/iss/summary.json` when documentation or examples mention reference
-values. Leave `runs/` untracked.
+Inspect `runs/iss/summary.json` and
+`runs/iss-sensitivity/sensitivity-summary.json` when documentation or examples mention
+reference values. Leave `runs/` untracked. Deterministic OAT ranges must not be described
+as uncertainty intervals, and heterogeneous RF sweep spans must not be ranked as though
+they were comparable uncertainties.
 
 ## Pull Requests
 

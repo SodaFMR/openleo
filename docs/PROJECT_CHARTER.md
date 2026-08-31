@@ -1,7 +1,7 @@
 # OpenLEO Research and Engineering Charter
 
 **Status:** Canonical project specification<br>
-**Last reviewed:** 2026-08-30<br>
+**Last reviewed:** 2026-08-31<br>
 **Working software name:** OpenLEO<br>
 **Planned distribution name:** `openleo-link`<br>
 **Planned import package and command:** `openleo`<br>
@@ -73,6 +73,11 @@ The following rules are non-negotiable:
   payload, beam, gateway, scheduler, interference, and protocol information.
 - Synthetic scenarios are labelled synthetic even when their orbital geometry is based
   on public constellation filings or element sets.
+- Public observed or fitted source data, synthetic assumptions, model-derived outputs,
+  and unavailable evidence are identified separately; a model output never inherits
+  the evidentiary status of a real input record.
+- Deterministic assumed ranges are never labelled probability, confidence, credible,
+  coverage, tolerance, or standard-uncertainty intervals.
 - Failed propagation, stale elements, invalid units, and non-finite results fail loudly
   or produce an explicit warning; they are never silently discarded.
 
@@ -151,11 +156,52 @@ v0.1 does not include:
   prediction; or
 - Starlink, Kuiper, OneWeb, or another operator’s actual performance.
 
-### 6.3 Later milestones
+### 6.3 v0.2a1: deterministic one-at-a-time sensitivity
+
+v0.2a1 asks how complete pass-level free-space outputs change when one explicitly
+declared input assumption changes and every other scenario field remains fixed. It
+adds no atmospheric model, probability distribution, input covariance, Monte Carlo
+method, or uncertainty interval.
+
+The canonical study contains 20 declared cases across sampling interval, elevation
+mask, EIRP, system-noise temperature, and miscellaneous loss. Each sweep contains the
+scenario value exactly once. The unchanged baseline is simulated once and reused for
+nominal rows; non-nominal cases are immutable scenario replacements that reuse the v0.1
+simulation without changing its physics.
+
+Public immutable types are `SensitivitySweep`, `SensitivityStudy`,
+`SensitivityMetrics`, `SensitivityBaselineContext`, `SensitivityCase`, and
+`SensitivityResult`. The public functions load a strict study, run it, and write
+deterministic artifacts. Sensitivity computation remains in the core package without
+Matplotlib; rendering remains in the optional `plot` extra.
+
+The reproducibility files are:
+
+- `examples/sensitivity/iss_cartagena_oat.json`: exact OAT configuration;
+- `sensitivity.csv`: one ordered row per declared value, including nominal rows;
+- `sensitivity-summary.json`: portable baseline inputs, metrics, fitted-record
+  epoch/age and leap-table context, warnings, sweeps, counts, fingerprints, versions,
+  formatting, ordering, and limitations;
+- `docs/SENSITIVITY.md`: method, GUM terminology boundary, exact results, and prohibited
+  claims; and
+- `docs/images/iss-cartagena-sensitivity-overview.svg`: artifact-only static overview.
+
+Its evidence boundary is explicit: the frozen CelesTrak GP record is real public fitted
+orbit data; station/time choices, RF values, and sweep spans are declared assumptions;
+all geometry, link-budget, integrated-bound, sensitivity, and figure values are
+model-derived. No calibrated RF observation or probabilistic input model is present.
+The 1 s plot reference is numerical, not truth, and heterogeneous RF spans cannot be
+used as a parameter-importance ranking.
+
+Baseline context is retrospective evidence copied from the completed unchanged run
+against the frozen fitted GP record. It is not a pre-pass prediction artifact,
+propagated covariance, or orbit-accuracy guarantee.
+
+### 6.4 Later milestones
 
 - **v0.2 — propagation and uncertainty:** implement only required subsets of current,
-  in-force ITU-R recommendations; add deterministic sensitivity and uncertainty
-  intervals.
+  in-force ITU-R recommendations; retain deterministic sensitivity and add only
+  justified uncertainty intervals.
 - **v0.3 — adaptive link state:** add cited MODCOD thresholds, implementation margin,
   hysteresis, useful-rate estimates, and outage state.
 - **v0.4 — network adapter:** export versioned capacity/delay/availability traces and
@@ -305,6 +351,7 @@ those transformations.
 External data are untrusted. The parser validates:
 
 - required GP CSV/OMM-compatible fields and a single selected record;
+- scenario JSON and orbit GP CSV inputs no larger than 1,000,000 bytes each;
 - absolute HTTP(S) source URL, retrieval timestamp, absolute HTTP(S) data license or
   terms URL, and optional expected checksum;
 - numeric finiteness and physically meaningful ranges;
@@ -363,8 +410,9 @@ limitations. Parsed JSON numbers do not preserve their original textual precisio
 does not invent a position covariance from GP elements or attach statistically
 unsupported error bars.
 
-v0.2 will introduce deterministic sensitivity ranges first. Seeded Monte Carlo or
-another probabilistic method is allowed only after each input distribution is justified.
+v0.2a1 introduces deterministic OAT assumed ranges first. They are scenario responses,
+not uncertainty intervals. Seeded Monte Carlo or another probabilistic method is
+allowed only after each input distribution and correlation is justified.
 Planned uncertainty groups are:
 
 - orbital-element age and propagation error;
@@ -416,9 +464,9 @@ license compatibility, and maintenance status.
 
 ## 14. Minimal software architecture
 
-v0.1 is a library with a thin standard-library CLI. It is not a framework.
+OpenLEO is a library with a thin standard-library CLI. It is not a framework.
 
-Planned layout:
+Current minimal layout, abridged:
 
 ```text
 openleo/
@@ -429,10 +477,12 @@ openleo/
 ├── docs/
 │   ├── FUNDAMENTALS.md
 │   ├── PROJECT_CHARTER.md
+│   ├── SENSITIVITY.md
 │   └── VALIDATION.md
 ├── examples/
 │   ├── data/
-│   └── scenarios/
+│   ├── scenarios/
+│   └── sensitivity/
 ├── src/openleo/
 │   ├── __init__.py
 │   ├── model.py
@@ -441,6 +491,8 @@ openleo/
 │   ├── simulation.py
 │   ├── output.py
 │   ├── plotting.py
+│   ├── sensitivity.py
+│   ├── sensitivity_plotting.py
 │   └── cli.py
 └── tests/
 ```
@@ -453,7 +505,12 @@ Responsibilities:
 - `simulation.py`: combine validated inputs into visible trace rows and summary;
 - `output.py`: deterministic CSV and JSON serialization;
 - `plotting.py`: validate completed artifacts and render static pass overviews;
-- `cli.py`: `argparse` entry point for simulation and plotting with user-facing errors.
+- `sensitivity.py`: strict OAT study loading, immutable cases, metrics, and deterministic
+  sensitivity artifacts;
+- `sensitivity_plotting.py`: validate completed sensitivity artifacts and render the
+  static sensitivity overview; and
+- `cli.py`: `argparse` entry point for simulation, sensitivity, and plotting with
+  user-facing errors.
 
 There are no provider interfaces, plugin managers, factories, repositories, service
 containers, custom exception hierarchies, or configuration frameworks. A boundary is
@@ -500,7 +557,8 @@ Required test layers:
 
 - unit tests for validation, each physical equation, and plotting artifact boundaries;
 - integration tests for one frozen pass from input to CSV/JSON and static SVG/PNG;
-- CLI smoke tests for simulation and plotting success and invalid input;
+- CLI smoke tests for simulation, deterministic sensitivity, and both plotters,
+  including a core-only wheel sensitivity run without Matplotlib;
 - cross-platform CI regression; and
 - a paper reproduction test when the paper workflow exists.
 
@@ -712,7 +770,7 @@ reference.
 
 ### Phase 3: uncertainty and atmosphere
 
-- add deterministic sensitivity first;
+- maintain the v0.2a1 deterministic sensitivity benchmark;
 - implement validated current-version atmospheric subsets;
 - compare the free-space baseline and specified-availability models; and
 - add justified uncertainty intervals.
@@ -847,6 +905,11 @@ v0.1 is complete only when a new contributor on Linux, macOS, or Windows can:
 The release must also have at least 80% coverage, no critical or high-severity review
 findings, an OSI-approved license, citation metadata, and an archived version tag.
 
+v0.2a1 is complete only when every supported CI platform regenerates the canonical
+20-case sensitivity artifacts and a disposable sensitivity figure, the full Ubuntu job
+regenerates both committed SVGs without drift, and a fresh core-only Python 3.12 wheel
+environment runs sensitivity while Matplotlib is absent.
+
 ## 24. Decision log
 
 - **2026-08-30:** OpenLEO selected as the initial research direction
@@ -878,6 +941,9 @@ findings, an OSI-approved license, citation metadata, and an archived version ta
 - **2026-08-31:** release verification includes stable extreme-SNR math, URL boundary
   checks, independent ECEF-to-ENU geometry, finite-difference/sign/range validation,
   and explicit sdist inspection.
+- **2026-08-31:** v0.2a1 adds deterministic OAT assumed ranges before probabilistic
+  uncertainty; 1 s is a numerical plot reference rather than truth, and heterogeneous
+  RF spans are not an importance ranking.
 
 ## 25. Authoritative references
 
@@ -904,7 +970,9 @@ findings, an OSI-approved license, citation metadata, and an archived version ta
 
 ### Validation, software, and publication
 
-- JCGM 100:2008, [Guide to the Expression of Uncertainty in Measurement](https://www.bipm.org/documents/20126/2071204/JCGM_100_2008_E.pdf).
+- BIPM JCGM 100:2008, [Guide to the Expression of Uncertainty in Measurement](https://doi.org/10.59161/JCGM100-2008E).
+- BIPM JCGM 100:2008/Amd.1:2026, [Nonlinearity in measurement models](https://doi.org/10.59161/PPDI3267).
+- Iott, Haftka, and Adelman, NASA TM-86382, [Selecting Step Sizes in Sensitivity Analysis by Finite Differences](https://ntrs.nasa.gov/citations/19850025225).
 - Hypatia, [LEO satellite network simulation framework](https://github.com/snkas/hypatia).
 - Manzanares-Lopez et al., [Review of ns-3-based LEO simulation frameworks](https://doi.org/10.1002/spe.70001).
 - SatNOGS Network, [API documentation](https://docs.satnogs.org/projects/satnogs-network/en/latest/api.html).

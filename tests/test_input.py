@@ -106,6 +106,17 @@ def test_frozen_scenario_fingerprint_matches_raw_bytes() -> None:
     assert scenario.source_sha256 == sha256(FROZEN_SCENARIO.read_bytes()).hexdigest()
 
 
+def test_rejects_oversized_scenario_before_json_parsing(tmp_path) -> None:
+    scenario_path = tmp_path / "oversized-scenario.json"
+    scenario_path.write_bytes(b" " * 1_000_001)
+
+    with pytest.raises(ValueError) as exc_info:
+        load_scenario(scenario_path)
+
+    assert str(scenario_path) in str(exc_info.value)
+    assert "scenario JSON exceeds 1000000 bytes" in str(exc_info.value)
+
+
 def test_scenario_fingerprint_preserves_insignificant_numeric_text(tmp_path) -> None:
     scenario_path, _ = _write_scenario(tmp_path, _valid_scenario())
     original_bytes = scenario_path.read_bytes()
