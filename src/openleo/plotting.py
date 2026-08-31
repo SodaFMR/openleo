@@ -64,10 +64,18 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
 
     start = rows[0].timestamp
     minutes = tuple((row.timestamp - start).total_seconds() / 60.0 for row in rows)
-    figure = plt.figure(figsize=(12, 7), facecolor="white", layout="constrained")
+    figure = plt.figure(figsize=(12, 7), facecolor="white", layout="none")
     try:
-        figure.get_layout_engine().set(rect=(0.0, 0.08, 1.0, 0.90))
-        grid = figure.add_gridspec(2, 2)
+        grid = figure.add_gridspec(
+            2,
+            2,
+            left=0.06,
+            right=0.96,
+            bottom=0.15,
+            top=0.86,
+            wspace=0.25,
+            hspace=0.25,
+        )
         polar = figure.add_subplot(grid[0, 0], projection="polar")
         doppler = figure.add_subplot(grid[0, 1])
         cn0 = figure.add_subplot(grid[1, 0])
