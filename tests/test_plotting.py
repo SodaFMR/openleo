@@ -1,3 +1,4 @@
+import builtins
 import csv
 import json
 import re
@@ -26,9 +27,9 @@ FIELDS = (
 def _write_run(directory: Path) -> Path:
     directory.mkdir()
     rows = (
-        ("2026-08-30T06:15:30Z", "20", "10", "1000", "42", "1000000"),
-        ("2026-08-30T06:16:30Z", "180", "60", "0", "55", "6000000"),
-        ("2026-08-30T06:17:30Z", "340", "10", "-1000", "42", "1000000"),
+        ("2026-08-30T06:15:30Z", "0", "0", "1000", "42", "0"),
+        ("2026-08-30T06:16:30Z", "180", "90", "0", "55", "6000000"),
+        ("2026-08-30T06:17:30Z", "360", "0", "-1000", "-42", "0"),
     )
     with (directory / "trace.csv").open("w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
@@ -99,6 +100,9 @@ def test_render_pass_overview_writes_png(tmp_path: Path) -> None:
     render_pass_overview(_write_run(tmp_path / "run"), output)
 
     assert output.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    x_dpi, y_dpi = _png_dpi(output.read_bytes())
+    assert x_dpi == pytest.approx(200, abs=0.1)
+    assert y_dpi == pytest.approx(200, abs=0.1)
 
 
 def test_render_pass_overview_places_zenith_at_the_polar_centre(
@@ -117,6 +121,146 @@ def test_render_pass_overview_places_zenith_at_the_polar_centre(
     close(figures[-1])
     assert hypot(*(zenith - centre)) < 1.0
     assert hypot(*(horizon - centre)) > 1.0
+
+
+def test_render_pass_overview_labels_polar_rings_as_elevation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    figures = []
+    close = plt.close
+    monkeypatch.setattr(plt, "close", figures.append)
+
+    render_pass_overview(_write_run(tmp_path / "run"), tmp_path / "pass-overview.svg")
+
+    polar = next(axis for axis in figures[-1].axes if axis.name == "polar")
+    try:
+        assert tuple(polar.get_yticks()) == (20.0, 40.0, 60.0, 80.0)
+        assert tuple(label.get_text() for label in polar.get_yticklabels()) == (
+            "70°",
+            "50°",
+            "30°",
+            "10°",
+        )
+    finally:
+        close(figures[-1])
+
+
+def test_render_pass_overview_labels_nominal_first_order_doppler(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    figures = []
+    close = plt.close
+    monkeypatch.setattr(plt, "close", figures.append)
+
+    render_pass_overview(_write_run(tmp_path / "run"), tmp_path / "pass-overview.svg")
+
+    try:
+        assert "Nominal first-order Doppler (kHz)" in {
+            axis.get_ylabel() for axis in figures[-1].axes
+        }
+    finally:
+        close(figures[-1])
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("azimuth_deg", "-0.001", "azimuth_deg must be between 0 and 360 inclusive"),
+        ("azimuth_deg", "360.001", "azimuth_deg must be between 0 and 360 inclusive"),
+        ("elevation_deg", "-0.001", "elevation_deg must be between 0 and 90 inclusive"),
+        ("elevation_deg", "90.001", "elevation_deg must be between 0 and 90 inclusive"),
+        (
+            "shannon_capacity_upper_bound_bps",
+            "-0.001",
+            "shannon_capacity_upper_bound_bps must be non-negative",
+        ),
+    ],
+)
+def test_render_pass_overview_rejects_finite_values_outside_their_domains(
+    tmp_path: Path, field: str, value: str, message: str
+) -> None:
+    run = _write_run(tmp_path / "run")
+    _replace_trace_value(run / "trace.csv", field, value)
+
+    with pytest.raises(ValueError, match=message):
+        render_pass_overview(run, tmp_path / "pass-overview.svg")
+
+
+def test_render_pass_overview_missing_matplotlib_has_install_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_import = builtins.__import__
+
+    def block_matplotlib(name, *args, **kwargs):
+        if name == "matplotlib":
+            raise ModuleNotFoundError("No module named 'matplotlib'", name="matplotlib")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", block_matplotlib)
+
+    with pytest.raises(
+        ValueError, match="plotting requires Matplotlib; install openleo-link\\[plot\\]"
+    ):
+        render_pass_overview(_write_run(tmp_path / "run"), tmp_path / "pass-overview.svg")
+
+
+def test_render_pass_overview_does_not_mask_unrelated_missing_module(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_import = builtins.__import__
+
+    def block_matplotlib(name, *args, **kwargs):
+        if name == "matplotlib":
+            raise ModuleNotFoundError("No module named 'unrelated'", name="unrelated")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", block_matplotlib)
+
+    with pytest.raises(ModuleNotFoundError, match="No module named 'unrelated'"):
+        render_pass_overview(_write_run(tmp_path / "run"), tmp_path / "pass-overview.svg")
+
+
+def test_render_pass_overview_closes_figure_when_output_directory_creation_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = _write_run(tmp_path / "run")
+    output = tmp_path / "plots" / "pass-overview.svg"
+    figures = set(plt.get_fignums())
+    mkdir = Path.mkdir
+
+    def fail_output_mkdir(path, *args, **kwargs):
+        if path == output.parent:
+            raise OSError("directory failed")
+        return mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", fail_output_mkdir)
+
+    try:
+        with pytest.raises(OSError, match="directory failed"):
+            render_pass_overview(run, output)
+        assert set(plt.get_fignums()) == figures
+    finally:
+        for figure in set(plt.get_fignums()) - figures:
+            plt.close(figure)
+
+
+def test_render_pass_overview_closes_figure_when_save_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    figures = set(plt.get_fignums())
+
+    def fail_save(*args, **kwargs):
+        raise OSError("save failed")
+
+    monkeypatch.setattr("matplotlib.figure.Figure.savefig", fail_save)
+
+    try:
+        with pytest.raises(OSError, match="save failed"):
+            render_pass_overview(_write_run(tmp_path / "run"), tmp_path / "pass-overview.svg")
+        assert set(plt.get_fignums()) == figures
+    finally:
+        for figure in set(plt.get_fignums()) - figures:
+            plt.close(figure)
 
 
 @pytest.mark.parametrize(
@@ -229,3 +373,26 @@ def _svg_text_y(svg: str, text: str) -> float:
     values = _svg_text_ys(svg, text)
     assert len(values) == 1
     return values[0]
+
+
+def _replace_trace_value(path: Path, field: str, value: str) -> None:
+    with path.open(encoding="utf-8", newline="") as file:
+        rows = list(csv.DictReader(file))
+    rows[0] = {**rows[0], field: value}
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _png_dpi(png: bytes) -> tuple[float, float]:
+    offset = 8
+    while offset < len(png):
+        length = int.from_bytes(png[offset : offset + 4], "big")
+        if png[offset + 4 : offset + 8] == b"pHYs":
+            x_ppm = int.from_bytes(png[offset + 8 : offset + 12], "big")
+            y_ppm = int.from_bytes(png[offset + 12 : offset + 16], "big")
+            assert png[offset + 16] == 1
+            return x_ppm / 39.37007874, y_ppm / 39.37007874
+        offset += length + 12
+    raise AssertionError("PNG is missing pHYs metadata")

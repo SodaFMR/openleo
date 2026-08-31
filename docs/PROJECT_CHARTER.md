@@ -440,6 +440,7 @@ openleo/
 │   ├── physics.py
 │   ├── simulation.py
 │   ├── output.py
+│   ├── plotting.py
 │   └── cli.py
 └── tests/
 ```
@@ -451,7 +452,8 @@ Responsibilities:
 - `physics.py`: pure delay, Doppler, FSPL, noise, and capacity equations;
 - `simulation.py`: combine validated inputs into visible trace rows and summary;
 - `output.py`: deterministic CSV and JSON serialization;
-- `cli.py`: `argparse` entry point and user-facing error handling.
+- `plotting.py`: validate completed artifacts and render static pass overviews;
+- `cli.py`: `argparse` entry point for simulation and plotting with user-facing errors.
 
 There are no provider interfaces, plugin managers, factories, repositories, service
 containers, custom exception hierarchies, or configuration frameworks. A boundary is
@@ -464,6 +466,8 @@ introduced only when a second real implementation requires it.
 - Development environment: `uv` and a committed cross-platform `uv.lock`.
 - Standard fallback: build/install through ordinary PEP 517-compatible Python tools.
 - Initial runtime dependency: Skyfield 1.55 or newer.
+- Optional plotting dependency: Matplotlib 3.11 or newer, installed only through the
+  `plot` extra.
 - Initial developer tools: pytest, coverage, and Ruff.
 - Paths: `pathlib`; text: UTF-8; newlines: platform-independent.
 - Frozen CSV and JSON scientific inputs use repository-enforced LF endings so raw-byte
@@ -494,9 +498,9 @@ Behavior changes follow strict red-green-refactor development:
 
 Required test layers:
 
-- unit tests for validation and each physical equation;
-- integration tests for one frozen pass from input to CSV/JSON;
-- CLI smoke tests for success and invalid input;
+- unit tests for validation, each physical equation, and plotting artifact boundaries;
+- integration tests for one frozen pass from input to CSV/JSON and static SVG/PNG;
+- CLI smoke tests for simulation and plotting success and invalid input;
 - cross-platform CI regression; and
 - a paper reproduction test when the paper workflow exists.
 
@@ -835,8 +839,8 @@ v0.1 is complete only when a new contributor on Linux, macOS, or Windows can:
 7. understand every input, output, assumption, warning, and limitation from the docs;
 8. build both a wheel and source distribution;
 9. inspect the source distribution to exclude generated, local, absolute, or private
-   worktree artifacts; and
-10. see the same required CI checks pass on the pull request.
+   worktree artifacts;
+10. see the same required CI checks pass on the pull request; and
 11. regenerate the documented static pass overview from the frozen CSV/JSON artifacts
     without recomputing the scenario, while retaining its visible scientific limitations.
 

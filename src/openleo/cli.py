@@ -14,16 +14,21 @@ from openleo.simulation import simulate_scenario
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="openleo",
-        description="Run a scenario and write trace.csv plus summary.json to an output directory.",
-        epilog="Command: openleo run SCENARIO.json --output DIRECTORY",
+        description="Run a scenario or render a completed pass overview.",
+        epilog=(
+            "Examples:\n"
+            "  openleo run SCENARIO.json --output DIRECTORY\n"
+            "  openleo plot RUN_DIRECTORY --output FILE.svg"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    run_parser = subparsers.add_parser("run")
+    run_parser = subparsers.add_parser("run", help="run a scenario and write its artifacts")
     run_parser.add_argument("scenario", metavar="SCENARIO.json", help="scenario input JSON")
     run_parser.add_argument("--output", required=True, metavar="DIRECTORY", help="output directory")
 
-    plot_parser = subparsers.add_parser("plot")
+    plot_parser = subparsers.add_parser("plot", help="render a completed pass overview")
     plot_parser.add_argument(
         "run_directory", metavar="RUN_DIRECTORY", help="completed run directory"
     )
@@ -59,15 +64,5 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         except (ValueError, OSError, UnicodeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
-            return 2
-        except ModuleNotFoundError as exc:
-            if exc.name is None or (
-                exc.name != "matplotlib" and not exc.name.startswith("matplotlib.")
-            ):
-                raise
-            print(
-                "error: plotting requires Matplotlib; install openleo-link[plot]",
-                file=sys.stderr,
-            )
             return 2
     return 2

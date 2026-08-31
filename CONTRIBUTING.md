@@ -8,7 +8,7 @@ requests, examples, and generated artifacts intended for the repository.
 Recommended:
 
 ```bash
-uv sync --group dev
+uv sync --group dev --extra plot
 ```
 
 Standard Python fallback:
@@ -32,7 +32,7 @@ Windows PowerShell:
 Then install the package and development tools:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[plot]"
 python -m pip install build pytest pytest-cov ruff
 ```
 
@@ -87,12 +87,13 @@ the repository contains the supporting release or evidence.
 Run these before opening a pull request:
 
 ```bash
-uv sync --locked --group dev
+uv sync --locked --group dev --extra plot
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run pytest --cov=openleo --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 uv run python -m build
 uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
+uv run openleo plot runs/iss --output runs/iss/pass-overview.svg
 git diff --check
 ```
 

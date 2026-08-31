@@ -50,7 +50,14 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
     rows = _read_rows(run / "trace.csv")
     _validate_consistency(summary, rows)
 
-    import matplotlib
+    try:
+        import matplotlib
+    except ModuleNotFoundError as exc:
+        if exc.name is None or (
+            exc.name != "matplotlib" and not exc.name.startswith("matplotlib.")
+        ):
+            raise
+        raise ValueError("plotting requires Matplotlib; install openleo-link[plot]") from exc
 
     matplotlib.use("Agg")
     from matplotlib import pyplot as plt
@@ -58,50 +65,64 @@ def render_pass_overview(run_directory: str | Path, output_path: str | Path) -> 
     start = rows[0].timestamp
     minutes = tuple((row.timestamp - start).total_seconds() / 60.0 for row in rows)
     figure = plt.figure(figsize=(12, 7), facecolor="white", layout="constrained")
-    figure.get_layout_engine().set(rect=(0.0, 0.08, 1.0, 0.90))
-    grid = figure.add_gridspec(2, 2)
-    polar = figure.add_subplot(grid[0, 0], projection="polar")
-    doppler = figure.add_subplot(grid[0, 1])
-    cn0 = figure.add_subplot(grid[1, 0])
-    capacity = figure.add_subplot(grid[1, 1])
-    polar.set_theta_zero_location("N")
-    polar.set_theta_direction(-1)
-    polar.plot(
-        tuple(row.azimuth_deg * pi / 180.0 for row in rows),
-        tuple(90.0 - row.elevation_deg for row in rows),
-        color="#0072B2",
-    )
-    maximum = max(range(len(rows)), key=lambda index: rows[index].elevation_deg)
-    for index, label in ((0, "sampled AOS"), (maximum, "maximum elevation"), (-1, "sampled LOS")):
-        row = rows[index]
-        polar.scatter(row.azimuth_deg * pi / 180.0, 90.0 - row.elevation_deg, label=label)
-    polar.set_title("Sky track")
-    polar.set_rlim(0.0, 90.0)
-    polar.legend(loc="lower left", bbox_to_anchor=(1.02, 0.0), fontsize="small")
+    try:
+        figure.get_layout_engine().set(rect=(0.0, 0.08, 1.0, 0.90))
+        grid = figure.add_gridspec(2, 2)
+        polar = figure.add_subplot(grid[0, 0], projection="polar")
+        doppler = figure.add_subplot(grid[0, 1])
+        cn0 = figure.add_subplot(grid[1, 0])
+        capacity = figure.add_subplot(grid[1, 1])
+        polar.set_theta_zero_location("N")
+        polar.set_theta_direction(-1)
+        polar.plot(
+            tuple(row.azimuth_deg * pi / 180.0 for row in rows),
+            tuple(90.0 - row.elevation_deg for row in rows),
+            color="#0072B2",
+        )
+        maximum = max(range(len(rows)), key=lambda index: rows[index].elevation_deg)
+        for index, label in (
+            (0, "sampled AOS"),
+            (maximum, "maximum elevation"),
+            (-1, "sampled LOS"),
+        ):
+            row = rows[index]
+            polar.scatter(row.azimuth_deg * pi / 180.0, 90.0 - row.elevation_deg, label=label)
+        polar.set_title("Sky track")
+        polar.set_rlim(0.0, 90.0)
+        polar.set_rgrids((20.0, 40.0, 60.0, 80.0), labels=("70°", "50°", "30°", "10°"))
+        polar.legend(loc="lower left", bbox_to_anchor=(1.02, 0.0), fontsize="small")
 
-    _line(doppler, minutes, tuple(row.doppler_hz / 1_000.0 for row in rows), "Doppler (kHz)")
-    _line(cn0, minutes, tuple(row.cn0_db_hz for row in rows), "C/N₀ (dB-Hz)")
-    _line(
-        capacity,
-        minutes,
-        tuple(row.capacity_bps / 1_000_000.0 for row in rows),
-        "Capacity upper bound (Mbit/s)",
-    )
-    figure.suptitle(str(summary["scenario_name"]), fontsize="large")
-    figure.text(0.5, 0.01, _LIMITATION, ha="center", fontsize="small")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    metadata = {
-        "Title": str(summary["scenario_name"]),
-        "Description": (
-            f"scenario_sha256={summary['scenario_hash']}; "
-            f"openleo={summary['openleo_version']}; matplotlib={matplotlib.__version__}"
-        ),
-        "Creator": "OpenLEO",
-        "Date": None,
-    }
-    with matplotlib.rc_context({"svg.fonttype": "none", "svg.hashsalt": "openleo-pass-overview"}):
-        figure.savefig(output, dpi=200 if suffix == ".png" else None, metadata=metadata)
-    plt.close(figure)
+        _line(
+            doppler,
+            minutes,
+            tuple(row.doppler_hz / 1_000.0 for row in rows),
+            "Nominal first-order Doppler (kHz)",
+        )
+        _line(cn0, minutes, tuple(row.cn0_db_hz for row in rows), "C/N₀ (dB-Hz)")
+        _line(
+            capacity,
+            minutes,
+            tuple(row.capacity_bps / 1_000_000.0 for row in rows),
+            "Capacity upper bound (Mbit/s)",
+        )
+        figure.suptitle(str(summary["scenario_name"]), fontsize="large")
+        figure.text(0.5, 0.01, _LIMITATION, ha="center", fontsize="small")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        metadata = {
+            "Title": str(summary["scenario_name"]),
+            "Description": (
+                f"scenario_sha256={summary['scenario_hash']}; "
+                f"openleo={summary['openleo_version']}; matplotlib={matplotlib.__version__}"
+            ),
+            "Creator": "OpenLEO",
+            "Date": None,
+        }
+        with matplotlib.rc_context(
+            {"svg.fonttype": "none", "svg.hashsalt": "openleo-pass-overview"}
+        ):
+            figure.savefig(output, dpi=200 if suffix == ".png" else None, metadata=metadata)
+    finally:
+        plt.close(figure)
     return output
 
 
@@ -187,17 +208,26 @@ def _check_artifact_size(path: Path, maximum: int) -> None:
 
 
 def _parse_row(value: dict[str, str | None]) -> _Row:
+    azimuth = _finite_float(value.get("azimuth_deg"), "azimuth_deg")
+    if not 0.0 <= azimuth <= 360.0:
+        raise ValueError("trace.csv azimuth_deg must be between 0 and 360 inclusive")
+    elevation = _finite_float(value.get("elevation_deg"), "elevation_deg")
+    if not 0.0 <= elevation <= 90.0:
+        raise ValueError("trace.csv elevation_deg must be between 0 and 90 inclusive")
+    capacity = _finite_float(
+        value.get("shannon_capacity_upper_bound_bps"), "shannon_capacity_upper_bound_bps"
+    )
+    if capacity < 0.0:
+        raise ValueError("trace.csv shannon_capacity_upper_bound_bps must be non-negative")
     return _Row(
         timestamp=_utc_timestamp(value.get("timestamp_utc")),
-        azimuth_deg=_finite_float(value.get("azimuth_deg"), "azimuth_deg"),
-        elevation_deg=_finite_float(value.get("elevation_deg"), "elevation_deg"),
+        azimuth_deg=azimuth,
+        elevation_deg=elevation,
         doppler_hz=_finite_float(value.get("doppler_hz"), "doppler_hz"),
         cn0_db_hz=_finite_float(
             value.get("carrier_to_noise_density_db_hz"), "carrier_to_noise_density_db_hz"
         ),
-        capacity_bps=_finite_float(
-            value.get("shannon_capacity_upper_bound_bps"), "shannon_capacity_upper_bound_bps"
-        ),
+        capacity_bps=capacity,
     )
 
 

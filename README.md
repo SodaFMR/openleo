@@ -62,7 +62,7 @@ The commands exit with status 0 and write:
 - `runs/iss/summary.json`
 - `runs/iss/pass-overview.svg`
 
-It also prints stable labels suitable for CI:
+They also print stable labels suitable for CI:
 
 ```text
 scenario: iss-cartagena-s-band-free-space
@@ -71,6 +71,7 @@ sampled AOS: 2026-08-30T06:15:30Z
 sampled LOS: 2026-08-30T06:22:00Z
 trace: runs/iss/trace.csv
 summary: runs/iss/summary.json
+plot: runs/iss/pass-overview.svg
 ```
 
 `runs/` is ignored by Git so regenerated examples do not pollute commits.
@@ -220,7 +221,8 @@ real RF link.
 
 ## Roadmap
 
-- v0.1: deterministic free-space pass trace, CLI, example, tests, and CI.
+- v0.1: deterministic free-space pass trace, static pass overview, CLI, example, tests,
+  and CI.
 - v0.2: propagation-model subsets and uncertainty/sensitivity reporting.
 - v0.3: adaptive link state with cited thresholds and useful-rate estimates.
 - v0.4: network-simulator trace export and fixed-versus-dynamic comparison.

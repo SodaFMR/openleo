@@ -228,7 +228,7 @@ C 219.526303 129.346651 221.892183 128.876048 224.281295 128.876048
 " clip-path="url(#p9bd8e0d9f2)" style="fill: none; stroke: #b0b0b0; stroke-width: 0.8; stroke-linecap: square"/>
      </g>
      <g id="text_9">
-      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="231.243538" y="127.85858" transform="rotate(-0 231.243538 127.85858)">20</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="231.243538" y="127.85858" transform="rotate(-0 231.243538 127.85858)">70°</text>
      </g>
     </g>
     <g id="ytick_2">
@@ -253,7 +253,7 @@ C 214.77131 111.624035 219.503071 110.682829 224.281295 110.682829
 " clip-path="url(#p9bd8e0d9f2)" style="fill: none; stroke: #b0b0b0; stroke-width: 0.8; stroke-linecap: square"/>
      </g>
      <g id="text_10">
-      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="238.205781" y="111.050238" transform="rotate(-0 238.205781 111.050238)">40</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="238.205781" y="111.050238" transform="rotate(-0 238.205781 111.050238)">50°</text>
      </g>
     </g>
     <g id="ytick_3">
@@ -278,7 +278,7 @@ C 210.016318 93.901419 217.11396 92.48961 224.281295 92.48961
 " clip-path="url(#p9bd8e0d9f2)" style="fill: none; stroke: #b0b0b0; stroke-width: 0.8; stroke-linecap: square"/>
      </g>
      <g id="text_11">
-      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="245.168025" y="94.241896" transform="rotate(-0 245.168025 94.241896)">60</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="245.168025" y="94.241896" transform="rotate(-0 245.168025 94.241896)">30°</text>
      </g>
     </g>
     <g id="ytick_4">
@@ -303,7 +303,7 @@ C 205.261326 76.178803 214.724848 74.296392 224.281295 74.296392
 " clip-path="url(#p9bd8e0d9f2)" style="fill: none; stroke: #b0b0b0; stroke-width: 0.8; stroke-linecap: square"/>
      </g>
      <g id="text_12">
-      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="252.130268" y="77.433553" transform="rotate(-0 252.130268 77.433553)">80</text>
+      <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: start" x="252.130268" y="77.433553" transform="rotate(-0 252.130268 77.433553)">10°</text>
      </g>
     </g>
    </g>
@@ -619,7 +619,7 @@ L 860.99976 86.63338
      </g>
     </g>
     <g id="text_30">
-     <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle" x="451.382182" y="147.069266" transform="rotate(-90 451.382182 147.069266)">Doppler (kHz)</text>
+     <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle" x="451.382182" y="147.069266" transform="rotate(-90 451.382182 147.069266)">Nominal first-order Doppler (kHz)</text>
     </g>
    </g>
    <g id="line2d_38">

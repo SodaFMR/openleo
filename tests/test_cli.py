@@ -57,9 +57,10 @@ def test_main_help_uses_standard_argparse_exit(capsys) -> None:
 
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
-    assert "run" in captured.out
-    assert "scenario" in captured.out
-    assert "--output" in captured.out
+    assert "run a scenario" in captured.out
+    assert "render a completed pass overview" in captured.out
+    assert "openleo run SCENARIO.json --output DIRECTORY" in captured.out
+    assert "openleo plot RUN_DIRECTORY --output FILE.svg" in captured.out
 
 
 def test_main_plot_writes_svg_and_stable_success_label(tmp_path, capsys) -> None:
