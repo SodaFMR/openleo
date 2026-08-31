@@ -23,6 +23,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_parser.add_argument("scenario", metavar="SCENARIO.json", help="scenario input JSON")
     run_parser.add_argument("--output", required=True, metavar="DIRECTORY", help="output directory")
 
+    plot_parser = subparsers.add_parser("plot")
+    plot_parser.add_argument(
+        "run_directory", metavar="RUN_DIRECTORY", help="completed run directory"
+    )
+    plot_parser.add_argument(
+        "--output", required=True, metavar="FILE.svg|FILE.png", help="plot output file"
+    )
+
     args = parser.parse_args(argv)
     if args.command == "run":
         try:
@@ -38,6 +46,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             print(f"trace: {trace_path}")
             print(f"summary: {summary_path}")
+            return 0
+        except (ValueError, OSError, UnicodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    if args.command == "plot":
+        try:
+            from openleo.plotting import render_pass_overview
+
+            output_path = render_pass_overview(args.run_directory, args.output)
+            print(f"plot: {output_path}")
             return 0
         except (ValueError, OSError, UnicodeError) as exc:
             print(f"error: {exc}", file=sys.stderr)

@@ -59,3 +59,32 @@ def test_main_help_uses_standard_argparse_exit(capsys) -> None:
     assert "run" in captured.out
     assert "scenario" in captured.out
     assert "--output" in captured.out
+
+
+def test_main_plot_writes_svg_and_stable_success_label(tmp_path, capsys) -> None:
+    run_directory = tmp_path / "run"
+    output_path = tmp_path / "overview.svg"
+    assert main(["run", str(FROZEN_SCENARIO), "--output", str(run_directory)]) == 0
+    capsys.readouterr()
+
+    assert main(["plot", str(run_directory), "--output", str(output_path)]) == 0
+
+    assert output_path.is_file()
+    assert output_path.stat().st_size > 0
+    assert capsys.readouterr().out == f"plot: {output_path}\n"
+
+
+def test_main_plot_unsupported_suffix_returns_error_without_traceback(tmp_path, capsys) -> None:
+    run_directory = tmp_path / "run"
+    output_path = tmp_path / "overview.txt"
+    assert main(["run", str(FROZEN_SCENARIO), "--output", str(run_directory)]) == 0
+    capsys.readouterr()
+
+    assert main(["plot", str(run_directory), "--output", str(output_path)]) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.count("error:") == 1
+    assert "output_path must end in .svg or .png" in captured.err
+    assert "Traceback" not in captured.err
+    assert not output_path.exists()
