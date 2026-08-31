@@ -111,11 +111,10 @@ uv run pytest tests/test_physics.py::test_reference_receiver_chain -q
 At closest sampled approach, received carrier power is `-124.805877641 dBW`.
 Convert it to dBm and watts.
 
-<details>
-<summary>Answer</summary>
+#### Answer
 
 - dBm: `-124.805877641 + 30 = -94.805877641 dBm`
-- watts: $10^{-124.805877641/10}=3.3068\times10^{-13}\ W$
+- watts: $10^{-124.805877641/10}=3.3068\times10^{-13}\,\mathrm{W}$
 
 Checkpoint answers:
 
@@ -124,7 +123,6 @@ Checkpoint answers:
 2. No. A 10 dB power increase multiplies power by ten.
 3. To make incompatible quantities harder to mix silently.
 
-</details>
 
 Optional: open the [NIST Guide to the SI, Chapter 8](https://www.nist.gov/pml/special-publication-811/nist-guide-si-chapter-8) and jump directly to Section 8.7, “Logarithmic quantities and units.”
 
@@ -168,7 +166,7 @@ T_{minutes}=\frac{1440}{n_{rev/day}}
 $$
 
 $$
-age_{days}=\frac{t-epoch}{86400\ s}
+age_{days}=\frac{t-epoch}{86400\,\mathrm{s}}
 $$
 
 ### Worked OpenLEO example
@@ -183,7 +181,7 @@ The frozen ISS record contains:
 Approximate orbital period:
 
 $$
-1440/15.48938909=92.9669\ minutes
+1440/15.48938909=92.9669\,\mathrm{minutes}
 $$
 
 The scenario begins `0.238756438 days`, or `5.73015 hours`, before the element epoch.
@@ -209,11 +207,10 @@ uv run pytest tests/test_simulation.py::test_load_orbit_accepts_frozen_gp_record
 
 The scenario stop age is `-0.231811993 days`. How many hours before the epoch is it?
 
-<details>
-<summary>Answer</summary>
+#### Answer
 
 $$
-0.231811993\times24=5.56349\ hours
+0.231811993\times24=5.56349\,\mathrm{hours}
 $$
 
 Checkpoint answers:
@@ -221,8 +218,6 @@ Checkpoint answers:
 1. No. It is a fitted set of mean elements and metadata.
 2. The elements were fitted for SGP4 and are not ordinary osculating elements.
 3. The requested propagation instant is earlier than the epoch.
-
-</details>
 
 Optional, read only the linked sections:
 
@@ -322,8 +317,7 @@ uv run pytest tests/test_simulation.py::test_closest_approach_topocentric_geomet
 Using the closest sample above, calculate its zenith distance and describe its viewing
 direction.
 
-<details>
-<summary>Answer</summary>
+#### Answer
 
 - zenith distance: `28.4200°`
 - viewing direction: north-east and high above the horizon
@@ -335,7 +329,6 @@ Checkpoint answers:
 3. Geometry depends on the exact instant and Earth orientation; an ambiguous time can
    rotate the station to the wrong location.
 
-</details>
 
 Optional:
 
@@ -385,7 +378,7 @@ $$
 \Delta f=-f_c\frac{\dot\rho}{c}
 $$
 
-where $c=299,792,458\ m/s$.
+where $c=299,792,458\,\mathrm{m/s}$.
 
 ### Worked OpenLEO example
 
@@ -398,13 +391,13 @@ At sampled AOS:
 Delay:
 
 $$
-1,495,209.6389/299,792,458=0.0049874825\ s=4.98748\ ms
+1,495,209.6389/299,792,458=0.0049874825\,\mathrm{s}=4.98748\,\mathrm{ms}
 $$
 
 Doppler:
 
 $$
--(2.2\times10^9)(-6709.8042)/299,792,458\approx+49,239.3\ Hz
+-(2.2\times10^9)(-6709.8042)/299,792,458\approx+49,239.3\,\mathrm{Hz}
 $$
 
 The spacecraft is approaching, so range rate is negative and downlink frequency shifts
@@ -431,8 +424,7 @@ uv run pytest tests/test_simulation.py::test_frozen_pass_geometry_has_consistent
 For range `1,000,000 m`, carrier `2.2 GHz`, and receding range rate `+6,000 m/s`,
 calculate delay and Doppler.
 
-<details>
-<summary>Answer</summary>
+#### Answer
 
 - delay: `0.003335640952 s`, or `3.33564 ms`
 - Doppler: `-44,030.4606 Hz`, approximately `-44.03 kHz`
@@ -443,7 +435,6 @@ Checkpoint answers:
 2. The Doppler formula has a minus sign and approaching range rate is negative.
 3. The 10-second sampling grid need not contain the exact continuous-time minimum.
 
-</details>
 
 Optional: [Skyfield: find a satellite's range rate](https://rhodesmill.org/skyfield/earth-satellites.html#find-a-satellite-s-range-rate).
 
@@ -549,8 +540,7 @@ uv run pytest \
 Repeat the reference chain after increasing EIRP from `10 dBW` to `13 dBW`. Calculate
 the new carrier power, `C/N0`, and SNR. All other values remain unchanged.
 
-<details>
-<summary>Answer</summary>
+#### Answer
 
 - carrier: `13 + 20 - 161 - 2 = -130 dBW`
 - `C/N0`: `-130 - (-205.588867) = 75.588867 dB-Hz`
@@ -561,12 +551,11 @@ non-linearly because it is calculated after converting SNR back to a linear rati
 
 Checkpoint answers:
 
-1. $20\log_{10}(2)=6.0206\ dB$.
+1. $20\log_{10}(2)=6.0206\,\mathrm{dB}$.
 2. `C/N0` compares with noise density per hertz; SNR includes bandwidth.
 3. No. It uses synthetic RF values, free-space propagation, and an ideal information
    theory limit.
 
-</details>
 
 Optional: [ITU-R P.525-5 PDF](https://www.itu.int/dms_pubrec/itu-r/rec/p/R-REC-P.525-5-202411-I%21%21PDF-E.pdf) — read only the scope and Annex Sections 1–2.
 
@@ -596,7 +585,7 @@ dependency versions, deterministic outputs, limitations, and numeric tolerances.
 ### Formulas
 
 $$
-h=SHA256(file\ bytes)
+h=SHA256(\text{file bytes})
 $$
 
 $$
@@ -624,7 +613,7 @@ Near closest approach, adjacent ranges are:
 Finite-difference range rate:
 
 $$
-(479363.356214-478628.235728)/20=36.7560243\ m/s
+(479363.356214-478628.235728)/20=36.7560243\,\mathrm{m/s}
 $$
 
 Skyfield reports `37.1481223 m/s`. The difference is `0.392098 m/s`, inside the
@@ -659,8 +648,7 @@ uv run pytest \
 Predict what happens if the scenario text changes from `"step_s": 10.0` to
 `"step_s": 1e1`.
 
-<details>
-<summary>Answer</summary>
+#### Answer
 
 Both values parse as `10.0`, so the physical trace should remain unchanged. The raw
 scenario bytes differ, so its SHA-256 and recorded provenance change.
@@ -673,7 +661,6 @@ Checkpoint answers:
 3. Reproduction repeats a computation; physical validation compares it with independent
    observations.
 
-</details>
 
 Optional: [NIST FIPS 180-4](https://csrc.nist.gov/pubs/fips/180-4/upd1/final) — read only the abstract explaining message digests.
 
