@@ -60,4 +60,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (ValueError, OSError, UnicodeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
+        except ModuleNotFoundError as exc:
+            if exc.name is None or (
+                exc.name != "matplotlib" and not exc.name.startswith("matplotlib.")
+            ):
+                raise
+            print(
+                "error: plotting requires Matplotlib; install openleo-link[plot]",
+                file=sys.stderr,
+            )
+            return 2
     return 2
