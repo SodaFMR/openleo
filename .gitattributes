@@ -1,6 +1,7 @@
 # Scientific input fingerprints cover raw bytes; keep them identical on every OS.
 examples/data/** text eol=lf
 examples/scenarios/** text eol=lf
+examples/sensitivity/** text eol=lf
 
 # Matplotlib-generated SVG path data uses trailing spaces for line continuations.
 docs/images/*.svg -whitespace

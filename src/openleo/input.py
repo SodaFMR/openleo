@@ -30,12 +30,13 @@ RADIO_LINK_KEYS = frozenset(
     )
 )
 MAX_TIME_GRID_SAMPLES = 100_000
+MAX_SCENARIO_BYTES = 1_000_000
 
 
 def load_scenario(path: str | Path) -> Scenario:
     scenario_path = Path(path)
     try:
-        source_bytes = scenario_path.read_bytes()
+        source_bytes = _read_scenario_bytes(scenario_path)
         raw = json.loads(source_bytes.decode("utf-8"))
         return _scenario(raw, scenario_path, sha256(source_bytes).hexdigest())
     except UnicodeDecodeError as exc:
@@ -50,6 +51,14 @@ def load_scenario(path: str | Path) -> Scenario:
         if str(exc).startswith(f"{scenario_path}:"):
             raise
         raise ValueError(f"{scenario_path}: invalid scenario: {exc}") from exc
+
+
+def _read_scenario_bytes(path: Path) -> bytes:
+    with path.open("rb") as scenario_file:
+        source_bytes = scenario_file.read(MAX_SCENARIO_BYTES + 1)
+    if len(source_bytes) > MAX_SCENARIO_BYTES:
+        raise ValueError(f"{path}: scenario JSON exceeds {MAX_SCENARIO_BYTES} bytes")
+    return source_bytes
 
 
 def _scenario(raw: Any, scenario_path: Path, source_sha256: str) -> Scenario:

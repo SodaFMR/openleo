@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 from io import StringIO
+from itertools import islice
 
 from skyfield.api import EarthSatellite
 
@@ -33,6 +34,7 @@ REQUIRED_OMM_FIELDS = frozenset(
         "MEAN_MOTION_DDOT",
     )
 )
+MAX_ORBIT_BYTES = 1_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,9 +46,12 @@ class LoadedOrbit:
 
 def load_orbit(source: OrbitSource, timescale) -> LoadedOrbit:
     try:
-        raw = source.path.read_bytes()
+        with source.path.open("rb") as orbit_file:
+            raw = orbit_file.read(MAX_ORBIT_BYTES + 1)
     except OSError as exc:
         raise ValueError(f"{source.path}: could not read GP CSV: {exc}") from exc
+    if len(raw) > MAX_ORBIT_BYTES:
+        raise ValueError(f"{source.path}: GP CSV exceeds {MAX_ORBIT_BYTES} bytes")
 
     actual_sha256 = sha256(raw).hexdigest()
     if actual_sha256 != source.provenance.sha256:
@@ -57,7 +62,7 @@ def load_orbit(source: OrbitSource, timescale) -> LoadedOrbit:
 
     try:
         text = raw.decode("utf-8")
-        rows = list(csv.DictReader(StringIO(text, newline="")))
+        rows = tuple(islice(csv.DictReader(StringIO(text, newline="")), 2))
         if len(rows) != 1:
             raise ValueError(f"expected exactly one GP record, got {len(rows)}")
         row = rows[0]

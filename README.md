@@ -5,7 +5,9 @@ satellite-to-ground links in Low Earth Orbit (LEO).
 
 v0.1 is intentionally narrow: it reads one frozen CelesTrak GP CSV record, one
 ground station, one UTC window, and one transparent RF scenario, then writes a
-deterministic visible-pass trace and summary.
+deterministic visible-pass trace and summary. v0.2a1 adds a deterministic
+one-at-a-time sensitivity benchmark over declared sampling, elevation-mask, and
+synthetic RF assumptions without adding probabilistic uncertainty claims.
 
 OpenLEO is research software. It is not an orbit-determination system, waveform
 simulator, operational network-planning tool, calibrated validation study, or
@@ -95,6 +97,46 @@ uv run openleo plot runs/iss --output docs/images/iss-cartagena-pass-overview.sv
 Repository attributes force LF endings for frozen CSV and JSON inputs so their
 raw-byte fingerprints remain identical on Linux, macOS, and Windows.
 
+## Run The Deterministic Sensitivity Benchmark
+
+```bash
+uv run openleo sensitivity \
+  examples/scenarios/iss_cartagena.json \
+  examples/sensitivity/iss_cartagena_oat.json \
+  --output runs/iss-sensitivity
+uv run openleo plot-sensitivity runs/iss-sensitivity \
+  --output runs/iss-sensitivity/sensitivity-overview.svg
+```
+
+The commands write:
+
+- `runs/iss-sensitivity/sensitivity.csv`, with one row for each of 20 declared cases;
+- `runs/iss-sensitivity/sensitivity-summary.json`, with the complete portable baseline,
+  fitted-record epoch/age and leap-table context, warnings, sweeps, fingerprints,
+  versions, formatting rules, and limitations; and
+- `runs/iss-sensitivity/sensitivity-overview.svg`, rendered from those completed
+  artifacts without rerunning the cases.
+
+The computation command does not require Matplotlib. The committed figure is regenerated
+with:
+
+```bash
+uv run openleo plot-sensitivity runs/iss-sensitivity \
+  --output docs/images/iss-cartagena-sensitivity-overview.svg
+```
+
+![Deterministic sensitivity overview for the frozen ISS Cartagena example](docs/images/iss-cartagena-sensitivity-overview.svg)
+
+The [deterministic sensitivity method and frozen benchmark](docs/SENSITIVITY.md)
+document the exact configuration, fields, results, references, and allowed claims. The
+study changes one input at a time across assumed values. It is not an uncertainty
+interval; the figure's 1 s sampling case is a numerical reference, not truth; and the
+heterogeneous RF spans are not a parameter-importance ranking.
+
+The baseline context is retrospective: it is copied from the completed unchanged
+baseline run against one frozen fitted GP record. It is not a pre-pass prediction
+artifact or an orbit-accuracy guarantee.
+
 ## Outputs
 
 `trace.csv` contains one row per visible sample at or above the configured elevation
@@ -160,6 +202,10 @@ standards list. You do not need to read it before the Fundamentals course.
 finite-difference checks, and the calibrated observation still required for physical
 validation.
 
+Read [Deterministic Sensitivity](docs/SENSITIVITY.md) for the v0.2a1 OAT method,
+canonical 20-case configuration, frozen results, GUM terminology boundary, and
+prohibited claims.
+
 Then read the source in this order:
 
 1. [src/openleo/model.py](src/openleo/model.py) for validated scenario objects.
@@ -171,15 +217,19 @@ Then read the source in this order:
 5. [src/openleo/simulation.py](src/openleo/simulation.py) for pass assembly and
    integration.
 6. [src/openleo/output.py](src/openleo/output.py) for deterministic CSV/JSON output.
-7. [src/openleo/plotting.py](src/openleo/plotting.py) for static plots from completed
-   run artifacts.
-8. [src/openleo/cli.py](src/openleo/cli.py) for the `openleo run` and `openleo plot`
-   commands.
+7. [src/openleo/sensitivity.py](src/openleo/sensitivity.py) for deterministic study
+   validation, immutable case execution, and sensitivity CSV/JSON output.
+8. [src/openleo/plotting.py](src/openleo/plotting.py) for static pass plots from
+   completed run artifacts.
+9. [src/openleo/sensitivity_plotting.py](src/openleo/sensitivity_plotting.py) for strict
+   sensitivity-artifact reading and static sensitivity plots.
+10. [src/openleo/cli.py](src/openleo/cli.py) for all four public commands.
 
 ## Verification Commands
 
 ```bash
 uv sync --locked --group dev --extra plot
+uv lock --check
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run pytest --cov=openleo --cov-report=term-missing --cov-report=xml --cov-fail-under=80
@@ -190,21 +240,31 @@ import tarfile
 
 archives = list(Path("dist").glob("*.tar.gz"))
 assert len(archives) == 1, f"expected one sdist, found {len(archives)}"
-forbidden = {".coverage", "coverage.xml", "runs", "dist"}
+forbidden = {"coverage.xml", "dist", "runs"}
 with tarfile.open(archives[0], "r:gz") as archive:
     invalid = [
         member.name
         for member in archive.getmembers()
-        if PurePosixPath(member.name).is_absolute()
-        or forbidden.intersection(PurePosixPath(member.name).parts)
+        if (path := PurePosixPath(member.name)).is_absolute()
+        or (
+            len(path.parts) > 1
+            and path.parts[1].startswith(".")
+            and path.parts[1] != ".gitignore"
+        )
+        or forbidden.intersection(path.parts)
     ]
 assert not invalid, f"invalid sdist members: {invalid}"
 print(f"sdist members clean: {archives[0]}")
 PY
 uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
-uv run openleo plot runs/iss --output runs/iss/pass-overview.svg
-uv run openleo plot runs/iss --output runs/iss/pass-overview.png
+uv run openleo plot runs/iss --output docs/images/iss-cartagena-pass-overview.svg
+uv run openleo sensitivity examples/scenarios/iss_cartagena.json \
+  examples/sensitivity/iss_cartagena_oat.json --output runs/iss-sensitivity
+uv run openleo plot-sensitivity runs/iss-sensitivity \
+  --output docs/images/iss-cartagena-sensitivity-overview.svg
 uvx cffconvert --validate
+git diff --exit-code -- docs/images/iss-cartagena-pass-overview.svg \
+  docs/images/iss-cartagena-sensitivity-overview.svg
 git diff --check
 ```
 
@@ -219,11 +279,19 @@ Shannon-Hartley capacity is reported only as a theoretical upper bound. It is no
 throughput, achieved goodput, commercial service performance, or validation of any
 real RF link.
 
+The OAT benchmark uses deterministic assumed ranges, not probability distributions.
+It propagates no input uncertainty or covariance and reports no confidence, credible,
+coverage, or standard-uncertainty interval. Its results apply only to the frozen public
+orbit record, selected time window and station, synthetic RF assumptions, and
+free-space model.
+
 ## Roadmap
 
 - v0.1: deterministic free-space pass trace, static pass overview, CLI, example, tests,
   and CI.
-- v0.2: propagation-model subsets and uncertainty/sensitivity reporting.
+- v0.2a1: deterministic OAT sensitivity reporting for sampling, elevation-mask, and
+  synthetic RF assumptions.
+- v0.2: validated propagation-model subsets and justified uncertainty reporting.
 - v0.3: adaptive link state with cited thresholds and useful-rate estimates.
 - v0.4: network-simulator trace export and fixed-versus-dynamic comparison.
 - v1.0: reproducible paper release with archived software/data release.

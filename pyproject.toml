@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openleo-link"
-version = "0.1.0"
+version = "0.2.0a1"
 description = "Reproducible time-varying link traces for LEO satellite research"
 readme = "README.md"
 license = "MIT"
@@ -36,7 +36,7 @@ packages = ["src/openleo"]
 
 [tool.hatch.build.targets.sdist]
 exclude = [
-    "/.coverage",
+    "/.*",
     "/coverage.xml",
     "/runs/",
     "/dist/",
