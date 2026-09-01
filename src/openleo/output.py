@@ -146,8 +146,8 @@ def _utc(value: datetime) -> str:
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _float(value: float) -> str:
-    return format(value, ".12g")
+def _float(value: float, significant_digits: int = 12) -> str:
+    return format(value, f".{significant_digits}g")
 
 
 def _json_dumps(value: Any, significant_digits: int = 12) -> str:

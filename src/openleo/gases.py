@@ -357,10 +357,16 @@ def _validate_result(result: GasesResult) -> None:
 def _gases_csv_row(case: GasesCase) -> dict[str, str]:
     attenuation = case.attenuation
     return {
-        "frequency_hz": _float(case.frequency_hz),
-        "dry_air_specific_attenuation_db_per_km": _float(attenuation.dry_air_db_per_km),
-        "water_vapour_specific_attenuation_db_per_km": _float(attenuation.water_vapour_db_per_km),
-        "total_specific_attenuation_db_per_km": _float(attenuation.total_db_per_km),
+        "frequency_hz": _float(case.frequency_hz, significant_digits=15),
+        "dry_air_specific_attenuation_db_per_km": _float(
+            attenuation.dry_air_db_per_km, significant_digits=15
+        ),
+        "water_vapour_specific_attenuation_db_per_km": _float(
+            attenuation.water_vapour_db_per_km, significant_digits=15
+        ),
+        "total_specific_attenuation_db_per_km": _float(
+            attenuation.total_db_per_km, significant_digits=15
+        ),
     }
 
 

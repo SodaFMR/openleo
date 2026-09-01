@@ -181,6 +181,9 @@ def test_run_and_write_gases_benchmark_are_immutable_and_deterministic(tmp_path)
         "water_vapour_specific_attenuation_db_per_km,"
         "total_specific_attenuation_db_per_km"
     )
+    assert first_csv.read_text(encoding="utf-8").splitlines()[1] == (
+        "12000000000,0.00869826406877357,0.00953538822024593,0.0182336522890195"
+    )
     summary = json.loads(first_summary.read_text(encoding="utf-8"))
     assert set(summary) == {
         "benchmark_name",
