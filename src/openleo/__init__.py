@@ -1,6 +1,16 @@
 """OpenLEO link budget tools."""
 
 from openleo.cli import main
+from openleo.gases import (
+    GasesBenchmark,
+    GasesCase,
+    GasesResult,
+    SpecificGaseousAttenuation,
+    load_gases_benchmark,
+    run_gases_benchmark,
+    specific_gaseous_attenuation,
+    write_gases_result,
+)
 from openleo.input import load_scenario
 from openleo.model import GroundStation, OrbitSource, Provenance, RadioLink, Scenario, TimeWindow
 from openleo.orbit import LoadedOrbit, load_orbit
@@ -19,6 +29,9 @@ from openleo.sensitivity import (
 from openleo.simulation import SimulationResult, SimulationSummary, TraceRow, simulate_scenario
 
 __all__ = [
+    "GasesBenchmark",
+    "GasesCase",
+    "GasesResult",
     "GroundStation",
     "LoadedOrbit",
     "OrbitSource",
@@ -33,14 +46,19 @@ __all__ = [
     "SensitivitySweep",
     "SimulationResult",
     "SimulationSummary",
+    "SpecificGaseousAttenuation",
     "TimeWindow",
     "TraceRow",
+    "load_gases_benchmark",
     "load_orbit",
     "load_scenario",
     "load_sensitivity_study",
     "main",
+    "run_gases_benchmark",
     "run_sensitivity",
     "simulate_scenario",
+    "specific_gaseous_attenuation",
+    "write_gases_result",
     "write_result",
     "write_sensitivity_result",
 ]

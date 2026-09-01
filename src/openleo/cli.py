@@ -6,6 +6,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 
+from openleo.gases import load_gases_benchmark, run_gases_benchmark, write_gases_result
 from openleo.input import load_scenario
 from openleo.output import write_result
 from openleo.sensitivity import load_sensitivity_study, run_sensitivity, write_sensitivity_result
@@ -20,6 +21,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "Examples:\n"
             "  openleo run SCENARIO.json --output DIRECTORY\n"
             "  openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY\n"
+            "  openleo gases CONFIG.json --output DIRECTORY\n"
             "  openleo plot RUN_DIRECTORY --output FILE.svg\n"
             "  openleo plot-sensitivity RUN_DIRECTORY --output FILE.svg"
         ),
@@ -39,6 +41,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "sensitivity", metavar="SENSITIVITY.json", help="sensitivity study JSON"
     )
     sensitivity_parser.add_argument(
+        "--output", required=True, metavar="DIRECTORY", help="output directory"
+    )
+
+    gases_parser = subparsers.add_parser(
+        "gases", help="run a gaseous specific-attenuation benchmark"
+    )
+    gases_parser.add_argument("benchmark", metavar="CONFIG.json", help="benchmark input JSON")
+    gases_parser.add_argument(
         "--output", required=True, metavar="DIRECTORY", help="output directory"
     )
 
@@ -90,6 +100,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"sweeps: {len(study.sweeps)}")
             print(f"cases: {len(result.cases)}")
             print(f"sensitivity: {csv_path}")
+            print(f"summary: {summary_path}")
+            return 0
+        except (ValueError, OSError, UnicodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    if args.command == "gases":
+        try:
+            result = run_gases_benchmark(load_gases_benchmark(args.benchmark))
+            csv_path, summary_path = write_gases_result(result, args.output)
+            print(f"benchmark: {result.benchmark.name}")
+            print(f"recommendation: {result.benchmark.recommendation}")
+            print(f"method: {result.benchmark.method}")
+            print(f"cases: {len(result.cases)}")
+            print(f"csv: {csv_path}")
             print(f"summary: {summary_path}")
             return 0
         except (ValueError, OSError, UnicodeError) as exc:

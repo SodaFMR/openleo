@@ -9,9 +9,10 @@ from openleo.cli import main
 
 FROZEN_SCENARIO = Path("examples/scenarios/iss_cartagena.json")
 CANONICAL_STUDY = Path("examples/sensitivity/iss_cartagena_oat.json")
+CANONICAL_GASES_BENCHMARK = Path("examples/atmosphere/p676_13_validation.json")
 
 
-def test_core_import_exports_sensitivity_without_matplotlib() -> None:
+def test_core_import_exports_gases_and_sensitivity_without_matplotlib() -> None:
     subprocess.run(
         [
             sys.executable,
@@ -21,13 +22,21 @@ import sys
 import openleo
 assert "matplotlib" not in sys.modules
 assert {
+    "GasesBenchmark",
+    "GasesCase",
+    "GasesResult",
     "SensitivityCase",
     "SensitivityMetrics",
     "SensitivityResult",
     "SensitivityStudy",
     "SensitivitySweep",
+    "SpecificGaseousAttenuation",
+    "load_gases_benchmark",
     "load_sensitivity_study",
+    "run_gases_benchmark",
     "run_sensitivity",
+    "specific_gaseous_attenuation",
+    "write_gases_result",
     "write_sensitivity_result",
 } <= set(openleo.__all__)
 """,
@@ -88,7 +97,6 @@ def test_main_sensitivity_writes_deterministic_artifacts(tmp_path, capsys) -> No
         )
         == 0
     )
-
     assert (output_dir / "sensitivity.csv").is_file()
     assert (output_dir / "sensitivity-summary.json").is_file()
     assert capsys.readouterr().out == (
@@ -98,6 +106,23 @@ def test_main_sensitivity_writes_deterministic_artifacts(tmp_path, capsys) -> No
         "cases: 20\n"
         f"sensitivity: {output_dir / 'sensitivity.csv'}\n"
         f"summary: {output_dir / 'sensitivity-summary.json'}\n"
+    )
+
+
+def test_main_gases_writes_deterministic_artifacts(tmp_path, capsys) -> None:
+    output_dir = tmp_path / "gases"
+
+    assert main(["gases", str(CANONICAL_GASES_BENCHMARK), "--output", str(output_dir)]) == 0
+
+    assert (output_dir / "gaseous-specific-attenuation.csv").is_file()
+    assert (output_dir / "gaseous-specific-attenuation-summary.json").is_file()
+    assert capsys.readouterr().out == (
+        "benchmark: itu-p676-13-specific-attenuation-validation\n"
+        "recommendation: ITU-R P.676-13\n"
+        "method: annex1_line_by_line_specific_attenuation\n"
+        "cases: 5\n"
+        f"csv: {output_dir / 'gaseous-specific-attenuation.csv'}\n"
+        f"summary: {output_dir / 'gaseous-specific-attenuation-summary.json'}\n"
     )
 
 
@@ -128,9 +153,11 @@ def test_main_help_uses_standard_argparse_exit(capsys) -> None:
     assert "run a scenario" in captured.out
     assert "render a completed pass overview" in captured.out
     assert "run a deterministic sensitivity study" in captured.out
+    assert "run a gaseous specific-attenuation benchmark" in captured.out
     assert "render a completed sensitivity overview" in captured.out
     assert "openleo run SCENARIO.json --output DIRECTORY" in captured.out
     assert "openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY" in captured.out
+    assert "openleo gases CONFIG.json --output DIRECTORY" in captured.out
     assert "openleo plot RUN_DIRECTORY --output FILE.svg" in captured.out
     assert "openleo plot-sensitivity RUN_DIRECTORY --output FILE.svg" in captured.out
 

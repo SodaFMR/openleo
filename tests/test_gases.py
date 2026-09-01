@@ -1,8 +1,226 @@
+import json
+from dataclasses import FrozenInstanceError, replace
+from hashlib import sha256
 from math import isclose
+from pathlib import Path
 
 import pytest
 
-from openleo.gases import specific_gaseous_attenuation
+from openleo.gases import (
+    GasesBenchmark,
+    load_gases_benchmark,
+    run_gases_benchmark,
+    specific_gaseous_attenuation,
+    write_gases_result,
+)
+
+CANONICAL_BENCHMARK = Path("examples/atmosphere/p676_13_validation.json")
+CANONICAL_BENCHMARK_SHA256 = "8bb73d2f3b3fe971cee54fa5feeeb4e041e2e77a3f272dc83842614d996e7bc0"
+
+
+def test_load_gases_benchmark_accepts_the_frozen_official_validation_config() -> None:
+    benchmark = load_gases_benchmark(CANONICAL_BENCHMARK)
+
+    assert benchmark == GasesBenchmark(
+        name="itu-p676-13-specific-attenuation-validation",
+        recommendation="ITU-R P.676-13",
+        method="annex1_line_by_line_specific_attenuation",
+        source_sha256=CANONICAL_BENCHMARK_SHA256,
+        dry_air_pressure_hpa=1013.25,
+        temperature_k=288.15,
+        water_vapour_density_g_per_m3=7.5,
+        frequencies_hz=(12e9, 20e9, 60e9, 90e9, 130e9),
+    )
+    assert sha256(CANONICAL_BENCHMARK.read_bytes()).hexdigest() == CANONICAL_BENCHMARK_SHA256
+
+
+@pytest.mark.parametrize(
+    ("contents", "message"),
+    [
+        ("{", "invalid JSON"),
+        (
+            """{
+                \"schema_version\": \"1\",
+                \"name\": \"discarded\",
+                \"name\": \"valid\",
+                \"recommendation\": \"ITU-R P.676-13\",
+                \"method\": \"annex1_line_by_line_specific_attenuation\",
+                \"dry_air_pressure_hpa\": 1013.25,
+                \"temperature_k\": 288.15,
+                \"water_vapour_density_g_per_m3\": 7.5,
+                \"frequencies_hz\": [12000000000.0]
+            }""",
+            "duplicate JSON key",
+        ),
+        ('{"schema_version": "1"}', "is required"),
+        (
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "name": "valid",
+                    "recommendation": "ITU-R P.676-13",
+                    "method": "annex1_line_by_line_specific_attenuation",
+                    "dry_air_pressure_hpa": 1013.25,
+                    "temperature_k": 288.15,
+                    "water_vapour_density_g_per_m3": 7.5,
+                    "frequencies_hz": [12e9],
+                    "extra": True,
+                }
+            ),
+            "is not allowed",
+        ),
+        (
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "name": "valid",
+                    "recommendation": "wrong",
+                    "method": "annex1_line_by_line_specific_attenuation",
+                    "dry_air_pressure_hpa": 1013.25,
+                    "temperature_k": 288.15,
+                    "water_vapour_density_g_per_m3": 7.5,
+                    "frequencies_hz": [12e9],
+                }
+            ),
+            "recommendation",
+        ),
+        (
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "name": "valid",
+                    "recommendation": "ITU-R P.676-13",
+                    "method": "wrong",
+                    "dry_air_pressure_hpa": 1013.25,
+                    "temperature_k": 288.15,
+                    "water_vapour_density_g_per_m3": 7.5,
+                    "frequencies_hz": [12e9],
+                }
+            ),
+            "method",
+        ),
+        (
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "name": "valid",
+                    "recommendation": "ITU-R P.676-13",
+                    "method": "annex1_line_by_line_specific_attenuation",
+                    "dry_air_pressure_hpa": 1013.25,
+                    "temperature_k": 288.15,
+                    "water_vapour_density_g_per_m3": 7.5,
+                    "frequencies_hz": [20e9, 12e9],
+                }
+            ),
+            "strictly greater",
+        ),
+        (
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "name": "valid",
+                    "recommendation": "ITU-R P.676-13",
+                    "method": "annex1_line_by_line_specific_attenuation",
+                    "dry_air_pressure_hpa": 1013.25,
+                    "temperature_k": 288.15,
+                    "water_vapour_density_g_per_m3": 7.5,
+                    "frequencies_hz": [1e9 - 1],
+                }
+            ),
+            "frequency_hz",
+        ),
+        (
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "name": "valid",
+                    "recommendation": "ITU-R P.676-13",
+                    "method": "annex1_line_by_line_specific_attenuation",
+                    "dry_air_pressure_hpa": 1013.25,
+                    "temperature_k": 288.15,
+                    "water_vapour_density_g_per_m3": 7.5,
+                    "frequencies_hz": [],
+                }
+            ),
+            "between 1 and 1000",
+        ),
+    ],
+)
+def test_load_gases_benchmark_rejects_invalid_configurations(tmp_path, contents, message) -> None:
+    path = tmp_path / "benchmark.json"
+    path.write_text(contents, encoding="utf-8", newline="\n")
+
+    with pytest.raises(ValueError, match=message):
+        load_gases_benchmark(path)
+
+
+def test_load_gases_benchmark_rejects_too_large_config(tmp_path) -> None:
+    path = tmp_path / "benchmark.json"
+    path.write_bytes(b" " * 1_000_001)
+
+    with pytest.raises(ValueError, match="exceeds 1000000 bytes"):
+        load_gases_benchmark(path)
+
+
+def test_run_and_write_gases_benchmark_are_immutable_and_deterministic(tmp_path) -> None:
+    result = run_gases_benchmark(load_gases_benchmark(CANONICAL_BENCHMARK))
+
+    with pytest.raises(FrozenInstanceError):
+        result.cases[0].frequency_hz = 0.0
+    with pytest.raises(FrozenInstanceError):
+        result.benchmark.name = "changed"
+
+    first_csv, first_summary = write_gases_result(result, tmp_path / "first")
+    second_csv, second_summary = write_gases_result(result, tmp_path / "second")
+
+    assert first_csv.read_bytes() == second_csv.read_bytes()
+    assert first_summary.read_bytes() == second_summary.read_bytes()
+    assert b"\r" not in first_csv.read_bytes()
+    assert first_csv.read_text(encoding="utf-8").splitlines()[0] == (
+        "frequency_hz,dry_air_specific_attenuation_db_per_km,"
+        "water_vapour_specific_attenuation_db_per_km,"
+        "total_specific_attenuation_db_per_km"
+    )
+    summary = json.loads(first_summary.read_text(encoding="utf-8"))
+    assert set(summary) == {
+        "benchmark_name",
+        "case_count",
+        "coefficient_source",
+        "conditions",
+        "limitations",
+        "method",
+        "numeric_format",
+        "official_validation",
+        "ordering",
+        "provenance",
+        "recommendation",
+        "schema_version",
+        "versions",
+    }
+    assert set(summary["conditions"]) == {
+        "dry_air_pressure_hpa",
+        "temperature_k",
+        "water_vapour_density_conversion_constant",
+        "water_vapour_density_g_per_m3",
+        "water_vapour_partial_pressure_hpa",
+    }
+    assert summary["conditions"]["water_vapour_partial_pressure_hpa"] == pytest.approx(
+        9.97288878634056
+    )
+    assert summary["conditions"]["water_vapour_density_conversion_constant"] == 216.7
+    assert summary["case_count"] == 5
+    assert summary["provenance"]["configuration"] == {"sha256": CANONICAL_BENCHMARK_SHA256}
+    assert summary["official_validation"]["workbook"]["sha256"] == (
+        "e2d8d864c80f59752318548cdd75d818792b44574da6e41dbdc5cb722aab7546"
+    )
+    assert summary["coefficient_source"]["commit"] == "f739993c4b6d34076de22249ef53d03fa5a53d73"
+
+
+def test_run_gases_benchmark_rejects_invalid_programmatic_benchmark() -> None:
+    benchmark = load_gases_benchmark(CANONICAL_BENCHMARK)
+
+    with pytest.raises(ValueError, match="method"):
+        run_gases_benchmark(replace(benchmark, method="wrong"))
 
 
 @pytest.mark.parametrize(
