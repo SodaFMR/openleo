@@ -204,10 +204,9 @@ def test_run_and_write_gases_benchmark_are_immutable_and_deterministic(tmp_path)
         "water_vapour_density_g_per_m3",
         "water_vapour_partial_pressure_hpa",
     }
-    assert summary["conditions"]["water_vapour_partial_pressure_hpa"] == pytest.approx(
-        9.97288878634056
-    )
+    assert summary["conditions"]["water_vapour_partial_pressure_hpa"] == 9.97288878634056
     assert summary["conditions"]["water_vapour_density_conversion_constant"] == 216.7
+    assert summary["numeric_format"]["floats"] == "Python format(value, '.15g')"
     assert summary["case_count"] == 5
     assert summary["provenance"]["configuration"] == {"sha256": CANONICAL_BENCHMARK_SHA256}
     assert summary["official_validation"]["workbook"]["sha256"] == (

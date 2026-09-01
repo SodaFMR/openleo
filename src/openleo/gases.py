@@ -137,7 +137,9 @@ def write_gases_result(result: GasesResult, output_dir: str | Path) -> tuple[Pat
         writer.writeheader()
         writer.writerows(_gases_csv_row(case) for case in result.cases)
     summary_path.write_text(
-        _json_dumps(_gases_summary(result)) + "\n", encoding="utf-8", newline="\n"
+        _json_dumps(_gases_summary(result), significant_digits=15) + "\n",
+        encoding="utf-8",
+        newline="\n",
     )
     return csv_path, summary_path
 
@@ -408,7 +410,7 @@ def _gases_summary(result: GasesResult) -> dict[str, Any]:
             "cases": "frequency order",
         },
         "numeric_format": {
-            "floats": "Python format(value, '.12g')",
+            "floats": "Python format(value, '.15g')",
             "csv": "UTF-8 with LF line endings",
             "json": "UTF-8, sorted keys, indentation 2, LF trailing newline",
         },

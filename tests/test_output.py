@@ -3,7 +3,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from openleo.input import load_scenario
-from openleo.output import write_result
+from openleo.output import _json_dumps, write_result
 from openleo.simulation import simulate_scenario
 
 FROZEN_SCENARIO = Path("examples/scenarios/iss_cartagena.json")
@@ -13,6 +13,15 @@ CSV_HEADER = (
     "noise_density_dbw_per_hz,carrier_to_noise_density_db_hz,signal_to_noise_ratio_db,"
     "shannon_capacity_upper_bound_bps"
 )
+
+
+def test_json_dumps_defaults_to_the_existing_12_significant_digit_format() -> None:
+    value = {"nested": [9.97288878634056, 0.1234567890123456]}
+
+    assert _json_dumps(value) == (
+        '{\n  "nested": [\n    9.97288878634,\n    0.123456789012\n  ]\n}'
+    )
+    assert _json_dumps(value, significant_digits=12) == _json_dumps(value)
 
 
 def test_write_result_creates_deterministic_trace_and_summary(tmp_path) -> None:
