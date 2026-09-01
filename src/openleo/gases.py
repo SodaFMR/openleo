@@ -46,6 +46,7 @@ GASES_CSV_FIELDS = (
     "water_vapour_specific_attenuation_db_per_km",
     "total_specific_attenuation_db_per_km",
 )
+_GASES_CSV_NAME = "gaseous-specific-attenuation.csv"
 GASES_LIMITATIONS = (
     "specific attenuation in dB/km at one declared homogeneous state; not integrated slant-path attenuation",
     "no atmospheric profile, refraction, rain, cloud, fog, scintillation, availability, or propagation-combination model",
@@ -130,14 +131,15 @@ def write_gases_result(result: GasesResult, output_dir: str | Path) -> tuple[Pat
     _validate_result(result)
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)
-    csv_path = directory / "gaseous-specific-attenuation.csv"
+    csv_path = directory / _GASES_CSV_NAME
     summary_path = directory / "gaseous-specific-attenuation-summary.json"
     with csv_path.open("w", encoding="utf-8", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=GASES_CSV_FIELDS, lineterminator="\n")
         writer.writeheader()
         writer.writerows(_gases_csv_row(case) for case in result.cases)
+    csv_sha256 = sha256(csv_path.read_bytes()).hexdigest()
     summary_path.write_text(
-        _json_dumps(_gases_summary(result), significant_digits=15) + "\n",
+        _json_dumps(_gases_summary(result, csv_sha256), significant_digits=15) + "\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -370,13 +372,19 @@ def _gases_csv_row(case: GasesCase) -> dict[str, str]:
     }
 
 
-def _gases_summary(result: GasesResult) -> dict[str, Any]:
+def _gases_summary(result: GasesResult, csv_sha256: str) -> dict[str, Any]:
     benchmark = result.benchmark
     water_vapour_partial_pressure_hpa = (
         benchmark.water_vapour_density_g_per_m3 * benchmark.temperature_k / 216.7
     )
     return {
         "schema_version": "1",
+        "artifacts": {
+            "csv": {
+                "filename": _GASES_CSV_NAME,
+                "sha256": csv_sha256,
+            }
+        },
         "benchmark_name": benchmark.name,
         "recommendation": benchmark.recommendation,
         "method": benchmark.method,

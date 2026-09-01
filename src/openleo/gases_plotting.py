@@ -6,6 +6,7 @@ import csv
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
+from hashlib import sha256
 from itertools import islice, pairwise
 from math import isclose, isfinite
 from pathlib import Path
@@ -21,6 +22,7 @@ _CSV_FIELDS = (
 )
 _SUMMARY_FIELDS = (
     "schema_version",
+    "artifacts",
     "benchmark_name",
     "recommendation",
     "method",
@@ -82,6 +84,7 @@ _GUIDE_NOTE = (
     "Validation points connected only as a visual guide; no values between validation "
     "frequencies were evaluated."
 )
+_ZERO_NOTE = "Zero attenuation values are omitted because a logarithmic axis cannot represent zero."
 _MAX_ARTIFACT_BYTES = 1_000_000
 _MAX_ROWS = 1_000
 
@@ -89,6 +92,7 @@ _MAX_ROWS = 1_000
 @dataclass(frozen=True, slots=True)
 class _Summary:
     benchmark_name: str
+    csv_sha256: str
     configuration_sha256: str
     dry_air_pressure_hpa: float
     temperature_k: float
@@ -120,6 +124,8 @@ def render_gases_overview(run_directory: str | Path, output_path: str | Path) ->
         raise ValueError("summary case_count does not match CSV row count")
     if summary.frequencies_hz != tuple(row.frequency_hz for row in rows):
         raise ValueError("summary frequencies_hz must match CSV frequency_hz values")
+    if summary.csv_sha256 != _file_sha256(run / _CSV_NAME):
+        raise ValueError(f"{_CSV_NAME} SHA-256 does not match summary")
 
     try:
         import matplotlib
@@ -134,6 +140,11 @@ def render_gases_overview(run_directory: str | Path, output_path: str | Path) ->
     from matplotlib import pyplot as plt
 
     frequencies_ghz = tuple(row.frequency_hz / 1e9 for row in rows)
+    has_zero = any(
+        value == 0.0
+        for row in rows
+        for value in (row.dry_air_db_per_km, row.water_vapour_db_per_km, row.total_db_per_km)
+    )
     figure = plt.figure(figsize=(14, 7), facecolor="white", layout="none")
     try:
         axis = figure.add_subplot(1, 1, 1)
@@ -158,9 +169,10 @@ def render_gases_overview(run_directory: str | Path, output_path: str | Path) ->
                 "^",
             ),
         ):
+            plotted_values = tuple(float("nan") if value == 0.0 else value for value in values)
             axis.plot(
                 frequencies_ghz,
-                values,
+                plotted_values,
                 label=label,
                 color=color,
                 marker=marker,
@@ -187,6 +199,8 @@ def render_gases_overview(run_directory: str | Path, output_path: str | Path) ->
             fontsize=11,
         )
         figure.text(0.5, 0.125, _GUIDE_NOTE, ha="center", fontsize=10)
+        if has_zero:
+            figure.text(0.5, 0.085, _ZERO_NOTE, ha="center", fontsize=10)
         figure.text(0.5, 0.045, _FOOTER, ha="center", fontsize=10)
         output.parent.mkdir(parents=True, exist_ok=True)
         metadata = {
@@ -194,6 +208,7 @@ def render_gases_overview(run_directory: str | Path, output_path: str | Path) ->
             "Description": (
                 f"benchmark={summary.benchmark_name}; "
                 f"configuration_sha256={summary.configuration_sha256}; "
+                f"csv_sha256={summary.csv_sha256}; "
                 f"workbook_sha256={_OFFICIAL_VALIDATION['workbook']['sha256']}; "
                 f"recommendation={_RECOMMENDATION}; method={_METHOD}; "
                 f"openleo={summary.openleo_version}; matplotlib={matplotlib.__version__}"
@@ -219,6 +234,11 @@ def _read_summary(path: Path) -> _Summary:
     if not isinstance(raw, Mapping) or raw.get("schema_version") != "1":
         raise ValueError("summary schema_version must be 1")
     data = _object(raw, _SUMMARY_FIELDS, "summary")
+    artifacts = _object(data["artifacts"], frozenset(("csv",)), "artifacts")
+    csv_artifact = _object(artifacts["csv"], frozenset(("filename", "sha256")), "artifacts.csv")
+    if csv_artifact["filename"] != _CSV_NAME:
+        raise ValueError(f"summary artifacts.csv.filename must be {_CSV_NAME!r}")
+    csv_sha256 = _sha256(csv_artifact["sha256"], "artifacts.csv.sha256")
     benchmark_name = _string(data["benchmark_name"], "benchmark_name")
     if len(benchmark_name) > 128:
         raise ValueError("benchmark_name must be at most 128 Unicode code points")
@@ -294,6 +314,7 @@ def _read_summary(path: Path) -> _Summary:
 
     return _Summary(
         benchmark_name=benchmark_name,
+        csv_sha256=csv_sha256,
         configuration_sha256=configuration_sha256,
         dry_air_pressure_hpa=dry_air_pressure_hpa,
         temperature_k=temperature_k,
@@ -342,8 +363,8 @@ def _parse_row(raw: dict[str | None, str | None]) -> _Row:
     )
     if not 1e9 <= frequency_hz <= 1e12:
         raise ValueError(f"{_CSV_NAME} frequency_hz must be between 1e9 and 1e12 inclusive")
-    if min(dry_air, water_vapour, total) <= 0.0:
-        raise ValueError(f"{_CSV_NAME} log scale requires strictly positive attenuation values")
+    if min(dry_air, water_vapour, total) < 0.0:
+        raise ValueError(f"{_CSV_NAME} attenuation values must be non-negative")
     if not isclose(total, dry_air + water_vapour, rel_tol=1e-12, abs_tol=1e-13):
         raise ValueError(f"{_CSV_NAME} total attenuation must equal dry plus water vapour")
     return _Row(frequency_hz, dry_air, water_vapour, total)
@@ -418,6 +439,13 @@ def _sha256(value: Any, path: str) -> str:
     ):
         raise ValueError(f"summary {path} must be 64 lowercase hexadecimal characters")
     return value
+
+
+def _file_sha256(path: Path) -> str:
+    try:
+        return sha256(path.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise ValueError(f"could not read {path.name}: {exc}") from exc
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

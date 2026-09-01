@@ -153,8 +153,8 @@ The commands write:
 - `gaseous-specific-attenuation.csv`, containing dry-air, water-vapour, and total
   specific attenuation in dB/km at five official validation frequencies;
 - `gaseous-specific-attenuation-summary.json`, containing declared and derived
-  conditions, configuration and source fingerprints, versions, formatting, and
-  limitations; and
+  conditions, configuration, source, and CSV-artifact fingerprints, versions,
+  formatting, and limitations; and
 - an optional static SVG rendered only from those completed artifacts.
 
 The calculation uses standard-library math and does not require Matplotlib. Its five

@@ -120,10 +120,11 @@ runs/p676-validation/
 ```
 
 The CSV contains the ordered frequencies and three specific-attenuation components.
-The summary records the configuration fingerprint, declared and derived conditions,
-Recommendation and method, coefficient provenance, official workbook provenance,
-package version, numeric format, ordering, and limitations. Finite floats use 15
-significant digits in both artifacts.
+The summary records the configuration fingerprint, the exact CSV filename and SHA-256,
+declared and derived conditions, Recommendation and method, coefficient provenance,
+official workbook provenance, package version, numeric format, ordering, and
+limitations. The plotter verifies the CSV fingerprint before rendering. Finite floats
+use 15 significant digits in both artifacts.
 
 Render the completed artifacts separately:
 
@@ -135,7 +136,9 @@ uv run openleo plot-gases runs/p676-validation \
 ![P.676-13 specific gaseous attenuation at the five official validation frequencies](images/p676-13-specific-attenuation.svg)
 
 The logarithmic curves connect only the five evaluated validation points as a visual
-guide. No values between those frequencies were calculated for the figure.
+guide. No values between those frequencies were calculated for the figure. If a valid
+artifact contains zero attenuation, the renderer omits that undefined log-scale point
+and states the omission explicitly on the figure; the calculation and CSV retain zero.
 
 ## Claim Boundary And Non-Goals
 

@@ -214,7 +214,7 @@ The reproducibility files are:
 - `examples/atmosphere/p676_13_validation.json`: exact conditions and five frequencies;
 - `gaseous-specific-attenuation.csv`: ordered dry-air, water-vapour, and total dB/km;
 - `gaseous-specific-attenuation-summary.json`: configuration, conditions, versions,
-  source provenance, formatting, ordering, and limitations;
+  source provenance, CSV fingerprint, formatting, ordering, and limitations;
 - `docs/GASES.md`: equations, units, official cases, provenance, and claim boundary; and
 - `docs/images/p676-13-specific-attenuation.svg`: artifact-only logarithmic overview.
 

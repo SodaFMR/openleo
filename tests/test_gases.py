@@ -186,6 +186,7 @@ def test_run_and_write_gases_benchmark_are_immutable_and_deterministic(tmp_path)
     )
     summary = json.loads(first_summary.read_text(encoding="utf-8"))
     assert set(summary) == {
+        "artifacts",
         "benchmark_name",
         "case_count",
         "coefficient_source",
@@ -200,6 +201,12 @@ def test_run_and_write_gases_benchmark_are_immutable_and_deterministic(tmp_path)
         "recommendation",
         "schema_version",
         "versions",
+    }
+    assert summary["artifacts"] == {
+        "csv": {
+            "filename": "gaseous-specific-attenuation.csv",
+            "sha256": sha256(first_csv.read_bytes()).hexdigest(),
+        }
     }
     assert set(summary["conditions"]) == {
         "dry_air_pressure_hpa",
@@ -224,6 +231,23 @@ def test_run_and_write_gases_benchmark_are_immutable_and_deterministic(tmp_path)
         "e2d8d864c80f59752318548cdd75d818792b44574da6e41dbdc5cb722aab7546"
     )
     assert summary["coefficient_source"]["commit"] == "f739993c4b6d34076de22249ef53d03fa5a53d73"
+
+
+def test_write_gases_result_preserves_zero_water_vapour_attenuation(tmp_path) -> None:
+    benchmark = replace(
+        load_gases_benchmark(CANONICAL_BENCHMARK),
+        water_vapour_density_g_per_m3=0.0,
+        frequencies_hz=(12e9,),
+    )
+
+    csv_path, summary_path = write_gases_result(
+        run_gases_benchmark(benchmark), tmp_path / "zero-water"
+    )
+
+    assert csv_path.read_text(encoding="utf-8").splitlines()[1].split(",")[2] == "0"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["conditions"]["water_vapour_density_g_per_m3"] == 0.0
+    assert summary["artifacts"]["csv"]["sha256"] == sha256(csv_path.read_bytes()).hexdigest()
 
 
 def test_run_gases_benchmark_rejects_invalid_programmatic_benchmark() -> None:
