@@ -305,7 +305,7 @@ uv run openleo gases examples/atmosphere/p676_13_validation.json \
   --output runs/p676-validation
 uv run openleo plot-gases runs/p676-validation \
   --output docs/images/p676-13-specific-attenuation.svg
-uvx cffconvert --validate
+uvx cffconvert==2.0.0 --validate
 git diff --exit-code -- docs/images/iss-cartagena-pass-overview.svg \
   docs/images/iss-cartagena-sensitivity-overview.svg \
   docs/images/p676-13-specific-attenuation.svg
