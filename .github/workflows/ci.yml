@@ -51,6 +51,17 @@ jobs:
         run: uv run python -m build
 
       - if: matrix.full-checks
+        run: uvx cffconvert --validate
+
+      - if: matrix.full-checks
+        shell: bash
+        run: |
+          audit_requirements="$(mktemp)"
+          uv export --quiet --locked --no-dev --no-emit-project --format requirements-txt \
+            --output-file "$audit_requirements"
+          uvx --from pip-audit pip-audit --requirement "$audit_requirements"
+
+      - if: matrix.full-checks
         shell: bash
         run: |
           uv run python - <<'PY'
@@ -95,6 +106,9 @@ jobs:
             examples/scenarios/iss_cartagena.json \
             examples/sensitivity/iss_cartagena_oat.json \
             --output "$core_env/sensitivity"
+          "$core_env/bin/openleo" gases \
+            examples/atmosphere/p676_13_validation.json \
+            --output "$core_env/gases"
 
       - run: uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
 
@@ -104,6 +118,10 @@ jobs:
 
       - run: uv run openleo plot-sensitivity runs/iss-sensitivity --output runs/iss-sensitivity/sensitivity-overview.svg
 
+      - run: uv run openleo gases examples/atmosphere/p676_13_validation.json --output runs/p676-validation
+
+      - run: uv run openleo plot-gases runs/p676-validation --output runs/p676-validation/p676-13-specific-attenuation.svg
+
       - if: matrix.full-checks
         run: uv run openleo plot runs/iss --output docs/images/iss-cartagena-pass-overview.svg
 
@@ -111,4 +129,7 @@ jobs:
         run: uv run openleo plot-sensitivity runs/iss-sensitivity --output docs/images/iss-cartagena-sensitivity-overview.svg
 
       - if: matrix.full-checks
-        run: git diff --exit-code -- docs/images/iss-cartagena-pass-overview.svg docs/images/iss-cartagena-sensitivity-overview.svg
+        run: uv run openleo plot-gases runs/p676-validation --output docs/images/p676-13-specific-attenuation.svg
+
+      - if: matrix.full-checks
+        run: git diff --exit-code -- examples/atmosphere/p676_13_validation.json docs/images/iss-cartagena-pass-overview.svg docs/images/iss-cartagena-sensitivity-overview.svg docs/images/p676-13-specific-attenuation.svg

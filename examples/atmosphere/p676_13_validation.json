@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "name": "itu-p676-13-specific-attenuation-validation",
+  "recommendation": "ITU-R P.676-13",
+  "method": "annex1_line_by_line_specific_attenuation",
+  "dry_air_pressure_hpa": 1013.25,
+  "temperature_k": 288.15,
+  "water_vapour_density_g_per_m3": 7.5,
+  "frequencies_hz": [
+    12000000000.0,
+    20000000000.0,
+    60000000000.0,
+    90000000000.0,
+    130000000000.0
+  ]
+}

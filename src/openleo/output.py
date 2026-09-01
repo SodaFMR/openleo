@@ -146,13 +146,13 @@ def _utc(value: datetime) -> str:
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _float(value: float) -> str:
-    return format(value, ".12g")
+def _float(value: float, significant_digits: int = 12) -> str:
+    return format(value, f".{significant_digits}g")
 
 
-def _json_dumps(value: Any) -> str:
+def _json_dumps(value: Any, significant_digits: int = 12) -> str:
     return json.dumps(
-        _json_value(value),
+        _json_value(value, significant_digits),
         indent=2,
         sort_keys=True,
         ensure_ascii=False,
@@ -160,13 +160,13 @@ def _json_dumps(value: Any) -> str:
     )
 
 
-def _json_value(value: Any) -> Any:
+def _json_value(value: Any, significant_digits: int = 12) -> Any:
     if isinstance(value, float):
         if not isfinite(value):
             raise ValueError(f"out of range float values are not JSON compliant: {value!r}")
-        return float(format(value, ".12g"))
+        return float(format(value, f".{significant_digits}g"))
     if isinstance(value, dict):
-        return {key: _json_value(item) for key, item in value.items()}
+        return {key: _json_value(item, significant_digits) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
-        return [_json_value(item) for item in value]
+        return [_json_value(item, significant_digits) for item in value]
     return value

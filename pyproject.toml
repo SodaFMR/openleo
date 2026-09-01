@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openleo-link"
-version = "0.2.0a1"
+version = "0.2.0b1"
 description = "Reproducible time-varying link traces for LEO satellite research"
 readme = "README.md"
 license = "MIT"
