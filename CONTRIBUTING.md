@@ -78,6 +78,13 @@ from public records.
 The frozen ISS example uses real/frozen CelesTrak GP geometry. Its RF values are
 synthetic OpenLEO assumptions. See [THIRD_PARTY_DATA.md](THIRD_PARTY_DATA.md).
 
+The P.676-13 benchmark uses official ITU validation outputs and attributed coefficient
+data adapted from a pinned MIT-licensed ITU-Rpy commit. Preserve exact Recommendation
+versions, source URLs, checksums, adapted-file lists, and the full notice in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Do not commit or redistribute the
+official workbook. Describe these outputs as specific attenuation in dB/km at declared
+homogeneous conditions, never as integrated path loss or weather.
+
 Do not claim PyPI publication, DOI, calibrated validation, peer-reviewed results,
 operator performance, achieved throughput, or commercial service behavior unless
 the repository contains the supporting release or evidence.
@@ -99,17 +106,23 @@ uv run openleo sensitivity examples/scenarios/iss_cartagena.json \
   examples/sensitivity/iss_cartagena_oat.json --output runs/iss-sensitivity
 uv run openleo plot-sensitivity runs/iss-sensitivity \
   --output docs/images/iss-cartagena-sensitivity-overview.svg
+uv run openleo gases examples/atmosphere/p676_13_validation.json \
+  --output runs/p676-validation
+uv run openleo plot-gases runs/p676-validation \
+  --output docs/images/p676-13-specific-attenuation.svg
 uvx cffconvert --validate
 git diff --exit-code -- docs/images/iss-cartagena-pass-overview.svg \
-  docs/images/iss-cartagena-sensitivity-overview.svg
+  docs/images/iss-cartagena-sensitivity-overview.svg \
+  docs/images/p676-13-specific-attenuation.svg
 git diff --check
 ```
 
 Inspect `runs/iss/summary.json` and
-`runs/iss-sensitivity/sensitivity-summary.json` when documentation or examples mention
-reference values. Leave `runs/` untracked. Deterministic OAT ranges must not be described
-as uncertainty intervals, and heterogeneous RF sweep spans must not be ranked as though
-they were comparable uncertainties.
+`runs/iss-sensitivity/sensitivity-summary.json`, plus both files in
+`runs/p676-validation/`, when documentation or examples mention reference values. Leave
+`runs/` untracked. Deterministic OAT ranges must not be described as uncertainty
+intervals, and heterogeneous RF sweep spans must not be ranked as though they were
+comparable uncertainties.
 
 ## Pull Requests
 

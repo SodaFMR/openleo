@@ -81,6 +81,33 @@ sweeps use heterogeneous dimensions and spans, so their plotted response ranges 
 an importance ranking. The full method and terminology boundary are documented in
 [Deterministic Sensitivity](SENSITIVITY.md).
 
+## P.676-13 Official Workbook Verification
+
+The v0.2b1 implementation evaluates the ITU-R P.676-13 Annex 1 line-by-line method with
+dry-air pressure 1013.25 hPa, temperature 288.15 K, and water-vapour density 7.5 g/m³.
+The derived water-vapour partial pressure is 9.97288878634056 hPa using
+$e=\rho T/216.7$.
+
+At 12, 20, 60, 90, and 130 GHz, tests compare dry-air, water-vapour, and total specific
+attenuation against all 15 literal values from official workbook Rev8.3.0. Every
+component must agree with relative tolerance `1e-12` and absolute tolerance `1e-13`;
+the in-memory total must also equal the implementation's single dry-plus-water
+addition exactly. Boundary tests cover the 1–1,000 GHz validity range, finite physical
+inputs, immutable cases, strict artifact schemas, and deterministic output.
+
+The workbook SHA-256 is
+`e2d8d864c80f59752318548cdd75d818792b44574da6e41dbdc5cb722aab7546`. It is used as
+validation evidence and is not redistributed. Equations and coefficient data are
+adapted from the pinned MIT-licensed ITU-Rpy source documented in
+[`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md); the official Recommendation and
+workbook, not that secondary implementation, are the scientific authorities.
+
+This verification establishes agreement for specific attenuation in dB/km at five
+frequencies under one homogeneous state. It does not validate a vertical or slant-path
+loss, atmospheric profile, local weather, rain, cloud, scintillation, availability,
+received power, or operator performance. Exact equations, values, commands, and source
+links are in [P.676-13 Specific Gaseous Attenuation](GASES.md).
+
 ## Validation Still Required
 
 Absolute physical validation needs an independent observation with documented station

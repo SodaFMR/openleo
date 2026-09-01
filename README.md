@@ -7,7 +7,9 @@ v0.1 is intentionally narrow: it reads one frozen CelesTrak GP CSV record, one
 ground station, one UTC window, and one transparent RF scenario, then writes a
 deterministic visible-pass trace and summary. v0.2a1 adds a deterministic
 one-at-a-time sensitivity benchmark over declared sampling, elevation-mask, and
-synthetic RF assumptions without adding probabilistic uncertainty claims.
+synthetic RF assumptions without adding probabilistic uncertainty claims. v0.2b1
+adds an officially benchmarked ITU-R P.676-13 Annex 1 specific gaseous-attenuation
+instrument without applying atmosphere to the pass trace.
 
 OpenLEO is research software. It is not an orbit-determination system, waveform
 simulator, operational network-planning tool, calibrated validation study, or
@@ -137,6 +139,36 @@ The baseline context is retrospective: it is copied from the completed unchanged
 baseline run against one frozen fitted GP record. It is not a pre-pass prediction
 artifact or an orbit-accuracy guarantee.
 
+## Run The P.676-13 Specific-Attenuation Benchmark
+
+```bash
+uv run openleo gases examples/atmosphere/p676_13_validation.json \
+  --output runs/p676-validation
+uv run openleo plot-gases runs/p676-validation \
+  --output runs/p676-validation/p676-13-specific-attenuation.svg
+```
+
+The commands write:
+
+- `gaseous-specific-attenuation.csv`, containing dry-air, water-vapour, and total
+  specific attenuation in dB/km at five official validation frequencies;
+- `gaseous-specific-attenuation-summary.json`, containing declared and derived
+  conditions, configuration and source fingerprints, versions, formatting, and
+  limitations; and
+- an optional static SVG rendered only from those completed artifacts.
+
+The calculation uses standard-library math and does not require Matplotlib. Its five
+dry-air, water-vapour, and total values reproduce the official ITU validation workbook
+within the declared tolerances. The workbook itself is not redistributed.
+
+![P.676-13 specific gaseous attenuation at the five official validation frequencies](docs/images/p676-13-specific-attenuation.svg)
+
+Read [ITU-R P.676-13 Specific Gaseous Attenuation](docs/GASES.md) for the equations,
+units, literal validation values, authoritative workbook URL and hash, implementation
+attribution, commands, and claim boundary. The figure connects validation points only
+as a visual guide. This milestone does not calculate slant-path loss or weather and
+does not modify the existing free-space pass outputs.
+
 ## Outputs
 
 `trace.csv` contains one row per visible sample at or above the configured elevation
@@ -206,6 +238,9 @@ Read [Deterministic Sensitivity](docs/SENSITIVITY.md) for the v0.2a1 OAT method,
 canonical 20-case configuration, frozen results, GUM terminology boundary, and
 prohibited claims.
 
+Read [ITU-R P.676-13 Specific Gaseous Attenuation](docs/GASES.md) for the v0.2b1
+line-by-line specific-attenuation method, official cases, provenance, and non-goals.
+
 Then read the source in this order:
 
 1. [src/openleo/model.py](src/openleo/model.py) for validated scenario objects.
@@ -219,11 +254,15 @@ Then read the source in this order:
 6. [src/openleo/output.py](src/openleo/output.py) for deterministic CSV/JSON output.
 7. [src/openleo/sensitivity.py](src/openleo/sensitivity.py) for deterministic study
    validation, immutable case execution, and sensitivity CSV/JSON output.
-8. [src/openleo/plotting.py](src/openleo/plotting.py) for static pass plots from
+8. [src/openleo/gases.py](src/openleo/gases.py) for P.676-13 physics, strict benchmark
+   loading, and gaseous specific-attenuation CSV/JSON output.
+9. [src/openleo/plotting.py](src/openleo/plotting.py) for static pass plots from
    completed run artifacts.
-9. [src/openleo/sensitivity_plotting.py](src/openleo/sensitivity_plotting.py) for strict
+10. [src/openleo/sensitivity_plotting.py](src/openleo/sensitivity_plotting.py) for strict
    sensitivity-artifact reading and static sensitivity plots.
-10. [src/openleo/cli.py](src/openleo/cli.py) for all four public commands.
+11. [src/openleo/gases_plotting.py](src/openleo/gases_plotting.py) for strict
+    gases-artifact reading and the static logarithmic validation figure.
+12. [src/openleo/cli.py](src/openleo/cli.py) for all six public commands.
 
 ## Verification Commands
 
@@ -262,18 +301,25 @@ uv run openleo sensitivity examples/scenarios/iss_cartagena.json \
   examples/sensitivity/iss_cartagena_oat.json --output runs/iss-sensitivity
 uv run openleo plot-sensitivity runs/iss-sensitivity \
   --output docs/images/iss-cartagena-sensitivity-overview.svg
+uv run openleo gases examples/atmosphere/p676_13_validation.json \
+  --output runs/p676-validation
+uv run openleo plot-gases runs/p676-validation \
+  --output docs/images/p676-13-specific-attenuation.svg
 uvx cffconvert --validate
 git diff --exit-code -- docs/images/iss-cartagena-pass-overview.svg \
-  docs/images/iss-cartagena-sensitivity-overview.svg
+  docs/images/iss-cartagena-sensitivity-overview.svg \
+  docs/images/p676-13-specific-attenuation.svg
 git diff --check
 ```
 
 ## Limitations
 
-v0.1 is free-space only. It has no atmospheric gases, rain, cloud, fog,
-scintillation, atmospheric refraction, antenna radiation patterns, beam steering,
-interference, polarization, MODCOD tables, packet traffic, routing, live downloads,
-hardware control, or calibrated-observation validation.
+The pass simulation remains free-space only. v0.2b1 calculates homogeneous P.676-13
+specific attenuation separately, but does not integrate it along a path or apply it to
+`trace.csv`. OpenLEO still has no atmospheric profile, rain, cloud, fog, scintillation,
+refraction, antenna radiation patterns, beam steering, interference, polarization,
+MODCOD tables, packet traffic, routing, live downloads, hardware control, or
+calibrated-observation validation.
 
 Shannon-Hartley capacity is reported only as a theoretical upper bound. It is not
 throughput, achieved goodput, commercial service performance, or validation of any
@@ -291,6 +337,8 @@ free-space model.
   and CI.
 - v0.2a1: deterministic OAT sensitivity reporting for sampling, elevation-mask, and
   synthetic RF assumptions.
+- v0.2b1: officially validated P.676-13 Annex 1 specific gaseous attenuation at
+  declared homogeneous conditions.
 - v0.2: validated propagation-model subsets and justified uncertainty reporting.
 - v0.3: adaptive link state with cited thresholds and useful-rate estimates.
 - v0.4: network-simulator trace export and fixed-versus-dynamic comparison.
@@ -301,4 +349,5 @@ free-space model.
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [CITATION.cff](CITATION.cff)
 - [THIRD_PARTY_DATA.md](THIRD_PARTY_DATA.md)
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 - [LICENSE](LICENSE)

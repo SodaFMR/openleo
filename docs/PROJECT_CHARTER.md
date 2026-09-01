@@ -1,7 +1,7 @@
 # OpenLEO Research and Engineering Charter
 
 **Status:** Canonical project specification<br>
-**Last reviewed:** 2026-08-31<br>
+**Last reviewed:** 2026-09-01<br>
 **Working software name:** OpenLEO<br>
 **Planned distribution name:** `openleo-link`<br>
 **Planned import package and command:** `openleo`<br>
@@ -197,7 +197,34 @@ Baseline context is retrospective evidence copied from the completed unchanged r
 against the frozen fitted GP record. It is not a pre-pass prediction artifact,
 propagated covariance, or orbit-accuracy guarantee.
 
-### 6.4 Later milestones
+### 6.4 v0.2b1: P.676-13 homogeneous specific attenuation
+
+v0.2b1 asks what dry-air, water-vapour, and total specific attenuation the current
+ITU-R P.676-13 Annex 1 line-by-line method predicts under one declared homogeneous
+thermodynamic state. It reports dB/km only and does not change a pass trace or integrate
+attenuation along a path.
+
+The public immutable types are `SpecificGaseousAttenuation`, `GasesBenchmark`,
+`GasesCase`, and `GasesResult`. The core implementation uses standard-library math,
+fixed attributed coefficient tuples, strict bounded JSON, and deterministic CSV/JSON;
+Matplotlib remains isolated in the optional artifact-only renderer.
+
+The reproducibility files are:
+
+- `examples/atmosphere/p676_13_validation.json`: exact conditions and five frequencies;
+- `gaseous-specific-attenuation.csv`: ordered dry-air, water-vapour, and total dB/km;
+- `gaseous-specific-attenuation-summary.json`: configuration, conditions, versions,
+  source provenance, formatting, ordering, and limitations;
+- `docs/GASES.md`: equations, units, official cases, provenance, and claim boundary; and
+- `docs/images/p676-13-specific-attenuation.svg`: artifact-only logarithmic overview.
+
+All 15 official component values are checked against workbook Rev8.3.0. Equations and
+coefficients are adapted from a pinned MIT-licensed ITU-Rpy commit with its full notice
+retained. The workbook is authoritative validation evidence but is not redistributed.
+This establishes implementation agreement for specific attenuation at the declared
+cases, not slant-path loss, weather, or calibrated RF validation.
+
+### 6.5 Later milestones
 
 - **v0.2 — propagation and uncertainty:** implement only required subsets of current,
   in-force ITU-R recommendations; retain deterministic sensitivity and add only
@@ -386,8 +413,9 @@ OpenLEO distinguishes software verification from physical validation.
    received power, noise, `C/N0`, SNR, and theoretical capacity bound.
 5. **Cross-platform regression:** run the same frozen scenario on Ubuntu, macOS, and
    Windows and compare within numeric tolerances.
-6. **ITU-R validation:** later atmospheric implementations reproduce the validation
-   examples for the exact Recommendation version before integration.
+6. **ITU-R validation:** atmospheric implementations reproduce official validation
+   examples for the exact Recommendation version before integration. v0.2b1 completes
+   this layer for P.676-13 Annex 1 specific attenuation only.
 7. **Public observational sanity check:** SatNOGS can support pass timing and signal
    presence comparisons, but not absolute RF validation by default.
 8. **Calibrated experiment:** absolute RF validation requires a documented station and
@@ -456,11 +484,13 @@ silently relying on older library defaults. Relevant references currently includ
 - ITU-R P.839-4 for rain height; and
 - ITU-R P.840-9 for clouds and fog.
 
-ITU-Rpy 0.4.0 is not a v0.1 dependency because it bundles older Recommendation versions
-for several models and brings a large scientific dependency stack. A later milestone
-may contribute updates upstream, implement a small cited subset, or wrap another
-validated implementation. That decision will be based on reference-example agreement,
-license compatibility, and maintenance status.
+OpenLEO does not depend on ITU-Rpy at runtime. v0.2b1 implements only P.676-13 Annex 1
+specific attenuation with standard-library math. Its equations and coefficient data
+are adapted from ITU-Rpy commit
+`f739993c4b6d34076de22249ef53d03fa5a53d73` under the retained MIT notice and are
+validated against the official Rev8.3.0 workbook. No atmospheric profile or path
+integration is present. Each later model requires the same current-version,
+reference-example, license, and claim-boundary review before integration.
 
 ## 14. Minimal software architecture
 
@@ -472,15 +502,18 @@ Current minimal layout, abridged:
 openleo/
 ├── LICENSE
 ├── README.md
+├── THIRD_PARTY_NOTICES.md
 ├── pyproject.toml
 ├── uv.lock
 ├── docs/
 │   ├── FUNDAMENTALS.md
+│   ├── GASES.md
 │   ├── PROJECT_CHARTER.md
 │   ├── SENSITIVITY.md
 │   └── VALIDATION.md
 ├── examples/
 │   ├── data/
+│   ├── atmosphere/
 │   ├── scenarios/
 │   └── sensitivity/
 ├── src/openleo/
@@ -493,6 +526,9 @@ openleo/
 │   ├── plotting.py
 │   ├── sensitivity.py
 │   ├── sensitivity_plotting.py
+│   ├── _p676_coefficients.py
+│   ├── gases.py
+│   ├── gases_plotting.py
 │   └── cli.py
 └── tests/
 ```
@@ -508,9 +544,14 @@ Responsibilities:
 - `sensitivity.py`: strict OAT study loading, immutable cases, metrics, and deterministic
   sensitivity artifacts;
 - `sensitivity_plotting.py`: validate completed sensitivity artifacts and render the
-  static sensitivity overview; and
-- `cli.py`: `argparse` entry point for simulation, sensitivity, and plotting with
-  user-facing errors.
+  static sensitivity overview;
+- `_p676_coefficients.py`: fixed attributed P.676-13 oxygen and water-vapour tuples;
+- `gases.py`: P.676-13 specific attenuation, strict benchmark loading, and deterministic
+  gases artifacts;
+- `gases_plotting.py`: validate completed gases artifacts and render their static
+  logarithmic overview; and
+- `cli.py`: `argparse` entry point for simulation, sensitivity, gases, and artifact
+  plotting with user-facing errors.
 
 There are no provider interfaces, plugin managers, factories, repositories, service
 containers, custom exception hierarchies, or configuration frameworks. A boundary is
@@ -557,8 +598,8 @@ Required test layers:
 
 - unit tests for validation, each physical equation, and plotting artifact boundaries;
 - integration tests for one frozen pass from input to CSV/JSON and static SVG/PNG;
-- CLI smoke tests for simulation, deterministic sensitivity, and both plotters,
-  including a core-only wheel sensitivity run without Matplotlib;
+- CLI smoke tests for simulation, deterministic sensitivity, gases, and all three
+  plotters, including core-only wheel sensitivity and gases runs without Matplotlib;
 - cross-platform CI regression; and
 - a paper reproduction test when the paper workflow exists.
 
@@ -771,7 +812,9 @@ reference.
 ### Phase 3: uncertainty and atmosphere
 
 - maintain the v0.2a1 deterministic sensitivity benchmark;
-- implement validated current-version atmospheric subsets;
+- maintain the officially validated v0.2b1 P.676-13 homogeneous specific-attenuation
+  instrument;
+- implement only the next required current-version atmospheric subset;
 - compare the free-space baseline and specified-availability models; and
 - add justified uncertainty intervals.
 
@@ -910,6 +953,13 @@ v0.2a1 is complete only when every supported CI platform regenerates the canonic
 regenerates both committed SVGs without drift, and a fresh core-only Python 3.12 wheel
 environment runs sensitivity while Matplotlib is absent.
 
+v0.2b1 is complete only when all 15 dry-air, water-vapour, and total components agree
+with the five official P.676-13 workbook cases within the declared tolerances; every CI
+platform regenerates the two gases artifacts and a disposable figure; the full Ubuntu
+job regenerates all three committed SVGs without drift; and a core-only wheel runs the
+gases benchmark while Matplotlib is absent. Public outputs and documentation must state
+dB/km at homogeneous conditions and must not imply path loss or weather.
+
 ## 24. Decision log
 
 - **2026-08-30:** OpenLEO selected as the initial research direction
@@ -944,6 +994,12 @@ environment runs sensitivity while Matplotlib is absent.
 - **2026-08-31:** v0.2a1 adds deterministic OAT assumed ranges before probabilistic
   uncertainty; 1 s is a numerical plot reference rather than truth, and heterogeneous
   RF spans are not an importance ranking.
+- **2026-09-01:** v0.2b1 adds only P.676-13 Annex 1 homogeneous specific attenuation,
+  validated against official workbook Rev8.3.0; atmosphere remains separate from pass
+  traces until a path model is designed and validated.
+- **2026-09-01:** P.676 equations and coefficients are adapted from a pinned
+  MIT-licensed ITU-Rpy commit with the full notice retained; ITU-Rpy is not a runtime
+  dependency and the official workbook is not redistributed.
 
 ## 25. Authoritative references
 

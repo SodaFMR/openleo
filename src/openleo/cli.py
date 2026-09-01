@@ -16,14 +16,15 @@ from openleo.simulation import simulate_scenario
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="openleo",
-        description="Run a scenario, sensitivity study, or completed pass overview.",
+        description="Run OpenLEO scientific benchmarks and render completed artifacts.",
         epilog=(
             "Examples:\n"
             "  openleo run SCENARIO.json --output DIRECTORY\n"
             "  openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY\n"
             "  openleo gases CONFIG.json --output DIRECTORY\n"
             "  openleo plot RUN_DIRECTORY --output FILE.svg\n"
-            "  openleo plot-sensitivity RUN_DIRECTORY --output FILE.svg"
+            "  openleo plot-sensitivity RUN_DIRECTORY --output FILE.svg\n"
+            "  openleo plot-gases RUN_DIRECTORY --output FILE.svg"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -67,6 +68,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         "run_directory", metavar="RUN_DIRECTORY", help="completed sensitivity run directory"
     )
     sensitivity_plot_parser.add_argument(
+        "--output", required=True, metavar="FILE.svg|FILE.png", help="plot output file"
+    )
+
+    gases_plot_parser = subparsers.add_parser(
+        "plot-gases", help="render a completed gaseous attenuation overview"
+    )
+    gases_plot_parser.add_argument(
+        "run_directory", metavar="RUN_DIRECTORY", help="completed gaseous benchmark directory"
+    )
+    gases_plot_parser.add_argument(
         "--output", required=True, metavar="FILE.svg|FILE.png", help="plot output file"
     )
 
@@ -134,6 +145,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             from openleo.sensitivity_plotting import render_sensitivity_overview
 
             output_path = render_sensitivity_overview(args.run_directory, args.output)
+            print(f"plot: {output_path}")
+            return 0
+        except (ValueError, OSError, UnicodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    if args.command == "plot-gases":
+        try:
+            from openleo.gases_plotting import render_gases_overview
+
+            output_path = render_gases_overview(args.run_directory, args.output)
             print(f"plot: {output_path}")
             return 0
         except (ValueError, OSError, UnicodeError) as exc:

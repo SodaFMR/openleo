@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use OpenLEO, please cite the software."
 title: OpenLEO
-version: 0.2.0a1
+version: 0.2.0b1
 repository-code: "https://github.com/SodaFMR/openleo"
 license: MIT
 authors:

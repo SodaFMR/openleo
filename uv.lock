@@ -509,7 +509,7 @@ wheels = [
 
 [[package]]
 name = "openleo-link"
-version = "0.2.0a1"
+version = "0.2.0b1"
 source = { editable = "." }
 dependencies = [
     { name = "skyfield" },

@@ -155,11 +155,13 @@ def test_main_help_uses_standard_argparse_exit(capsys) -> None:
     assert "run a deterministic sensitivity study" in captured.out
     assert "run a gaseous specific-attenuation benchmark" in captured.out
     assert "render a completed sensitivity overview" in captured.out
+    assert "render a completed gaseous attenuation overview" in captured.out
     assert "openleo run SCENARIO.json --output DIRECTORY" in captured.out
     assert "openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY" in captured.out
     assert "openleo gases CONFIG.json --output DIRECTORY" in captured.out
     assert "openleo plot RUN_DIRECTORY --output FILE.svg" in captured.out
     assert "openleo plot-sensitivity RUN_DIRECTORY --output FILE.svg" in captured.out
+    assert "openleo plot-gases RUN_DIRECTORY --output FILE.svg" in captured.out
 
 
 def test_main_plot_writes_svg_and_stable_success_label(tmp_path, capsys) -> None:
@@ -292,6 +294,72 @@ def test_main_plot_sensitivity_missing_matplotlib_returns_install_error(
     monkeypatch.setattr(builtins, "__import__", block_matplotlib)
 
     assert main(["plot-sensitivity", str(run_directory), "--output", str(output_path)]) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.count("error:") == 1
+    assert "install openleo-link[plot]" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_main_plot_gases_writes_svg_and_stable_success_label(tmp_path, capsys) -> None:
+    run_directory = tmp_path / "gases"
+    output_path = tmp_path / "gases-overview.svg"
+    assert main(["gases", str(CANONICAL_GASES_BENCHMARK), "--output", str(run_directory)]) == 0
+    capsys.readouterr()
+
+    assert main(["plot-gases", str(run_directory), "--output", str(output_path)]) == 0
+
+    assert output_path.is_file()
+    assert capsys.readouterr().out == f"plot: {output_path}\n"
+
+
+@pytest.mark.parametrize(
+    ("run_kind", "output_name", "message"),
+    [
+        ("missing", "overview.svg", "could not read gaseous-specific-attenuation-summary.json"),
+        ("malformed", "overview.svg", "schema_version"),
+        ("missing", "overview.txt", "output_path must end in .svg or .png"),
+    ],
+)
+def test_main_plot_gases_returns_artifact_errors_without_traceback(
+    tmp_path, capsys, run_kind, output_name, message
+) -> None:
+    run_directory = tmp_path / "gases"
+    if run_kind == "malformed":
+        run_directory.mkdir()
+        (run_directory / "gaseous-specific-attenuation-summary.json").write_text(
+            "{}", encoding="utf-8"
+        )
+    output_path = tmp_path / output_name
+
+    assert main(["plot-gases", str(run_directory), "--output", str(output_path)]) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.count("error:") == 1
+    assert message in captured.err
+    assert "Traceback" not in captured.err
+    assert not output_path.exists()
+
+
+def test_main_plot_gases_missing_matplotlib_returns_install_error(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    run_directory = tmp_path / "gases"
+    output_path = tmp_path / "overview.svg"
+    assert main(["gases", str(CANONICAL_GASES_BENCHMARK), "--output", str(run_directory)]) == 0
+    capsys.readouterr()
+    original_import = builtins.__import__
+
+    def block_matplotlib(name, *args, **kwargs):
+        if name == "matplotlib":
+            raise ModuleNotFoundError("No module named 'matplotlib'", name="matplotlib")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", block_matplotlib)
+
+    assert main(["plot-gases", str(run_directory), "--output", str(output_path)]) == 2
 
     captured = capsys.readouterr()
     assert captured.out == ""
