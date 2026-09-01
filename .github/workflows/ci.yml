@@ -51,7 +51,7 @@ jobs:
         run: uv run python -m build
 
       - if: matrix.full-checks
-        run: uvx cffconvert --validate
+        run: uvx cffconvert==2.0.0 --validate
 
       - if: matrix.full-checks
         shell: bash
@@ -59,7 +59,7 @@ jobs:
           audit_requirements="$(mktemp)"
           uv export --quiet --locked --no-dev --no-emit-project --format requirements-txt \
             --output-file "$audit_requirements"
-          uvx --from pip-audit pip-audit --requirement "$audit_requirements"
+          uvx --from pip-audit==2.10.1 pip-audit --requirement "$audit_requirements"
 
       - if: matrix.full-checks
         shell: bash

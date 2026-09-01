@@ -292,6 +292,31 @@ def test_render_gases_overview_rejects_negative_or_inconsistent_values(tmp_path:
         render_gases_overview(run, tmp_path / "gases.svg")
 
 
+def test_render_gases_overview_rejects_csv_frequency_not_declared_by_summary(
+    tmp_path: Path,
+) -> None:
+    run = _write_run(tmp_path / "run")
+    rows = _read_rows(run)
+    rows[0]["frequency_hz"] = "13000000000"
+    _write_rows(run, rows)
+
+    with pytest.raises(ValueError, match="frequencies_hz must match CSV frequency_hz"):
+        render_gases_overview(run, tmp_path / "gases.svg")
+
+
+def test_render_gases_overview_rejects_zero_attenuation_on_log_scale(tmp_path: Path) -> None:
+    run = _write_run(tmp_path / "run")
+    rows = _read_rows(run)
+    rows[0]["water_vapour_specific_attenuation_db_per_km"] = "0"
+    rows[0]["total_specific_attenuation_db_per_km"] = rows[0][
+        "dry_air_specific_attenuation_db_per_km"
+    ]
+    _write_rows(run, rows)
+
+    with pytest.raises(ValueError, match="log scale requires strictly positive attenuation"):
+        render_gases_overview(run, tmp_path / "gases.svg")
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     [
@@ -367,7 +392,7 @@ def test_render_gases_overview_rejects_duplicate_summary_keys(tmp_path: Path) ->
     [
         ("header", "CSV fields"),
         ("non_finite", "must be finite"),
-        ("negative", "must be non-negative"),
+        ("negative", "log scale requires strictly positive attenuation"),
         ("unsorted", "strictly increasing"),
         ("out_of_range", "between 1e9 and 1e12"),
     ],

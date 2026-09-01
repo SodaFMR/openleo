@@ -342,8 +342,8 @@ def _parse_row(raw: dict[str | None, str | None]) -> _Row:
     )
     if not 1e9 <= frequency_hz <= 1e12:
         raise ValueError(f"{_CSV_NAME} frequency_hz must be between 1e9 and 1e12 inclusive")
-    if min(dry_air, water_vapour, total) < 0.0:
-        raise ValueError(f"{_CSV_NAME} attenuation values must be non-negative")
+    if min(dry_air, water_vapour, total) <= 0.0:
+        raise ValueError(f"{_CSV_NAME} log scale requires strictly positive attenuation values")
     if not isclose(total, dry_air + water_vapour, rel_tol=1e-12, abs_tol=1e-13):
         raise ValueError(f"{_CSV_NAME} total attenuation must equal dry plus water vapour")
     return _Row(frequency_hz, dry_air, water_vapour, total)
