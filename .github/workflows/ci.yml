@@ -67,15 +67,18 @@ jobs:
           uv run python - <<'PY'
           from pathlib import Path, PurePosixPath
           import tarfile
+          import zipfile
 
           archives = list(Path("dist").glob("*.tar.gz"))
           if len(archives) != 1:
               raise SystemExit(f"expected one sdist, found {len(archives)}")
           forbidden = {"coverage.xml", "dist", "runs"}
           with tarfile.open(archives[0], "r:gz") as archive:
+              members = archive.getmembers()
+              names = [member.name for member in members]
               invalid = [
                   member.name
-                  for member in archive.getmembers()
+                  for member in members
                   if (path := PurePosixPath(member.name)).is_absolute()
                   or (
                       len(path.parts) > 1
@@ -86,7 +89,26 @@ jobs:
               ]
           if invalid:
               raise SystemExit(f"invalid sdist members: {invalid}")
-          print(f"sdist members clean: {archives[0]}")
+          if not any(name.endswith("/THIRD_PARTY_NOTICES.md") for name in names):
+              raise SystemExit("sdist is missing THIRD_PARTY_NOTICES.md")
+
+          wheels = list(Path("dist").glob("*.whl"))
+          if len(wheels) != 1:
+              raise SystemExit(f"expected one wheel, found {len(wheels)}")
+          with zipfile.ZipFile(wheels[0]) as wheel:
+              wheel_names = wheel.namelist()
+          required_notices = (
+              ".dist-info/licenses/LICENSE",
+              ".dist-info/licenses/THIRD_PARTY_NOTICES.md",
+          )
+          missing_notices = [
+              notice
+              for notice in required_notices
+              if not any(name.endswith(notice) for name in wheel_names)
+          ]
+          if missing_notices:
+              raise SystemExit(f"wheel is missing license notices: {missing_notices}")
+          print(f"distribution members clean: {archives[0]}, {wheels[0]}")
           PY
 
       - if: matrix.full-checks
