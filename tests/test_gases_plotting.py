@@ -83,6 +83,13 @@ def _write_run(directory: Path) -> Path:
                     "water_vapour_density_conversion_constant": 216.7,
                 },
                 "case_count": 5,
+                "frequencies_hz": [
+                    12000000000.0,
+                    20000000000.0,
+                    60000000000.0,
+                    90000000000.0,
+                    130000000000.0,
+                ],
                 "versions": {"openleo-link": "0.2.0b1"},
                 "coefficient_source": {
                     "repository": "https://github.com/inigodelportillo/ITU-Rpy",
@@ -299,6 +306,7 @@ def test_render_gases_overview_rejects_negative_or_inconsistent_values(tmp_path:
         ("coefficient_source", "coefficient_source"),
         ("workbook_hash", "official_validation"),
         ("versions", "versions"),
+        ("frequencies", "frequencies_hz"),
         ("limitations", "limitations"),
         ("case_count", "case_count"),
     ],
@@ -330,6 +338,8 @@ def test_render_gases_overview_rejects_invalid_summary_contract(
         summary["official_validation"]["workbook"]["sha256"] = "0" * 64
     elif change == "versions":
         summary["versions"]["other"] = "1"
+    elif change == "frequencies":
+        summary["frequencies_hz"][0] = 13e9
     elif change == "limitations":
         summary["limitations"] = summary["limitations"][:-1]
     elif change == "case_count":

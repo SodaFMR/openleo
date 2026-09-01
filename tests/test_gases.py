@@ -190,6 +190,7 @@ def test_run_and_write_gases_benchmark_are_immutable_and_deterministic(tmp_path)
         "case_count",
         "coefficient_source",
         "conditions",
+        "frequencies_hz",
         "limitations",
         "method",
         "numeric_format",
@@ -211,6 +212,13 @@ def test_run_and_write_gases_benchmark_are_immutable_and_deterministic(tmp_path)
     assert summary["conditions"]["water_vapour_density_conversion_constant"] == 216.7
     assert summary["numeric_format"]["floats"] == "Python format(value, '.15g')"
     assert summary["case_count"] == 5
+    assert summary["frequencies_hz"] == [
+        12000000000.0,
+        20000000000.0,
+        60000000000.0,
+        90000000000.0,
+        130000000000.0,
+    ]
     assert summary["provenance"]["configuration"] == {"sha256": CANONICAL_BENCHMARK_SHA256}
     assert summary["official_validation"]["workbook"]["sha256"] == (
         "e2d8d864c80f59752318548cdd75d818792b44574da6e41dbdc5cb722aab7546"

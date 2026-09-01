@@ -389,6 +389,7 @@ def _gases_summary(result: GasesResult) -> dict[str, Any]:
             "water_vapour_density_conversion_constant": 216.7,
         },
         "case_count": len(result.cases),
+        "frequencies_hz": [case.frequency_hz for case in result.cases],
         "versions": {"openleo-link": version("openleo-link")},
         "coefficient_source": {
             "repository": "https://github.com/inigodelportillo/ITU-Rpy",

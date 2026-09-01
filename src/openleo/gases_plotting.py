@@ -26,6 +26,7 @@ _SUMMARY_FIELDS = (
     "method",
     "provenance",
     "conditions",
+    "frequencies_hz",
     "case_count",
     "versions",
     "coefficient_source",
@@ -92,6 +93,7 @@ class _Summary:
     dry_air_pressure_hpa: float
     temperature_k: float
     water_vapour_density_g_per_m3: float
+    frequencies_hz: tuple[float, ...]
     case_count: int
     openleo_version: str
 
@@ -116,6 +118,8 @@ def render_gases_overview(run_directory: str | Path, output_path: str | Path) ->
     rows = _read_rows(run / _CSV_NAME)
     if summary.case_count != len(rows):
         raise ValueError("summary case_count does not match CSV row count")
+    if summary.frequencies_hz != tuple(row.frequency_hz for row in rows):
+        raise ValueError("summary frequencies_hz must match CSV frequency_hz values")
 
     try:
         import matplotlib
@@ -269,6 +273,7 @@ def _read_summary(path: Path) -> _Summary:
         abs_tol=1e-13,
     ):
         raise ValueError("conditions.water_vapour_partial_pressure_hpa does not match rho*T/216.7")
+    frequencies_hz = _summary_frequencies(data["frequencies_hz"])
     case_count = data["case_count"]
     if (
         not isinstance(case_count, int)
@@ -293,6 +298,7 @@ def _read_summary(path: Path) -> _Summary:
         dry_air_pressure_hpa=dry_air_pressure_hpa,
         temperature_k=temperature_k,
         water_vapour_density_g_per_m3=density,
+        frequencies_hz=frequencies_hz,
         case_count=case_count,
         openleo_version=openleo_version,
     )
@@ -391,6 +397,17 @@ def _number(value: Any, path: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
         raise ValueError(f"summary {path} must be finite")
     return float(value)
+
+
+def _summary_frequencies(raw: Any) -> tuple[float, ...]:
+    if not isinstance(raw, list) or not 1 <= len(raw) <= _MAX_ROWS:
+        raise ValueError(f"summary frequencies_hz must contain 1 to {_MAX_ROWS} values")
+    frequencies = tuple(_number(value, "frequencies_hz") for value in raw)
+    if any(frequency < 1e9 or frequency > 1e12 for frequency in frequencies):
+        raise ValueError("summary frequencies_hz values must be between 1e9 and 1e12")
+    if any(left >= right for left, right in pairwise(frequencies)):
+        raise ValueError("summary frequencies_hz values must be strictly increasing")
+    return frequencies
 
 
 def _sha256(value: Any, path: str) -> str:
