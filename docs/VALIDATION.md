@@ -93,7 +93,8 @@ attenuation against all 15 literal values from official workbook Rev8.3.0. Every
 component must agree with relative tolerance `1e-12` and absolute tolerance `1e-13`;
 the in-memory total must also equal the implementation's single dry-plus-water
 addition exactly. Boundary tests cover the 1–1,000 GHz validity range, finite physical
-inputs, immutable cases, strict artifact schemas, and deterministic output.
+inputs, immutable cases, strict artifact schemas, deterministic output, and exact
+summary-to-CSV SHA-256 binding before visualization.
 
 The workbook SHA-256 is
 `e2d8d864c80f59752318548cdd75d818792b44574da6e41dbdc5cb722aab7546`. It is used as

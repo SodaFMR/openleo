@@ -8,7 +8,7 @@
    <cc:Work>
     <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
     <dc:title>ITU-R P.676-13 Annex 1 specific attenuation</dc:title>
-    <dc:description>benchmark=itu-p676-13-specific-attenuation-validation; configuration_sha256=8bb73d2f3b3fe971cee54fa5feeeb4e041e2e77a3f272dc83842614d996e7bc0; workbook_sha256=e2d8d864c80f59752318548cdd75d818792b44574da6e41dbdc5cb722aab7546; recommendation=ITU-R P.676-13; method=annex1_line_by_line_specific_attenuation; openleo=0.2.0b1; matplotlib=3.11.1</dc:description>
+    <dc:description>benchmark=itu-p676-13-specific-attenuation-validation; configuration_sha256=8bb73d2f3b3fe971cee54fa5feeeb4e041e2e77a3f272dc83842614d996e7bc0; csv_sha256=956066b8a36b3163ed6712ff780a2efecb2180191cb961c4aa08fa4cb4f718d4; workbook_sha256=e2d8d864c80f59752318548cdd75d818792b44574da6e41dbdc5cb722aab7546; recommendation=ITU-R P.676-13; method=annex1_line_by_line_specific_attenuation; openleo=0.2.0b1; matplotlib=3.11.1</dc:description>
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>

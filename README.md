@@ -153,8 +153,8 @@ The commands write:
 - `gaseous-specific-attenuation.csv`, containing dry-air, water-vapour, and total
   specific attenuation in dB/km at five official validation frequencies;
 - `gaseous-specific-attenuation-summary.json`, containing declared and derived
-  conditions, configuration and source fingerprints, versions, formatting, and
-  limitations; and
+  conditions, configuration, source, and CSV-artifact fingerprints, versions,
+  formatting, and limitations; and
 - an optional static SVG rendered only from those completed artifacts.
 
 The calculation uses standard-library math and does not require Matplotlib. Its five
@@ -305,7 +305,7 @@ uv run openleo gases examples/atmosphere/p676_13_validation.json \
   --output runs/p676-validation
 uv run openleo plot-gases runs/p676-validation \
   --output docs/images/p676-13-specific-attenuation.svg
-uvx cffconvert --validate
+uvx cffconvert==2.0.0 --validate
 git diff --exit-code -- docs/images/iss-cartagena-pass-overview.svg \
   docs/images/iss-cartagena-sensitivity-overview.svg \
   docs/images/p676-13-specific-attenuation.svg

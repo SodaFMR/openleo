@@ -8,6 +8,7 @@ version = "0.2.0b1"
 description = "Reproducible time-varying link traces for LEO satellite research"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.12"
 dependencies = [
     "skyfield>=1.55",

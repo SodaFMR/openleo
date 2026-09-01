@@ -3,11 +3,17 @@ import csv
 import json
 import struct
 from copy import deepcopy
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
 from matplotlib import pyplot as plt
 
+from openleo.gases import (
+    GasesBenchmark,
+    run_gases_benchmark,
+    write_gases_result,
+)
 from openleo.gases_plotting import render_gases_overview
 
 FOOTER = (
@@ -18,6 +24,7 @@ GUIDE_NOTE = (
     "Validation points connected only as a visual guide; no values between validation "
     "frequencies were evaluated."
 )
+ZERO_NOTE = "Zero attenuation values are omitted because a logarithmic axis cannot represent zero."
 FIELDS = (
     "frequency_hz",
     "dry_air_specific_attenuation_db_per_km",
@@ -67,10 +74,17 @@ def _write_run(directory: Path) -> Path:
                 ),
             )
         )
+    csv_sha256 = sha256((directory / "gaseous-specific-attenuation.csv").read_bytes()).hexdigest()
     (directory / "gaseous-specific-attenuation-summary.json").write_text(
         json.dumps(
             {
                 "schema_version": "1",
+                "artifacts": {
+                    "csv": {
+                        "filename": "gaseous-specific-attenuation.csv",
+                        "sha256": csv_sha256,
+                    }
+                },
                 "benchmark_name": "test-p676",
                 "recommendation": "ITU-R P.676-13",
                 "method": "annex1_line_by_line_specific_attenuation",
@@ -292,6 +306,55 @@ def test_render_gases_overview_rejects_negative_or_inconsistent_values(tmp_path:
         render_gases_overview(run, tmp_path / "gases.svg")
 
 
+def test_render_gases_overview_rejects_csv_frequency_not_declared_by_summary(
+    tmp_path: Path,
+) -> None:
+    run = _write_run(tmp_path / "run")
+    rows = _read_rows(run)
+    rows[0]["frequency_hz"] = "13000000000"
+    _write_rows(run, rows)
+
+    with pytest.raises(ValueError, match="frequencies_hz must match CSV frequency_hz"):
+        render_gases_overview(run, tmp_path / "gases.svg")
+
+
+def test_render_gases_overview_rejects_attenuation_values_not_bound_to_summary(
+    tmp_path: Path,
+) -> None:
+    run = _write_run(tmp_path / "run")
+    rows = _read_rows(run)
+    rows[0]["dry_air_specific_attenuation_db_per_km"] = "0.00969826406877357"
+    rows[0]["total_specific_attenuation_db_per_km"] = "0.0192336522890195"
+    _write_rows(run, rows)
+
+    with pytest.raises(ValueError, match="SHA-256 does not match summary"):
+        render_gases_overview(run, tmp_path / "gases.svg")
+
+
+def test_render_gases_overview_explicitly_omits_zero_values_on_log_scale(
+    tmp_path: Path,
+) -> None:
+    run = tmp_path / "run"
+    benchmark = GasesBenchmark(
+        name="zero-water",
+        recommendation="ITU-R P.676-13",
+        method="annex1_line_by_line_specific_attenuation",
+        source_sha256="a" * 64,
+        dry_air_pressure_hpa=1013.25,
+        temperature_k=288.15,
+        water_vapour_density_g_per_m3=0.0,
+        frequencies_hz=(12e9,),
+    )
+    write_gases_result(run_gases_benchmark(benchmark), run)
+    output = tmp_path / "zero-water.svg"
+
+    render_gases_overview(run, output)
+
+    svg = output.read_text(encoding="utf-8")
+    assert ZERO_NOTE in svg
+    assert "Water vapour" in svg
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     [
@@ -307,6 +370,7 @@ def test_render_gases_overview_rejects_negative_or_inconsistent_values(tmp_path:
         ("workbook_hash", "official_validation"),
         ("versions", "versions"),
         ("frequencies", "frequencies_hz"),
+        ("csv_hash", "SHA-256"),
         ("limitations", "limitations"),
         ("case_count", "case_count"),
     ],
@@ -340,6 +404,8 @@ def test_render_gases_overview_rejects_invalid_summary_contract(
         summary["versions"]["other"] = "1"
     elif change == "frequencies":
         summary["frequencies_hz"][0] = 13e9
+    elif change == "csv_hash":
+        summary["artifacts"]["csv"]["sha256"] = "0" * 64
     elif change == "limitations":
         summary["limitations"] = summary["limitations"][:-1]
     elif change == "case_count":
