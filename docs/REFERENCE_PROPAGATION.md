@@ -218,6 +218,11 @@ uv run --extra plot openleo propagation-study \
   --figure runs/reference-propagation/overview.svg
 ```
 
+The cross-platform figure check requires identical SVG structure, labels, styling
+and non-marker attributes, with an absolute tolerance of 0.001 SVG point for marker
+coordinates. This accommodates invisible floating-point rendering differences;
+scientific outputs are not rounded or altered for the figure check.
+
 ## Numerical checks and source provenance
 
 The complete bundled example covers 80 archived objects and 121 samples over two
