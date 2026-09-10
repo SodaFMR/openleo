@@ -1,8 +1,11 @@
 # OpenLEO scientific workbench
 
 The workbench runs a reproducible constellation experiment from an archived GP catalog
-through ground-link budgets, adaptive reference rates, and snapshot routing. It opens
-in a local browser and exports a self-contained interactive report.
+through ground-link budgets, optional reference-atmosphere propagation, adaptive
+reference rates, and snapshot routing. It opens in a local browser and exports a
+self-contained interactive report. The light workspace uses a compact toolbar,
+numerical inspector, conventional axis plots and a route table; the 3D Earth is a
+view of the same computed data, not a separate simulation.
 
 ## Start the application
 
@@ -10,7 +13,7 @@ From the repository root on Linux, macOS or Windows:
 
 ```bash
 uv sync --locked --group dev --extra plot
-uv run openleo app examples/constellations/iridium_global.json
+uv run openleo app examples/constellations/iridium_global_reference.json
 ```
 
 Open the printed `http://127.0.0.1:8765/` address if the browser does not open. Use
@@ -24,12 +27,18 @@ Madrid, Tromso, Singapore, and Quito. Select any station and satellite, move thr
 the sampled UTC timeline, inspect RF conditions and compare network routes. Drag the
 globe to rotate, scroll or use the zoom buttons, and select links in the routing table.
 Keyboard users can rotate the focused globe with arrow keys and use its zoom buttons.
+Playback advances through archived-orbit model samples; it is not a real-time
+telemetry feed. The inspector identifies the active propagation model and, when
+enabled, shows gaseous loss, apparent elevation and atmospheric excess delay.
 
 **Scenario** opens the experiment editor. Change station coordinates, RF assumptions,
 sampling, adaptation, or network endpoints and recompute. The JSON editor supports
 adding/removing stations within the documented bounds. Names must be unique, and the
 network source and destination must name two distinct stations. Coordinates and city
 presets are scenario choices; they do not assert that a calibrated station exists there.
+Reference-atmosphere scenarios also require an explicit AMSL height for every station
+in the JSON `propagation` object. Update those assumptions when relocating or renaming
+stations; a city preset does not supply a surveyed height or a geoid conversion.
 
 The application keeps the original catalog path and provenance pinned. To use another
 catalog, start the application with another local configuration and its verified hash.
@@ -39,7 +48,7 @@ exported, and a failed run preserves the preceding successful experiment.
 ## Reproduce and share
 
 ```bash
-uv run openleo constellation examples/constellations/iridium_global.json --output runs/global
+uv run openleo constellation examples/constellations/iridium_global_reference.json --output runs/global
 ```
 
 This command writes:
@@ -60,6 +69,13 @@ round-trip precision. CLI CSV uses 15 significant digits, explicit units and LF 
 Browser CSV downloads include readable station/satellite names, retain JavaScript's
 numeric round-trip representation, and use CRLF endings. Use CLI exports for the fixed
 machine-readable column schema above.
+
+Free-space configurations omit `propagation` and retain experiment schema `1` and
+the original link-column set. Reference-atmosphere configurations use schema `2`,
+adding dry, wet and total gaseous loss, free-space `C/N0`, geometric delay,
+atmospheric excess delay and apparent elevation. Exported model metadata records the
+Recommendation versions, source hashes and approximation boundaries. Both schemas
+remain readable; the original `iridium_global.json` is still a free-space example.
 
 `openleo.workbench.load_experiment(directory)` verifies all four artifact hashes before
 returning the experiment. Checksums detect a changed artifact relative to its manifest;
@@ -125,9 +141,49 @@ The reference rate is $R_s\eta$; actual decoding, pilot overhead, acquisition de
 modem dynamics and transport overhead are not simulated. The Doppler trace is reported,
 but an ideal tracking assumption prevents it from independently degrading the rate.
 
-The existing [P.676 reference calculation](GASES.md) remains a separate scientific
-instrument. Specific attenuation in dB/km is not added directly to path loss in dB.
-A validated path-integration model is required before that coupling is supported.
+## Reference-atmosphere propagation
+
+The optional model combines the P.835-7 global temperature, total-pressure and
+water-vapour profile, P.453-14 refractivity, and P.676-13 Annex 1 layer integration.
+Specific attenuation in dB/km is integrated over each refracted layer length to obtain
+loss in dB. The dry pressure supplied to the gas calculation is total pressure minus
+water-vapour partial pressure.
+
+The endpoint solve uses geometric elevation and range to find an apparent launch
+elevation through a 6,371 km mean-radius spherical atmosphere ending at 100 km.
+This sphere approximates the WGS84 topocentric geometry. Atmospheric heights are
+explicit geometric heights above mean sea level, not automatic conversions of the
+stations' ellipsoidal heights. The example's four heights are assumptions, not survey
+data, even where their numerical values equal the ellipsoidal-height assumptions.
+
+Gaseous loss reduces `cn0_db_hz`, SNR, `esn0_db` and the selected adaptive reference
+rate. `delay_s` includes both geometric range divided by light speed and the excess
+optical path divided by light speed. The inspector reports the excess separately.
+The elevation mask, contact samples and nominal Doppler remain geometric. Receiver
+system noise temperature remains fixed; atmospheric emission is not added. The delay
+uses non-dispersive radio refractivity, not a frequency-dependent group-delay model.
+
+The coupled model accepts frequencies from 1 to 1,000 GHz, station AMSL heights from
+0 to 10,000 m, a geometric elevation mask of at least 5 degrees, and ray endpoints
+above 100 km. `refinement` is 1, 2 or 4, splitting each reference layer evenly.
+These are calculation bounds, not an assertion of measured accuracy throughout the
+domain. Rain, cloud, scintillation and local weather are absent.
+
+To isolate this model's effect and check its grid resolution:
+
+```bash
+uv run openleo propagation-study examples/constellations/iridium_global_reference.json \
+  --output runs/propagation-study --figure runs/propagation-study/comparison.svg
+```
+
+The output contains `free_space/`, `reference/` and `refined/` experiment bundles,
+`comparison.csv`, and `propagation-study.json` with provenance, case summaries and
+maximum loss, apparent-elevation and excess-delay differences. The refined case
+doubles a starting refinement of 1 or 2; a study starting at 4 is rejected. Geometry,
+RF inputs and network settings are held fixed. The optional figure requires the
+`plot` extra. Refinement differences are numerical evidence, not uncertainty bars or
+calibrated weather validation. See [Reference propagation](REFERENCE_PROPAGATION.md)
+for exact equations, official cases and configuration fields.
 
 ## Network experiment
 
@@ -145,8 +201,10 @@ Three models use the same positions, geometric mask and ISL assumptions:
 3. **Fixed capacity:** minimum-delay routing with all geometric ground links assigned
    `fixed_capacity_bps`, including links where the adaptive model reports RF outage.
 
-Path delay is the sum of vacuum propagation delays; bottleneck rate is the minimum
-edge rate. A reciprocal ground-link budget is an explicit modeling assumption, not a
+Path delay sums the selected ground-link delays and vacuum ISL delays; reference
+atmosphere adds ground-link optical-path excess in all three routing models.
+The fixed-capacity baseline changes ground-link rates, not their delays. Bottleneck
+rate is the minimum edge rate. A reciprocal ground-link budget is an explicit modeling assumption, not a
 separate uplink calculation. These graph snapshots contain no traffic demand, packet
 queues, congestion, terminal contention, retransmissions or TCP/UDP goodput.
 
@@ -172,14 +230,17 @@ cannot change the catalog file path, fetch remote inputs or write arbitrary file
 Tests include official MODCOD thresholds, independent known orbit and local-geometry
 checks, hysteresis/outages, ellipsoid occlusion, hand-derived shortest/widest graphs,
 unchanged ISLs in the fixed baseline, input validation, HTTP boundary failures, export
-hashes and real browser interaction. Browser tests exercise offline reports, simulation
-edits, downloads, timeline synchronization and narrow layouts. Source provenance is in
+hashes and real browser interaction. Atmospheric tests add official profile/path
+reference cases, analytic homogeneous-shell and vacuum checks, endpoint recovery,
+grid refinement and schema-1 compatibility. Browser tests exercise offline reports,
+simulation edits, downloads, timeline synchronization and narrow layouts. Source provenance is in
 [Third-party data](../THIRD_PARTY_DATA.md).
 
 ## Release boundary
 
-Version 0.3 supplies an executable research workflow for the models above. Completing
-the paper release still requires additional model ablations, justified uncertainty
-inputs and propagation, atmospheric profile/path validation, observational comparisons,
-packet-simulator adapter validation and an archived release with a DOI. The existing
-scientific tests verify implemented calculations; they do not supply absent measurements.
+Version 0.4 supplies an executable research workflow for the models above, including
+reference-profile path verification and a controlled propagation ablation. Completing
+v1.0 still requires broader ablations, justified uncertainty inputs and propagation,
+observational comparisons, packet-simulator adapter validation and an archived release
+with a DOI. The [v1.0 checklist](V1_0.md) defines those gates. Scientific tests verify
+implemented calculations; they do not supply absent measurements.

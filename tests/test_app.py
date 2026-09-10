@@ -105,6 +105,14 @@ def test_loopback_app_serves_live_document(running_app):
     assert "network" in document
 
 
+def test_propagation_input_error_is_actionable_and_does_not_leak_values():
+    from openleo.app import _input_error
+
+    assert _input_error(ValueError("propagation secret-file.json invalid")) == (
+        "Invalid propagation. Check its values and limits."
+    )
+
+
 def test_simulate_updates_document_in_memory_without_changing_files(running_app, scenario):
     original_source = scenario.source_path.read_bytes()
     original = json.loads(request(running_app)[2])

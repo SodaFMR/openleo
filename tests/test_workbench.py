@@ -108,6 +108,28 @@ def test_canonical_scenario_provenance_rejects_inconsistent_records(tmp_path, ch
     assert not (tmp_path / "bad").exists()
 
 
+@pytest.mark.parametrize("encoding", ["original UTF-8 file bytes", "unknown", None, "missing"])
+def test_canonical_text_requires_the_matching_encoding_label(tmp_path, encoding):
+    source = document()
+    encoded = json.dumps(source["scenario"], sort_keys=True, separators=(",", ":"))
+    provenance = {
+        **source["provenance"],
+        "scenario_canonical_json": encoded,
+        "scenario_sha256": sha256(encoded.encode()).hexdigest(),
+        **({"scenario_hash_encoding": encoding} if encoding != "missing" else {}),
+    }
+    with pytest.raises(ValueError, match="encoding"):
+        write_workbench({**source, "provenance": provenance}, tmp_path / "bad")
+    assert not (tmp_path / "bad").exists()
+
+
+def test_unknown_hash_encoding_is_rejected_without_canonical_text():
+    source = document()
+    provenance = {**source["provenance"], "scenario_hash_encoding": "unknown"}
+    with pytest.raises(ValueError, match="encoding"):
+        render_workbench({**source, "provenance": provenance})
+
+
 @pytest.mark.parametrize(
     "filename", ["experiment.json", "links.csv", "routes.csv", "explorer.html"]
 )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -18,6 +19,7 @@ from skyfield.api import load, wgs84
 from skyfield.framelib import itrs
 
 from openleo.adaptation import ETSI_SOURCE_URL, MODCODS, AdaptationConfig, select_modcod
+from openleo.atmospheric_path import GroundPathResult, build_reference_column
 from openleo.catalog import load_catalog
 from openleo.input import (
     _finite_number,
@@ -41,6 +43,12 @@ from openleo.physics import (
     received_carrier_power_dbw,
     shannon_capacity_upper_bound_bps,
     signal_to_noise_ratio_db,
+)
+from openleo.propagation import (
+    PropagationConfig,
+    parse_propagation,
+    propagation_document,
+    propagation_metadata,
 )
 from openleo.simulation import _leap_second_table_sha256, _timestamps, _validated_time_grid
 
@@ -66,6 +74,7 @@ class ConstellationScenario:
     radio_link: RadioLink
     adaptation: AdaptationConfig
     network: NetworkConfig
+    propagation: PropagationConfig | None = None
 
 
 def load_constellation(path: str | Path) -> ConstellationScenario:
@@ -98,9 +107,14 @@ def parse_constellation(raw: Any, path: str | Path, source_sha256: str) -> Const
     """
     scenario_path = Path(path).resolve()
     try:
-        data = _object(raw, CONSTELLATION_KEYS, "scenario")
+        keys = CONSTELLATION_KEYS | (
+            {"propagation"} if isinstance(raw, Mapping) and "propagation" in raw else set()
+        )
+        data = _object(raw, keys, "scenario")
         stations = _stations(data["stations"])
+        station_names = tuple(station.name for station in stations)
         radio = _radio_link(data["radio_link"])
+        time_window = _time_window(data["time_window"])
         adaptation = AdaptationConfig(**_object(data["adaptation"], ADAPTATION_KEYS, "adaptation"))
         if radio.channel_bandwidth_hz < adaptation.symbol_rate_baud * (1 + adaptation.rolloff):
             raise ValueError(
@@ -113,10 +127,18 @@ def parse_constellation(raw: Any, path: str | Path, source_sha256: str) -> Const
             source_path=scenario_path,
             orbit=_orbit(data["orbit"], scenario_path),
             stations=stations,
-            time_window=_time_window(data["time_window"]),
+            time_window=time_window,
             radio_link=radio,
             adaptation=adaptation,
-            network=parse_network(data["network"], tuple(station.name for station in stations)),
+            network=parse_network(data["network"], station_names),
+            propagation=parse_propagation(
+                data["propagation"],
+                station_names,
+                radio.carrier_frequency_hz,
+                time_window.minimum_elevation_deg,
+            )
+            if "propagation" in data
+            else None,
         )
         _bounded_grid(scenario)
         return scenario
@@ -172,6 +194,11 @@ def scenario_document(scenario: ConstellationScenario) -> dict[str, Any]:
         "radio_link": asdict(scenario.radio_link),
         "adaptation": asdict(scenario.adaptation),
         "network": asdict(scenario.network),
+        **(
+            {"propagation": propagation_document(scenario.propagation)}
+            if scenario.propagation
+            else {}
+        ),
     }
 
 
@@ -198,18 +225,18 @@ def simulate_constellation(scenario: ConstellationScenario) -> dict[str, Any]:
     ]
     links = _links(scenario, timestamps, times, states, sites)
     return {
-        "schema_version": "1",
+        "schema_version": "2" if scenario.propagation else "1",
         "kind": "openleo.constellation",
         "scenario": scenario_document(scenario),
         "provenance": _provenance(scenario),
-        "models": _models(timescale),
+        "models": _models(timescale, scenario.propagation),
         "warnings": [
             f"NORAD {satellite['norad_id']}: maximum requested time is more than 14 days "
             f"from the element epoch ({satellite['maximum_absolute_element_age_days']:.6g} days)"
             for satellite in satellites
             if satellite["maximum_absolute_element_age_days"] > 14.0
         ],
-        "limitations": _limitations(),
+        "limitations": _limitations(scenario.propagation),
         "timestamps_utc": [_utc_text(timestamp) for timestamp in timestamps],
         "satellites": satellites,
         "stations": [
@@ -250,8 +277,18 @@ def _satellite_document(orbit, state, timestamps):
 
 def _links(scenario, timestamps, times, states, sites):
     frames = [[] for _ in timestamps]
+    heights = dict(scenario.propagation.station_heights_amsl_m) if scenario.propagation else {}
     for station_index, site in enumerate(sites):
         site_state = site.at(times)
+        column = (
+            build_reference_column(
+                scenario.radio_link.carrier_frequency_hz,
+                heights[scenario.stations[station_index].name] / 1000,
+                refinement=scenario.propagation.refinement,
+            )
+            if scenario.propagation
+            else None
+        )
         for satellite_index, state in enumerate(states):
             elevation, azimuth, distance, range_rate = _topocentric(
                 state, site_state, site, scenario.stations[station_index].name
@@ -263,7 +300,12 @@ def _links(scenario, timestamps, times, states, sites):
                 if not is_visible:
                     previous = None
                     continue
-                radio = _radio_metrics(scenario.radio_link, float(distance.m[index]))
+                path = (
+                    column.for_geometry(float(elevation.degrees[index]), float(distance.m[index]))
+                    if column
+                    else None
+                )
+                radio = _radio_metrics(scenario.radio_link, float(distance.m[index]), path)
                 esn0_db = signal_to_noise_ratio_db(
                     radio["cn0_db_hz"], scenario.adaptation.symbol_rate_baud
                 )
@@ -323,22 +365,39 @@ def _remaining_contacts(timestamps, visible):
     return tuple(reversed(reverse))
 
 
-def _radio_metrics(radio: RadioLink, range_m: float) -> dict[str, float]:
+def _radio_metrics(
+    radio: RadioLink, range_m: float, path: GroundPathResult | None = None
+) -> dict[str, float]:
     path_loss_db = free_space_path_loss_db(range_m, radio.carrier_frequency_hz)
     carrier_power_dbw = received_carrier_power_dbw(
         radio.eirp_dbw, radio.receiver_gain_dbi, path_loss_db, radio.miscellaneous_loss_db
     )
-    cn0_db_hz = carrier_to_noise_density_db_hz(
+    free_space_cn0_db_hz = carrier_to_noise_density_db_hz(
         carrier_power_dbw, noise_density_dbw_per_hz(radio.system_noise_temperature_k)
     )
+    cn0_db_hz = free_space_cn0_db_hz - path.total_db if path else free_space_cn0_db_hz
+    geometric_delay_s = propagation_delay_s(range_m)
     snr_db = signal_to_noise_ratio_db(cn0_db_hz, radio.channel_bandwidth_hz)
     return {
-        "delay_s": propagation_delay_s(range_m),
+        "delay_s": geometric_delay_s + path.excess_delay_s if path else geometric_delay_s,
         "cn0_db_hz": cn0_db_hz,
         "snr_db": snr_db,
         "shannon_upper_bound_bps": _finite_number(
             shannon_capacity_upper_bound_bps(snr_db, radio.channel_bandwidth_hz),
             "shannon_upper_bound_bps",
+        ),
+        **(
+            {
+                "gaseous_dry_attenuation_db": path.dry_air_db,
+                "gaseous_water_attenuation_db": path.water_vapour_db,
+                "gaseous_attenuation_db": path.total_db,
+                "free_space_cn0_db_hz": free_space_cn0_db_hz,
+                "geometric_delay_s": geometric_delay_s,
+                "atmospheric_excess_delay_s": path.excess_delay_s,
+                "apparent_elevation_deg": path.apparent_elevation_deg,
+            }
+            if path
+            else {}
         ),
     }
 
@@ -403,7 +462,7 @@ def _provenance(scenario):
     }
 
 
-def _models(timescale):
+def _models(timescale, propagation=None):
     return {
         "coordinates": {
             "frame": "ITRS",
@@ -421,9 +480,13 @@ def _models(timescale):
             "integration": "Left-hold rates over adjacent sample intervals; UTC datetime differences (POSIX convention)",
         },
         "radio_link": {
-            "channel": "Free-space AWGN; one declared reciprocal radio link budget for every satellite and station",
+            "channel": "Free-space plus reference gaseous loss, fixed-noise AWGN; one declared reciprocal radio link budget for every satellite and station"
+            if propagation
+            else "Free-space AWGN; one declared reciprocal radio link budget for every satellite and station",
             "doppler": "First order: -carrier_frequency_hz * range_rate_mps / c; receding is negative",
-            "delay": "One-way instantaneous geometric range / c",
+            "delay": "One-way instantaneous geometric range / c plus non-dispersive atmospheric optical-path excess delay"
+            if propagation
+            else "One-way instantaneous geometric range / c",
             "capacity": "Shannon AWGN upper bound, not traffic throughput",
             "constants": "c = 299792458 m/s; k = 1.380649e-23 J/K (exact SI)",
         },
@@ -454,16 +517,28 @@ def _models(timescale):
             "relay": "Only source and target ground stations participate; intermediate stations do not relay",
             "baseline": "Only ground-link rates become fixed_capacity_bps; ISLs retain isl_capacity_bps",
         },
+        **({"propagation": propagation_metadata(propagation)} if propagation else {}),
     }
 
 
-def _limitations():
+def _limitations(propagation=None):
     return [
         "Archived GP elements are propagated predictions, not measured satellite positions; age is reported without an uncertainty distribution.",
         "Station coordinates and every RF/ISL parameter are declared experiment assumptions, not surveyed infrastructure or real constellation specifications.",
         "DVB-S2 reference rates are synthetic link adaptation, not Iridium waveform or receiver measurements.",
-        "No atmosphere, rain, scintillation, terrain, antenna patterns, interference, RF acquisition delay or tracking dynamics are modeled.",
+        "Reference gaseous atmosphere only: no local weather, rain, cloud, fog, scintillation, terrain, antenna patterns, interference, RF acquisition delay or tracking dynamics are modeled."
+        if propagation
+        else "No atmosphere, rain, scintillation, terrain, antenna patterns, interference, RF acquisition delay or tracking dynamics are modeled.",
         "Contact boundaries and route choices are sampled; finer events between samples can be missed.",
         "UTC datetime integration uses the POSIX convention; inserted leap seconds are not explicit grid samples or additional integration seconds.",
         "Snapshot path bottlenecks omit link scheduling, contention, queues, packet loss, TCP and protocol overhead; they are not measured throughput.",
+        *(
+            [
+                "AMSL heights are explicit assumptions distinct from WGS84 ellipsoid heights; a 6371 km spherical ray approximates local WGS84 geometry.",
+                "System noise temperature stays fixed; atmospheric sky emission, refractive Doppler and dispersive group delay are not modeled. Visibility retains the geometric elevation mask.",
+                "Reference-profile agreement and layer-refinement convergence are numerical checks, not measured-weather or calibrated RF validation.",
+            ]
+            if propagation
+            else []
+        ),
     ]

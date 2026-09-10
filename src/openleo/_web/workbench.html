@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="$csp">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light">
   <meta name="description" content="OpenLEO reproducible satellite geometry, radio links and network experiments.">
   <title>OpenLEO · Scientific workbench</title>
   <style>$stylesheet</style>
@@ -12,32 +12,26 @@
 <body>
   <a class="skip-link" href="#main">Skip to experiment</a>
   <header class="app-header">
-    <a class="brand" href="#main" aria-label="OpenLEO workbench"><span class="brand-orbit" aria-hidden="true">◌</span><span>Open<span class="brand-accent">LEO</span><small>SCIENTIFIC WORKBENCH</small></span></a>
+    <a class="brand" href="#main" aria-label="OpenLEO workbench">OpenLEO <small id="app-version">Workbench</small></a>
+    <h1 id="experiment-name">Constellation experiment</h1>
     <nav aria-label="Workbench actions">
-      <button id="scenario-open" class="quiet" type="button">Scenario <span aria-hidden="true">↗</span></button>
+      <button id="scenario-open" class="quiet" type="button">Scenario</button>
       <button id="provenance-open" class="quiet" type="button">Sources &amp; assumptions</button>
-      <button id="download-report" class="primary" type="button">↓ <span>Export report</span></button>
+      <button id="download-report" class="primary" type="button">Export report</button>
     </nav>
   </header>
   <main id="main">
-    <section class="experiment-heading" aria-labelledby="experiment-name">
-      <div><div class="eyebrow"><span class="status-dot"></span> ORBITAL RESEARCH / REPRODUCIBLE EXPERIMENT</div>
-        <h1 id="experiment-name">Constellation experiment</h1>
-        <p>From orbital geometry to network performance. One reproducible experiment.</p>
-      </div>
-      <div class="session"><span id="session-badge" class="badge">ARCHIVED EXPERIMENT</span><span id="session-note">Explore exact samples. All times are UTC.</span></div>
-    </section>
     <noscript><p class="notice">This self-contained report requires JavaScript for its interactive globe, charts and controls. The complete experiment, scenario, provenance and model assumptions are embedded as JSON in this file; the accompanying experiment.json and CSV exports are readable without JavaScript.</p></noscript>
     <div id="startup-error" class="notice" role="alert" hidden></div>
     <section class="overview" aria-label="Experiment overview">
-      <div><span>CATALOG OBJECTS</span><strong id="satellite-count">—</strong><small>archived orbital elements</small></div>
-      <div><span>GROUND STATIONS</span><strong id="station-count">—</strong><small>declared WGS84 coordinates</small></div>
-      <div><span>VISIBLE LINKS <i>NOW</i></span><strong id="visible-count">—</strong><small id="usable-count">— RF-usable at this sample</small></div>
-      <div><span>EXPERIMENT WINDOW</span><strong id="window-duration">—</strong><small id="sample-count">— discrete samples</small></div>
+      <div><span>Catalog objects</span><strong id="satellite-count">—</strong></div>
+      <div><span>Ground stations</span><strong id="station-count">—</strong></div>
+      <div><span>Visible links</span><strong id="visible-count">—</strong><small id="usable-count">— RF-usable at this sample</small></div>
+      <div><span>Window</span><strong id="window-duration">—</strong><small id="sample-count">— discrete samples</small></div>
     </section>
     <div class="workspace-grid">
       <section class="panel scene-panel" aria-labelledby="scene-title">
-        <div class="panel-heading"><div><span class="eyebrow">01 / EARTH-FIXED GEOMETRY</span><h2 id="scene-title">Orbital view</h2></div><span class="badge subtle">WGS84 · ITRS</span></div>
+        <div class="panel-heading"><h2 id="scene-title">Orbital geometry</h2><span class="panel-context">WGS84 · ITRS</span></div>
         <div class="scene-selectors">
           <label>Ground station<select id="station-select" aria-label="Ground station"></select></label>
           <label>Tracked satellite<select id="satellite-select" aria-label="Tracked satellite"></select></label>
@@ -45,51 +39,53 @@
         </div>
         <div class="globe-wrap">
           <canvas id="globe" tabindex="0" role="img" aria-label="Interactive Earth-fixed satellite scene. Drag or use arrow keys to rotate, plus and minus to zoom, Home to center on the selected station.">Interactive orbital geometry requires a canvas-capable browser.</canvas>
-          <div class="scene-readout"><span class="scene-kicker">ORTHOGRAPHIC / ECEF</span><span id="camera-position">—</span></div>
+          <div class="scene-readout"><span>Orthographic · Earth-fixed</span><span id="camera-position">—</span></div>
           <div class="zoom-controls" aria-label="Camera controls"><button id="zoom-in" class="icon-button" aria-label="Zoom in" type="button">+</button><button id="zoom-out" class="icon-button" aria-label="Zoom out" type="button">−</button><button id="reset-view" class="icon-button" aria-label="Reset view" title="Reset view" type="button">↺</button></div>
-          <div class="scene-legend"><span><i class="legend-dot cyan"></i>Satellite</span><span><i class="legend-dot amber"></i>Station</span><span><i class="legend-line"></i>Selected track</span></div>
+          <div class="scene-legend"><span><i class="legend-dot cyan"></i>Satellite</span><span><i class="legend-dot amber"></i>Station</span><span><i class="legend-line"></i>Track</span><span><i class="legend-line route"></i>Route</span></div>
           <div class="scene-hint">Drag to rotate · scroll to zoom · click a satellite</div>
         </div>
-        <div class="layer-controls"><label><input id="show-ground" type="checkbox" checked> Ground links</label><label><input id="show-isl" type="checkbox"> Inter-satellite links</label><span>Rear geometry is Earth-occluded</span></div>
+        <div class="layer-controls"><label><input id="show-ground" type="checkbox" checked> Ground links</label><label><input id="show-isl" type="checkbox"> Inter-satellite links</label><span>Earth occlusion enabled</span></div>
         <div class="timeline">
-          <div class="timeline-heading"><span class="eyebrow">SIMULATION TIME</span><time id="current-time">—</time><span id="sample-position" class="mono">—</span></div>
+          <div class="timeline-heading"><span>Simulation time</span><time id="current-time">—</time><span id="sample-position" class="mono">—</span></div>
           <div class="timeline-controls"><button id="previous-sample" class="icon-button" type="button" aria-label="Previous sample">‹</button><button id="play-pause" class="play-button" type="button" aria-label="Play timeline" aria-pressed="false">▶</button><button id="next-sample" class="icon-button" type="button" aria-label="Next sample">›</button><input id="timeline" type="range" min="0" max="0" value="0" step="1" aria-label="Simulation time sample"><select id="playback-speed" aria-label="Playback speed"><option value="1">1 sample/s</option><option value="4">4 samples/s</option><option value="12">12 samples/s</option></select></div>
           <div class="timeline-extents"><time id="start-time">—</time><span>Discrete snapshots · no metric interpolation</span><time id="stop-time">—</time></div>
         </div>
       </section>
       <aside class="panel link-panel" aria-labelledby="link-title">
-        <div class="panel-heading"><div><span class="eyebrow">02 / SELECTED DOWNLINK</span><h2 id="link-title">Modelled link state</h2></div><span id="link-status" class="badge subtle">—</span></div>
-        <div class="link-identity"><span id="selected-satellite">—</span><span aria-hidden="true">↓</span><span id="selected-station">—</span></div>
-        <div class="rate-hero"><span class="eyebrow">ADAPTIVE PHYSICAL-LAYER RATE</span><strong id="link-rate">—</strong><div><span id="link-modcod" class="badge">—</span><span id="link-margin">—</span></div></div>
+        <div class="panel-heading"><h2 id="link-title">Selected downlink</h2><span id="link-status" class="badge subtle">—</span></div>
+        <div class="link-identity"><span id="selected-satellite">—</span><span aria-hidden="true">→</span><span id="selected-station">—</span></div>
+        <div class="rate-readout"><span>Adaptive PHY rate</span><strong id="link-rate">—</strong><div><span id="link-modcod" class="badge">—</span><span id="link-margin">—</span></div></div>
         <dl class="metrics">
           <div><dt>Elevation</dt><dd id="link-elevation">—</dd></div><div><dt>Slant range</dt><dd id="link-range">—</dd></div>
           <div><dt>Doppler shift</dt><dd id="link-doppler">—</dd></div><div><dt>Propagation delay</dt><dd id="link-delay">—</dd></div>
           <div><dt>C/N₀</dt><dd id="link-cn0">—</dd></div><div><dt>Eₛ/N₀</dt><dd id="link-esn0">—</dd></div>
           <div><dt>Azimuth</dt><dd id="link-azimuth">—</dd></div><div><dt>Remaining contact</dt><dd id="link-contact">—</dd></div>
         </dl>
-        <div class="station-summary"><span class="eyebrow">SELECTED STATION / FULL WINDOW</span><dl><div><dt>Visible sample fraction</dt><dd id="station-visible">—</dd></div><div><dt>RF-usable sample fraction</dt><dd id="station-usable">—</dd></div><div><dt>Best-link integrated bits</dt><dd id="station-bits">—</dd></div><div><dt>Fixed baseline integrated bits</dt><dd id="station-fixed-bits">—</dd></div><div><dt>Handovers</dt><dd id="station-handovers">—</dd></div></dl></div>
-        <p class="panel-note">Visibility is geometric. RF usability follows declared link assumptions and ideal DVB-S2 thresholds; it is not measured service availability.</p>
+        <div class="propagation-summary"><h3>Propagation <span id="propagation-model">Free space</span></h3><dl id="propagation-values" hidden><div><dt>Gaseous attenuation</dt><dd id="link-gas-loss">—</dd></div><div><dt>Apparent elevation</dt><dd id="link-apparent-elevation">—</dd></div><div><dt>Atmospheric excess delay</dt><dd id="link-excess-delay">—</dd></div></dl></div>
+        <div class="station-summary"><h3>Station summary <span>Full window</span></h3><dl><div><dt>Visible sample fraction</dt><dd id="station-visible">—</dd></div><div><dt>RF-usable sample fraction</dt><dd id="station-usable">—</dd></div><div><dt>Best-link integrated bits</dt><dd id="station-bits">—</dd></div><div><dt>Fixed baseline integrated bits</dt><dd id="station-fixed-bits">—</dd></div><div><dt>Handovers</dt><dd id="station-handovers">—</dd></div></dl></div>
+        <details class="panel-note"><summary>Link interpretation</summary><p>Visibility is geometric. RF usability follows declared link assumptions and ideal DVB-S2 thresholds; it is not measured service availability.</p></details>
       </aside>
     </div>
     <section class="charts-section" aria-labelledby="charts-title">
-      <div class="section-heading"><h2 id="charts-title">A link, through time</h2><p id="chart-context">Exact samples for the selected station and satellite.</p></div>
+      <div class="section-heading"><h2 id="charts-title">Link history</h2><p id="chart-context">Exact samples for the selected station and satellite.</p></div>
       <div class="charts-grid">
         <article class="panel chart-panel"><div><h3>Adaptive rate</h3><span id="rate-chart-value" class="cyan-text">—</span></div><canvas id="rate-chart" role="img" aria-label="Adaptive rate over the experiment. Current exact value is shown above."></canvas><p>Zero includes below-mask and RF outages.</p></article>
         <article class="panel chart-panel"><div><h3>Elevation</h3><span id="elevation-chart-value" class="amber-text">—</span></div><canvas id="elevation-chart" role="img" aria-label="Elevation over the experiment. Current exact value is shown above."></canvas><p>Gaps mark geometry below the elevation mask.</p></article>
-        <article class="panel chart-panel"><div><h3>Doppler shift</h3><span id="doppler-chart-value">—</span></div><canvas id="doppler-chart" role="img" aria-label="First-order Doppler shift over the experiment. Current exact value is shown above."></canvas><p>First-order radial-velocity model; sign retained.</p></article>
+        <article class="panel chart-panel"><div><h3>Doppler shift</h3><span id="doppler-chart-value" class="green-text">—</span></div><canvas id="doppler-chart" role="img" aria-label="First-order Doppler shift over the experiment. Current exact value is shown above."></canvas><p>First-order radial-velocity model; sign retained.</p></article>
       </div>
     </section>
     <section class="panel network-panel" aria-labelledby="network-title">
-      <div class="panel-heading"><div><span class="eyebrow">03 / NETWORK COMPARISON</span><h2 id="network-title">Three routing assumptions. One geometry.</h2></div><span id="network-endpoints" class="badge subtle">—</span></div>
+      <div class="panel-heading"><h2 id="network-title">Network routing</h2><span id="network-endpoints" class="panel-context">—</span></div>
       <div class="table-scroll"><table><caption class="sr-only">Routing models at the selected sample and across the full experiment</caption><thead><tr><th scope="col">Show path</th><th scope="col">At this sample</th><th scope="col">Path delay</th><th scope="col">Bottleneck rate</th><th scope="col">Connected samples</th><th scope="col">Integrated bits</th><th scope="col">Route changes</th></tr></thead><tbody id="network-rows"></tbody></table></div>
-      <div class="route-detail"><span class="eyebrow">SELECTED PATH</span><p id="route-path">—</p></div>
-      <p class="panel-note">Snapshot, reciprocal links with no queues or protocol overhead. The fixed baseline uses geometric links even during adaptive RF outages. Integrated values use left-held samples; none are measured throughput.</p>
+      <div class="route-detail"><span>Selected path</span><p id="route-path">—</p></div>
+      <details class="panel-note"><summary>Routing assumptions</summary><p>Snapshot, reciprocal links with no queues or protocol overhead. The fixed baseline uses geometric links even during adaptive RF outages. Integrated values use left-held samples; none are measured throughput.</p></details>
     </section>
-    <section class="report-footer"><div><span class="eyebrow">REPRODUCIBLE BY DESIGN</span><p>Archived elements. Explicit assumptions. Portable results.</p></div><div><button id="download-json" class="quiet" type="button">↓ Experiment JSON</button><button id="download-links" class="quiet" type="button">↓ Links CSV</button><button id="download-routes" class="quiet" type="button">↓ Routes CSV</button></div></section>
-    <p class="footnote">OpenLEO · Scientific workbench <span>Earth coastline: Natural Earth, public domain. Symbols enlarged; track lines connect sampled positions in ITRS.</span></p>
+    <section class="report-footer" aria-label="Data exports"><span>Export current experiment</span><div><button id="download-json" type="button">Experiment JSON</button><button id="download-links" type="button">Links CSV</button><button id="download-routes" type="button">Routes CSV</button></div></section>
+    <p class="footnote">Earth coastline: Natural Earth, public domain. Symbols enlarged; track lines connect sampled positions in ITRS.</p>
   </main>
+  <footer class="status-bar" aria-label="Session information"><span id="session-badge">ARCHIVED EXPERIMENT</span><span id="session-note">Exact samples</span><time id="status-time">UTC</time></footer>
   <dialog id="scenario-dialog" aria-labelledby="scenario-title">
-    <div class="dialog-heading"><div><span class="eyebrow">EXPERIMENT CONFIGURATION</span><h2 id="scenario-title">Make the assumptions yours.</h2></div><button class="icon-button close-dialog" type="button" aria-label="Close scenario editor">×</button></div>
+    <div class="dialog-heading"><h2 id="scenario-title">Scenario configuration</h2><button class="icon-button close-dialog" type="button" aria-label="Close scenario editor">×</button></div>
     <p id="editor-mode" class="muted">Changes are computed by your local OpenLEO process using the pinned orbital catalog.</p>
     <form id="scenario-form">
       <fieldset id="quick-fields"><legend>Station &amp; radio controls</legend><div class="editor-grid">
@@ -97,12 +93,12 @@
         <label>Latitude / °<input id="edit-latitude" type="number" min="-90" max="90" step="any" required></label><label>Longitude / °<input id="edit-longitude" type="number" min="-180" max="180" step="any" required></label><label>Height / m<input id="edit-height" type="number" step="any" required></label><label>Elevation mask / °<input id="edit-mask" type="number" min="0" max="89.999" step="any" required></label>
         <label>Carrier / GHz<input id="edit-frequency" type="number" min="0.000001" step="any" required></label><label>Bandwidth / MHz<input id="edit-bandwidth" type="number" min="0.000001" step="any" required></label><label>EIRP / dBW<input id="edit-eirp" type="number" step="any" required></label><label>Receiver gain / dBi<input id="edit-gain" type="number" step="any" required></label><label>Symbol rate / Mbaud<input id="edit-symbols" type="number" min="0.000001" step="any" required></label><label>Implementation margin / dB<input id="edit-margin" type="number" min="0" step="any" required></label>
       </div></fieldset>
-      <label class="json-label" for="scenario-json">Complete scenario <span>JSON · UTC timestamps · SI units</span></label><textarea id="scenario-json" rows="17" spellcheck="false" aria-describedby="scenario-help"></textarea>
+      <label class="json-label" for="scenario-json">Complete scenario <span>JSON · UTC timestamps · SI units</span></label><textarea id="scenario-json" rows="10" spellcheck="false" aria-describedby="scenario-help"></textarea>
       <p id="scenario-help" class="muted">Presets move the selected station and preserve its name. All coordinates and RF values are scenario choices. The catalog path and provenance remain pinned by the local server.</p>
-      <p id="editor-error" class="error-message" role="alert" hidden></p><div class="dialog-actions"><button id="reset-scenario" class="quiet" type="button">Reset to current run</button><button id="run-scenario" class="primary" type="submit">Recompute experiment <span aria-hidden="true">↗</span></button></div>
+      <p id="editor-error" class="error-message" role="alert" hidden></p><div class="dialog-actions"><button id="reset-scenario" class="quiet" type="button">Reset to current run</button><button id="run-scenario" class="primary" type="submit">Recompute experiment</button></div>
     </form>
   </dialog>
-  <dialog id="provenance-dialog" aria-labelledby="provenance-title"><div class="dialog-heading"><div><span class="eyebrow">REPRODUCIBILITY RECORD</span><h2 id="provenance-title">Sources &amp; assumptions</h2></div><button class="icon-button close-dialog" type="button" aria-label="Close sources and assumptions">×</button></div><p class="muted">This record travels with every JSON and standalone report export.</p><h3>Warnings</h3><ul id="warnings-list"></ul><h3>Research limitations</h3><ul id="limitations-list"></ul><details open><summary>Model definitions</summary><pre id="models-json"></pre></details><details><summary>Catalog &amp; scenario provenance</summary><pre id="provenance-json"></pre></details><details><summary>Satellite element epochs</summary><pre id="epochs-json"></pre></details></dialog>
+  <dialog id="provenance-dialog" aria-labelledby="provenance-title"><div class="dialog-heading"><h2 id="provenance-title">Sources &amp; assumptions</h2><button class="icon-button close-dialog" type="button" aria-label="Close sources and assumptions">×</button></div><p class="muted">Included with every JSON and standalone report export.</p><h3>Warnings</h3><ul id="warnings-list"></ul><h3>Research limitations</h3><ul id="limitations-list"></ul><details open><summary>Model definitions</summary><pre id="models-json"></pre></details><details><summary>Catalog &amp; scenario provenance</summary><pre id="provenance-json"></pre></details><details><summary>Satellite element epochs</summary><pre id="epochs-json"></pre></details></dialog>
   <div id="announcement" class="announcement" role="status" aria-live="polite" hidden></div>
   <script type="application/json" id="experiment-data">$experiment_json</script>
   <script type="application/json" id="coastline-data">$coastline_json</script>

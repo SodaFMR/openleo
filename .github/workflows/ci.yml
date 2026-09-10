@@ -51,6 +51,50 @@ jobs:
 
       - run: uv run python -c "from openleo.workbench import load_experiment; assert len(load_experiment('runs/global')['satellites']) == 80"
 
+      - run: uv run openleo constellation examples/constellations/iridium_global_reference.json --output runs/global-reference
+
+      - run: uv run python -c "from openleo.workbench import load_experiment; d = load_experiment('runs/global-reference'); assert d['schema_version'] == '2' and len(d['satellites']) == 80 and any(d['links'])"
+
+      - name: Prepare a short reference-atmosphere study
+        shell: bash
+        run: |
+          uv run python - <<'PY'
+          import json
+          from datetime import datetime, timedelta
+          from pathlib import Path
+
+          path = Path("examples/constellations/iridium_global_reference.json")
+          original = json.loads(path.read_text(encoding="utf-8"))
+          stop = datetime.fromisoformat(original["time_window"]["start_utc"]) + timedelta(minutes=1)
+          scenario = {
+              **original,
+              "orbit": {**original["orbit"], "path": (path.parent / original["orbit"]["path"]).resolve().as_posix()},
+              "time_window": {**original["time_window"], "stop_utc": stop.isoformat().replace("+00:00", "Z")},
+          }
+          Path("runs/reference-study-scenario.json").write_text(json.dumps(scenario), encoding="utf-8")
+          PY
+
+      - run: uv run openleo propagation-study runs/reference-study-scenario.json --output runs/reference-study --figure runs/reference-study/comparison.svg
+
+      - name: Validate reference-atmosphere study artifacts
+        shell: bash
+        run: |
+          uv run python - <<'PY'
+          import json
+          from pathlib import Path
+          from xml.etree import ElementTree
+          from openleo.workbench import load_experiment
+
+          directory = Path("runs/reference-study")
+          for name, schema in (("free_space", "1"), ("reference", "2"), ("refined", "2")):
+              document = load_experiment(directory / name)
+              assert document["schema_version"] == schema
+          summary = json.loads((directory / "propagation-study.json").read_text(encoding="utf-8"))
+          assert summary["comparison"]["link_count"] > 0
+          assert (directory / "comparison.csv").is_file()
+          assert ElementTree.parse(directory / "comparison.svg").getroot().tag.endswith("svg")
+          PY
+
       - if: matrix.full-checks
         run: node --test tests/test_workbench_ui.mjs
 
@@ -59,6 +103,9 @@ jobs:
 
       - if: matrix.full-checks
         run: uv run --group browser --extra plot python tests/browser_workbench.py
+
+      - if: matrix.full-checks
+        run: uv run --group browser --extra plot python tests/browser_workbench.py --scenario examples/constellations/iridium_global_reference.json
 
       - if: matrix.full-checks
         run: uv run python -m build
@@ -153,6 +200,12 @@ jobs:
           "$core_env/bin/openleo" constellation \
             examples/constellations/iridium_global.json \
             --output "$core_env/constellation"
+          "$core_env/bin/openleo" constellation \
+            examples/constellations/iridium_global_reference.json \
+            --output "$core_env/constellation-reference"
+          "$core_env/bin/openleo" propagation-study \
+            runs/reference-study-scenario.json \
+            --output "$core_env/reference-study"
 
       - run: uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
 
@@ -174,6 +227,12 @@ jobs:
 
       - if: matrix.full-checks
         run: uv run openleo plot-gases runs/p676-validation --output docs/images/p676-13-specific-attenuation.svg
+
+      - if: matrix.full-checks
+        run: uv run openleo propagation-study examples/constellations/iridium_global_reference.json --output runs/reference-study-full --figure runs/reference-study-full/comparison.svg
+
+      - if: matrix.full-checks
+        run: uv run python tests/check_propagation_figure.py docs/images/reference-propagation-ablation.svg runs/reference-study-full/comparison.svg
 
       - if: matrix.full-checks
         run: git diff --exit-code -- examples/atmosphere/p676_13_validation.json docs/images/iss-cartagena-pass-overview.svg docs/images/iss-cartagena-sensitivity-overview.svg docs/images/p676-13-specific-attenuation.svg

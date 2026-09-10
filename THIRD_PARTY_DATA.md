@@ -31,6 +31,14 @@ Iridium's payload, RF network, gateways, operational topology or measured perfor
 Example city coordinates and heights are approximate scenario choices, not surveys of
 real ground stations. The frozen two-hour window is retrospective.
 
+`examples/constellations/iridium_global_reference.json` reuses these exact archived
+orbits. Its independent AMSL heights (Madrid 650 m, Tromso and Singapore 0 m,
+Quito 2850 m) are explicit scenario assumptions, not surveyed elevations or a geoid
+conversion. Its temperature, pressure and humidity are computed from the idealized
+ITU-R P.835-7 global reference profile, not collected weather observations.
+Source versions, PDF hashes, official numerical reference cases and model limits
+are documented in [Reference propagation](docs/REFERENCE_PROPAGATION.md).
+
 ## Natural Earth coastline
 
 - Packaged map: `src/openleo/_web/coastline.geojson`.

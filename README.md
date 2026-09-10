@@ -3,10 +3,11 @@
 OpenLEO is an open, reproducible Python tool for studying time-varying
 satellite-to-ground links in Low Earth Orbit (LEO).
 
-Version 0.3 adds a complete local scientific workbench: propagate an archived
-constellation, edit stations and RF assumptions anywhere in the world, compare adaptive
-and fixed-capacity ground links, inspect routes on a 3D Earth, and export the full
-experiment with a standalone interactive report.
+Version 0.4 adds an optional ITU reference atmosphere to the constellation workbench:
+integrate gaseous attenuation along a refracted path, inspect apparent elevation and
+excess delay, and compare the result with an unchanged free-space scenario. A compact,
+light scientific workspace brings the 3D Earth, numerical readouts, plots and route
+table together without requiring a hosted service.
 
 ![OpenLEO scientific workbench: constellation geometry, link state and routing comparison](docs/images/workbench.png)
 
@@ -14,18 +15,19 @@ experiment with a standalone interactive report.
 
 ```bash
 uv sync --locked --group dev --extra plot
-uv run openleo app examples/constellations/iridium_global.json
+uv run openleo app examples/constellations/iridium_global_reference.json
 ```
 
 Your browser opens the local application at `http://127.0.0.1:8765/`. Select a station
 and satellite, play the UTC timeline, inspect rates and routes, or use **Scenario** to
 edit coordinates, RF assumptions, sampling and network endpoints. Computation runs
-locally; the browser requires no internet connection or map API key.
+locally; the browser requires no internet connection or map API key. The timeline
+replays computed samples from archived elements, not live satellite telemetry.
 
 Generate the same experiment without a server:
 
 ```bash
-uv run openleo constellation examples/constellations/iridium_global.json --output runs/global
+uv run openleo constellation examples/constellations/iridium_global_reference.json --output runs/global
 ```
 
 Open `runs/global/explorer.html` directly in a browser. The directory also contains
@@ -35,8 +37,34 @@ all data and application assets, and the live app can export your edited experim
 The global example uses **80 genuine archived CelesTrak GP records**, with declared
 stations in Madrid, Tromso, Singapore and Quito. Its RF terminals and reciprocal network
 are hypothetical experiment assumptions, separate from Iridium's actual system.
-Adaptive rates use a cited subset of DVB-S2 ideal AWGN reference thresholds. Read the
-[workbench guide](docs/WORKBENCH.md) for the model, input format, bounds and validation.
+Adaptive rates use a cited subset of DVB-S2 ideal AWGN reference thresholds. The
+atmosphere is the P.835-7 global reference profile, not measured weather at those cities;
+the station heights and fixed receiver noise temperature are declared assumptions.
+Read the [workbench guide](docs/WORKBENCH.md) for the model, input format and bounds,
+and [reference propagation](docs/REFERENCE_PROPAGATION.md) for equations and validation.
+The original `examples/constellations/iridium_global.json` remains the free-space example.
+
+## Compare Propagation Models
+
+```bash
+uv run openleo propagation-study examples/constellations/iridium_global_reference.json \
+  --output runs/propagation-study --figure runs/propagation-study/comparison.svg
+```
+
+This runs three otherwise identical cases: `free_space`, `reference`, and `refined`
+(twice as many atmospheric layers). Each has its own complete interactive report and
+CSV/JSON bundle. `propagation-study.json` records the case provenance and maximum
+refinement differences; `comparison.csv` summarizes station metrics. The optional
+figure shows best-link integrated reference bits and the layer-refinement loss
+difference. Omit `--figure` when the optional `plot` extra is not installed.
+
+Changing the layer grid checks numerical resolution, not physical accuracy or input
+uncertainty. Neither reference rates nor integrated reference bits are measured
+throughput. See the [v1.0 release criteria](docs/V1_0.md) for the evidence still needed.
+
+![Reference-atmosphere ablation and numerical layer-refinement comparison](docs/images/reference-propagation-ablation.svg)
+
+## Earlier Instruments
 
 The earlier scientific instruments remain available:
 
@@ -203,8 +231,9 @@ within the declared tolerances. The workbook itself is not redistributed.
 Read [ITU-R P.676-13 Specific Gaseous Attenuation](docs/GASES.md) for the equations,
 units, literal validation values, authoritative workbook URL and hash, implementation
 attribution, commands, and claim boundary. The figure connects validation points only
-as a visual guide. This milestone does not calculate slant-path loss or weather and
-does not modify the existing free-space pass outputs.
+as a visual guide. This standalone benchmark does not calculate slant-path loss or
+weather and does not modify the existing free-space pass outputs. The constellation
+workbench uses a separate [reference-profile path calculation](docs/REFERENCE_PROPAGATION.md).
 
 ## Outputs
 
@@ -278,6 +307,9 @@ prohibited claims.
 Read [ITU-R P.676-13 Specific Gaseous Attenuation](docs/GASES.md) for the v0.2b1
 line-by-line specific-attenuation method, official cases, provenance, and non-goals.
 
+Read [Reference-Atmosphere Propagation](docs/REFERENCE_PROPAGATION.md) for the v0.4
+profile, slant-path model, height conventions and controlled propagation study.
+
 Then read the source in this order:
 
 1. [src/openleo/model.py](src/openleo/model.py) for validated scenario objects.
@@ -299,7 +331,15 @@ Then read the source in this order:
    sensitivity-artifact reading and static sensitivity plots.
 11. [src/openleo/gases_plotting.py](src/openleo/gases_plotting.py) for strict
     gases-artifact reading and the static logarithmic validation figure.
-12. [src/openleo/cli.py](src/openleo/cli.py) for all six public commands.
+12. [src/openleo/constellation.py](src/openleo/constellation.py) and
+    [src/openleo/network.py](src/openleo/network.py) for multi-satellite experiments
+    and snapshot routes.
+13. [src/openleo/reference_atmosphere.py](src/openleo/reference_atmosphere.py) and
+    [src/openleo/atmospheric_path.py](src/openleo/atmospheric_path.py) for reference
+    states, refracted paths and optical-path excess.
+14. [src/openleo/propagation_study.py](src/openleo/propagation_study.py) for controlled
+    ablation and layer refinement.
+15. [src/openleo/cli.py](src/openleo/cli.py) for the public commands.
 
 ## Verification Commands
 
@@ -351,14 +391,18 @@ git diff --check
 
 ## Limitations
 
-The pass simulation remains free-space only. v0.2b1 calculates homogeneous P.676-13
-specific attenuation separately, but does not integrate it along a path or apply it to
-`trace.csv`. OpenLEO still has no atmospheric profile, rain, cloud, fog, scintillation,
-refraction, antenna radiation patterns, beam steering, interference, polarization,
-packet traffic, live downloads during scientific runs, hardware control, or
-calibrated-observation validation. The workbench adds a five-mode DVB-S2 reference
-table and hypothetical reciprocal snapshot routing. Acquisition, pointing, contention,
-queues and real operator behavior are not modeled.
+The single-pass `run` command remains free-space only; its `trace.csv` is unchanged.
+The constellation workbench optionally adds reference-profile gaseous loss and
+non-dispersive refracted-path delay. Its 6,371 km mean-sphere ray approximates the
+WGS84 local geometry; explicit AMSL heights are separate from ellipsoidal station
+heights. Receiver noise temperature stays fixed: atmospheric emission, refractive
+Doppler and refraction-corrected contact boundaries are not modeled.
+
+There is no local weather, rain, cloud, fog, scintillation, antenna radiation pattern,
+beam steering, interference, polarization model, packet traffic, automatic live data
+download, hardware control or calibrated-observation validation. The five-mode DVB-S2
+reference table and reciprocal snapshot routing omit acquisition, pointing, contention,
+queues and real operator behavior.
 
 Shannon-Hartley capacity is reported only as a theoretical upper bound. It is not
 throughput, achieved goodput, commercial service performance, or validation of any
@@ -380,9 +424,13 @@ free-space model.
   declared homogeneous conditions.
 - v0.3: local/offline workbench, archived constellation geometry, configurable stations,
   reference adaptive links, snapshot routing and fixed-versus-dynamic comparison.
-- Next model work: validated atmospheric path integration and justified uncertainty.
-- v0.4: validated packet-simulator adapters, acquisition/handover dynamics and broader ablations.
-- v1.0: reproducible paper release with archived software/data release.
+- v0.4: officially checked reference-atmosphere slant paths, propagation ablation and
+  grid-refinement reporting, with a compact scientific workbench.
+- Before v1.0: broader ablations, justified uncertainty, observational comparison,
+  validated packet-simulator integration and explicit acquisition/handover assumptions.
+- v1.0: the bounded research workflow meets the [release criteria](docs/V1_0.md), with
+  a reproducible paper artifact and archived software/data release. A version number
+  alone does not establish scientific completeness.
 
 ## Contributing, Citation, And Data Terms
 
