@@ -3,8 +3,8 @@
 **Status:** Canonical project specification<br>
 **Last reviewed:** 2026-09-11<br>
 **Working software name:** OpenLEO<br>
-**Planned distribution name:** `openleo-link`<br>
-**Planned import package and command:** `openleo`<br>
+**Distribution name:** `openleo-link`<br>
+**Import package and command:** `openleo`<br>
 **Language:** English for all project artifacts
 
 ## 1. Purpose of this document
@@ -90,8 +90,8 @@ These are questions to test, not conclusions to assume:
 - **H2:** Minimum-delay routing is not always the highest-availability or
   highest-throughput choice once ground-link state varies with geometry and propagation.
 - **H3:** The importance of link fidelity depends on orbit altitude, elevation mask,
-  frequency, terminal assumptions, atmospheric availability percentile, and gateway
-  geography.
+  frequency, terminal assumptions, propagation model and gateway geography. An
+  atmospheric exceedance percentile applies only when a statistical model is included.
 - **H4:** A predictive link-aware route can trade a small latency increase for fewer
   imminent outages or failed handovers.
 
@@ -239,22 +239,57 @@ coordinates, 121 UTC samples, and hypothetical Ku-band terminals/network edges. 
 does not claim actual Iridium service performance. Details, commands, schema and
 validation are in [Scientific workbench](WORKBENCH.md).
 
-This functional application does not complete the later atmospheric, observational,
-uncertainty or publication requirements. P.676 remains a separate homogeneous-state
-reference instrument until its path integration is independently validated.
+This milestone does not complete the observational, uncertainty or publication
+requirements. At v0.3, P.676 remains a separate homogeneous-state reference instrument;
+the following milestone supplies its validated reference-profile path integration.
 
-### 6.6 Remaining research milestones
+### 6.6 v0.4: reference propagation and scientific workspace
+
+The constellation experiment optionally couples P.835-7 global reference atmosphere,
+P.453-14 refractivity and P.676-13 Annex 1 layer integration. Dry-air and water-vapour
+losses reduce `C/N0` before SNR, reference MODCOD and rate calculation. A refracted-ray
+endpoint solve obtains apparent elevation from the geometric elevation/range pair;
+delay includes the bent-path and refractive optical-path excess relative to the vacuum
+endpoint chord.
+
+Explicit geometric AMSL station heights are separate from WGS84 ellipsoidal heights.
+The atmosphere uses a 6,371 km mean-radius sphere and ends at 100 km; coupled endpoints
+must be above that height. The supported constellation configuration requires a mask
+of at least 5 degrees, 1–1,000 GHz and AMSL heights of 0–10,000 m. Its fixed system
+noise temperature, geometric visibility mask and nominal Doppler remain unchanged.
+This is an idealized global profile, not local weather, atmospheric emission modelling
+or a dispersive group-delay calculation.
+
+Official workbook profile/path cases, analytic vacuum/homogeneous paths and endpoint
+recovery checks verify the implementation. A three-case propagation study compares
+free space, the reference grid and a doubled layer grid with all other inputs fixed.
+It exports complete workbench bundles, case metrics and numerical refinement
+differences. Grid differences are not physical error bars.
+
+The light browser workspace groups 3D geometry, synchronized plots, unit-labelled
+readouts and snapshot routes in a compact scientific layout. It reports the active
+propagation model and exports the same numerical data it displays. Reference-profile
+experiments use schema `2`; omitted propagation retains free-space schema `1` and the
+legacy link fields. The original single-pass instruments are unchanged.
+
+Exact equations, domains, source hashes and examples are in
+[Reference propagation](REFERENCE_PROPAGATION.md). The global example uses real
+archived CelesTrak fitted elements with hypothetical terminal/network parameters and
+declared station-height assumptions, not measured RF performance.
+
+### 6.7 Remaining research milestones
 
 - **Propagation and uncertainty:** implement only required subsets of current,
   in-force ITU-R recommendations; retain deterministic sensitivity and add only
   justified uncertainty intervals.
 - **Adaptive link extensions:** validate additional MODCOD profiles, acquisition and
   handover dynamics, directional terminals and propagation coupling.
-- **v0.4 — network adapter:** export versioned capacity/delay/availability traces and
-  compare fixed and dynamic ground links in a small synthetic network scenario.
+- **Network adapter:** validate consumption of versioned rate/delay/outage traces in
+  a small packet-simulator experiment; snapshot routing alone does not meet this gate.
 - **v1.0 — paper release:** freeze benchmark inputs, run full ablations and uncertainty
   analysis, regenerate all figures/tables with one command, archive code and derived
-  data, and mint a DOI.
+  data, and mint a DOI. The [v1.0 checklist](V1_0.md) defines the release evidence;
+  changing the version number does not complete those requirements.
 
 ## 7. v0.1 physical model
 
@@ -433,8 +468,9 @@ OpenLEO distinguishes software verification from physical validation.
 5. **Cross-platform regression:** run the same frozen scenario on Ubuntu, macOS, and
    Windows and compare within numeric tolerances.
 6. **ITU-R validation:** atmospheric implementations reproduce official validation
-   examples for the exact Recommendation version before integration. v0.2b1 completes
-   this layer for P.676-13 Annex 1 specific attenuation only.
+   examples for the exact Recommendation version before integration. v0.2b1 covers
+   P.676-13 Annex 1 specific attenuation; v0.4 adds reference-profile states, two
+   normalized-layer slant-path cases, and analytic endpoint/optical-path checks.
 7. **Public observational sanity check:** SatNOGS can support pass timing and signal
    presence comparisons, but not absolute RF validation by default.
 8. **Calibrated experiment:** absolute RF validation requires a documented station and
@@ -493,9 +529,11 @@ without a complete calibration argument.
 
 ## 13. Atmospheric-model policy
 
-The atmospheric milestone will use current, in-force Recommendations rather than
+Atmospheric models use explicitly reviewed Recommendation versions rather than
 silently relying on older library defaults. Relevant references currently include:
 
+- ITU-R P.453-14 for radio refractivity;
+- ITU-R P.835-7 for reference atmospheres;
 - ITU-R P.618-14 for Earth-space propagation design;
 - ITU-R P.676-13 for gaseous attenuation and related effects;
 - ITU-R P.837-8 for precipitation characteristics;
@@ -507,9 +545,16 @@ OpenLEO does not depend on ITU-Rpy at runtime. v0.2b1 implements only P.676-13 A
 specific attenuation with standard-library math. Its equations and coefficient data
 are adapted from ITU-Rpy commit
 `f739993c4b6d34076de22249ef53d03fa5a53d73` under the retained MIT notice and are
-validated against the official Rev8.3.0 workbook. No atmospheric profile or path
-integration is present. Each later model requires the same current-version,
-reference-example, license, and claim-boundary review before integration.
+validated against the official Rev8.3.0 workbook. v0.4 adds the P.835-7 global profile
+and P.453-14 refractivity directly from the published equations, and P.676-13 normalized
+layer integration with explicit endpoint refraction. Total and dry pressure, apparent
+and geometric elevation, and AMSL and ellipsoidal height must remain distinct.
+
+The reference atmosphere cannot be presented as observed weather or as an exceedance
+probability. Fixed receiver noise excludes atmosphere-dependent sky emission. Each
+later model requires the same version, reference-example, license and claim-boundary
+review before integration; more equations alone do not establish better physical
+accuracy.
 
 ## 14. Minimal software architecture
 
@@ -528,11 +573,15 @@ openleo/
 │   ├── FUNDAMENTALS.md
 │   ├── GASES.md
 │   ├── PROJECT_CHARTER.md
+│   ├── REFERENCE_PROPAGATION.md
 │   ├── SENSITIVITY.md
-│   └── VALIDATION.md
+│   ├── VALIDATION.md
+│   ├── V1_0.md
+│   └── WORKBENCH.md
 ├── examples/
 │   ├── data/
 │   ├── atmosphere/
+│   ├── constellations/
 │   ├── scenarios/
 │   └── sensitivity/
 ├── src/openleo/
@@ -548,6 +597,15 @@ openleo/
 │   ├── _p676_coefficients.py
 │   ├── gases.py
 │   ├── gases_plotting.py
+│   ├── reference_atmosphere.py
+│   ├── atmospheric_path.py
+│   ├── propagation.py
+│   ├── propagation_study.py
+│   ├── constellation.py
+│   ├── network.py
+│   ├── workbench.py
+│   ├── app.py
+│   ├── _web/
 │   └── cli.py
 └── tests/
 ```
@@ -568,9 +626,16 @@ Responsibilities:
 - `gases.py`: P.676-13 specific attenuation, strict benchmark loading, and deterministic
   gases artifacts;
 - `gases_plotting.py`: validate completed gases artifacts and render their static
-  logarithmic overview; and
+  logarithmic overview;
+- `reference_atmosphere.py`, `atmospheric_path.py`, `propagation.py`: immutable reference
+  states/columns, slant integration, endpoint solving and explicit configuration;
+- `propagation_study.py`: controlled atmosphere ablation, refinement and study exports;
+- `constellation.py`, `network.py`: bounded multi-satellite experiments and reciprocal
+  snapshot routes;
+- `workbench.py`, `app.py`, `_web/`: verified exports, loopback application and native
+  browser views; and
 - `cli.py`: `argparse` entry point for simulation, sensitivity, gases, and artifact
-  plotting with user-facing errors.
+  plotting, constellation experiments and propagation studies with user-facing errors.
 
 There are no provider interfaces, plugin managers, factories, repositories, service
 containers, custom exception hierarchies, or configuration frameworks. A boundary is
@@ -617,8 +682,10 @@ Required test layers:
 
 - unit tests for validation, each physical equation, and plotting artifact boundaries;
 - integration tests for one frozen pass from input to CSV/JSON and static SVG/PNG;
-- CLI smoke tests for simulation, deterministic sensitivity, gases, and all three
-  plotters, including core-only wheel sensitivity and gases runs without Matplotlib;
+- CLI smoke tests for simulation, deterministic sensitivity, gases, constellation and
+  propagation studies, plus optional plotting and core-only runs without Matplotlib;
+- unit and browser tests for live scenario editing, offline exports, link inspection,
+  timeline synchronization, schema compatibility, narrow layouts and HTTP boundaries;
 - cross-platform CI regression; and
 - a paper reproduction test when the paper workflow exists.
 
@@ -797,7 +864,8 @@ reference.
 
 1. CelesTrak GP data formats and Vallado et al., “Revisiting Spacetrack Report #3.”
 2. Skyfield Earth-satellite, time, and coordinate documentation.
-3. ITU-R P.525-5, P.618-14, P.676-13, P.837-8, P.838-3, P.839-4, and P.840-9.
+3. ITU-R P.453-14, P.525-5, P.618-14, P.676-13, P.835-7, P.837-8, P.838-3,
+   P.839-4, and P.840-9; use only the subset relevant to the implemented model.
 4. CCSDS 401.0-B and, when MODCOD begins, CCSDS 131.3-B / DVB-S2 documentation.
 5. NASA Small Spacecraft Technology State of the Art, communications chapter.
 6. JCGM 100, Guide to the Expression of Uncertainty in Measurement.
@@ -833,6 +901,7 @@ reference.
 - maintain the v0.2a1 deterministic sensitivity benchmark;
 - maintain the officially validated v0.2b1 P.676-13 homogeneous specific-attenuation
   instrument;
+- maintain the v0.4 reference-profile slant-path checks and controlled layer refinement;
 - implement only the next required current-version atmospheric subset;
 - compare the free-space baseline and specified-availability models; and
 - add justified uncertainty intervals.
@@ -879,7 +948,8 @@ $$
 - **M0:** explicit fixed-capacity baseline;
 - **M1:** time-varying geometry and FSPL;
 - **M2:** complete transparent free-space RF budget;
-- **M3:** statistical atmosphere at declared availability percentile;
+- **M3:** integrated global reference atmosphere, with a separate statistical
+  atmosphere/declared-percentile ablation only after that model is validated;
 - **M4:** documented MODCOD and useful-rate trace; and
 - **M5:** optional network consumption of the trace.
 
@@ -979,6 +1049,13 @@ job regenerates all three committed SVGs without drift; and a core-only wheel ru
 gases benchmark while Matplotlib is absent. Public outputs and documentation must state
 dB/km at homogeneous conditions and must not imply path loss or weather.
 
+v0.4 additionally requires official reference-profile/slant-path cases and independent
+endpoint checks; unchanged legacy free-space results; valid schema-2 artifacts; a
+reproducible free-space/reference/refined study; and browser checks for both propagation
+modes. Its UI must display geometric and apparent quantities distinctly and retain the
+assumptions and provenance in offline exports. The full v1.0 definition of done is the
+[release checklist](V1_0.md), not a claim that all atmospheric or network effects exist.
+
 ## 24. Decision log
 
 - **2026-08-30:** OpenLEO selected as the initial research direction
@@ -1019,6 +1096,15 @@ dB/km at homogeneous conditions and must not imply path loss or weather.
 - **2026-09-01:** P.676 equations and coefficients are adapted from a pinned
   MIT-licensed ITU-Rpy commit with the full notice retained; ITU-Rpy is not a runtime
   dependency and the official workbook is not redistributed.
+- **2026-09-11:** v0.4 couples a reviewed global reference atmosphere to constellation
+  budgets and delays, preserving the single-pass free-space instruments. It keeps AMSL
+  and ellipsoid heights explicit and uses an endpoint solve rather than treating
+  geometric elevation as apparent elevation.
+- **2026-09-11:** A controlled propagation ablation and layer-refinement study precede
+  probabilistic claims. The light scientific workspace displays the same exported
+  sample data; 3D presentation supplies no additional validation.
+- **2026-09-11:** Packet-simulator integration remains a later release gate. v1.0 is
+  defined by reproducible scientific and software evidence, tracked in `V1_0.md`.
 
 ## 25. Authoritative references
 
@@ -1032,6 +1118,8 @@ dB/km at homogeneous conditions and must not imply path loss or weather.
 
 ### Radio link and propagation
 
+- ITU-R P.453-14, [The radio refractive index: its formula and refractivity data](https://www.itu.int/rec/R-REC-P.453-14-201908-I/en).
+- ITU-R P.835-7, [Reference standard atmospheres](https://www.itu.int/rec/R-REC-P.835-7-202408-I/en).
 - ITU-R P.525-5, [Calculation of free-space attenuation](https://www.itu.int/rec/R-REC-P.525-5-202411-I/en).
 - ITU-R P.618-14, [Earth-space propagation data and prediction methods](https://www.itu.int/rec/R-REC-P.618-14-202308-I/en).
 - ITU-R P.676-13, [Attenuation by atmospheric gases and related effects](https://www.itu.int/rec/R-REC-P.676-13-202208-I/en).

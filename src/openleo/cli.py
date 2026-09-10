@@ -21,6 +21,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "Examples:\n"
             "  openleo app CONSTELLATION.json\n"
             "  openleo constellation CONSTELLATION.json --output DIRECTORY\n"
+            "  openleo propagation-study CONSTELLATION.json --output DIRECTORY\n"
             "  openleo run SCENARIO.json --output DIRECTORY\n"
             "  openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY\n"
             "  openleo gases CONFIG.json --output DIRECTORY\n"
@@ -43,6 +44,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     constellation_parser.add_argument("scenario", metavar="CONSTELLATION.json")
     constellation_parser.add_argument("--output", required=True, metavar="DIRECTORY")
+
+    propagation_parser = subparsers.add_parser(
+        "propagation-study", help="compare free space, reference atmosphere, and a refined grid"
+    )
+    propagation_parser.add_argument("scenario", metavar="CONSTELLATION.json")
+    propagation_parser.add_argument("--output", required=True, metavar="DIRECTORY")
+    propagation_parser.add_argument(
+        "--figure", metavar="FILE.svg|FILE.png", help="optional figure; requires the plot extra"
+    )
 
     run_parser = subparsers.add_parser("run", help="run a scenario and write its artifacts")
     run_parser.add_argument("scenario", metavar="SCENARIO.json", help="scenario input JSON")
@@ -96,6 +106,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    if args.command == "propagation-study":
+        try:
+            from openleo.constellation import load_constellation
+            from openleo.propagation_study import (
+                render_propagation_study,
+                run_propagation_study,
+                write_propagation_study,
+            )
+
+            result = run_propagation_study(load_constellation(args.scenario))
+            path = write_propagation_study(result, args.output)
+            print(f"study: {path}")
+            if args.figure:
+                print(f"figure: {render_propagation_study(result, args.figure)}")
+            return 0
+        except (ValueError, OSError, UnicodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     if args.command in {"app", "constellation"}:
         try:
             from openleo.constellation import load_constellation, simulate_constellation

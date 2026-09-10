@@ -85,6 +85,12 @@ versions, source URLs, checksums, adapted-file lists, and the full notice in
 official workbook. Describe these outputs as specific attenuation in dB/km at declared
 homogeneous conditions, never as integrated path loss or weather.
 
+The optional constellation propagation model has a separate
+[reference-profile validation contract](docs/REFERENCE_PROPAGATION.md). Preserve
+the distinction between geometric and apparent elevation, AMSL and ellipsoid
+heights, and numerical refinement and physical uncertainty. Do not interpret the
+idealized profile as measured weather.
+
 Do not claim PyPI publication, DOI, calibrated validation, peer-reviewed results,
 operator performance, achieved throughput, or commercial service behavior unless
 the repository contains the supporting release or evidence.
@@ -98,6 +104,7 @@ node --test tests/test_workbench_ui.mjs
 uv run openleo constellation examples/constellations/iridium_global.json --output runs/global
 uv run --group browser playwright install chromium
 uv run --group browser python tests/browser_workbench.py
+uv run --group browser python tests/browser_workbench.py --scenario examples/constellations/iridium_global_reference.json
 ```
 
 On Arch Linux, use the installed Chromium with

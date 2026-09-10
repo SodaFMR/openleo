@@ -8,7 +8,7 @@
    <cc:Work>
     <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
     <dc:title>iss-cartagena-s-band-free-space</dc:title>
-    <dc:description>scenario_sha256=0da86937ac841c727ecdfd5a955b405944fd3e9a4440bf5eca16f72fbb7c6451; openleo=0.3.0; matplotlib=3.11.1</dc:description>
+    <dc:description>scenario_sha256=0da86937ac841c727ecdfd5a955b405944fd3e9a4440bf5eca16f72fbb7c6451; openleo=0.4.0; matplotlib=3.11.1</dc:description>
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>

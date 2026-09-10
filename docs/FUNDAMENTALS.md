@@ -38,8 +38,10 @@ Study now:
 5. The free-space receiver chain and theoretical capacity.
 6. Verification, validation, and reproducibility.
 
-Defer until the feature exists: atmospheric propagation, uncertainty distributions,
-MODCOD, routing, ns-3, dashboards, and 3D globes.
+These lessons cover the original single-pass free-space model. Continue with the
+[workbench](WORKBENCH.md) for MODCOD, routing and interactive geometry, then
+[reference propagation](REFERENCE_PROPAGATION.md) for atmospheric path integration.
+Probabilistic uncertainty and packet-level simulation remain outside this tutorial.
 
 ---
 
@@ -689,5 +691,5 @@ cli.main()
 
 </details>
 
-No deeper theory should block v0.1 development. Learn the next layer only when its
-feature—visualization, atmosphere, uncertainty, MODCOD, or networking—actually starts.
+The equations here remain the free-space baseline for the later constellation and
+reference-atmosphere models. Use the linked model documents to follow those extensions.

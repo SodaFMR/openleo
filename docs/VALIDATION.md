@@ -103,11 +103,62 @@ adapted from the pinned MIT-licensed ITU-Rpy source documented in
 [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md); the official Recommendation and
 workbook, not that secondary implementation, are the scientific authorities.
 
-This verification establishes agreement for specific attenuation in dB/km at five
+This standalone benchmark establishes agreement for specific attenuation in dB/km at five
 frequencies under one homogeneous state. It does not validate a vertical or slant-path
 loss, atmospheric profile, local weather, rain, cloud, scintillation, availability,
 received power, or operator performance. Exact equations, values, commands, and source
 links are in [P.676-13 Specific Gaseous Attenuation](GASES.md).
+
+## Reference Profile and Slant-Path Verification
+
+The v0.4 constellation model implements the P.835-7 Annex 1 global reference profile
+and P.453-14 refractivity. Profile tests compare 14 literal midpoint states spanning
+approximately 0–100 km with the official workbook: temperature, total pressure,
+water-vapour density, vapour pressure and refractive index. The workbook labels the
+equivalent P.835-6 global-profile equations; these were checked against P.835-7 before
+reuse. Temperature and thermodynamic values use relative tolerance `5e-13`; the
+refractive index uses absolute tolerance `3e-16`.
+
+Independent checks cover geometric-to-geopotential height conversion, the published
+layer-boundary behavior, the minimum upper-atmosphere water-vapour mixing ratio, and
+the distinction between total and dry pressure. At sea level, P.835 supplies total
+pressure 1013.25 hPa, yielding dry pressure approximately 1003.2771112136594 hPa.
+This is deliberately different from the homogeneous specific-attenuation fixture,
+which declares 1013.25 hPa as its **dry** pressure.
+
+The normalized P.676-13 layer calculation reproduces two official workbook cases
+from sheet `P.676-13 A_Gas_A1_2.2.1b`. Both use 28 GHz, a lower height of 1.3 km AMSL
+and **apparent**, not geometric, launch elevation of 30 degrees:
+
+| Upper height (km AMSL) | Total gaseous attenuation (dB) | Bending within the column (rad) |
+| ---: | ---: | ---: |
+| 8 | 0.24376211236218553 | 0.0002517972739610741 |
+| 100 | 0.27744110604568128 | 0.00045579353223956787 |
+
+Both attenuation and bending must agree within relative tolerance `1e-8`. The workbook
+hash is the same Rev8.3.0 hash above; it is not redistributed. The 8 km case verifies a
+partial column only. Coupled ground-to-space experiments always extend the atmosphere
+to 100 km and require the target above it.
+
+Separate analytic tests check vertical and homogeneous-shell paths, zero excess loss
+and delay in vacuum, and recovery of a known refracted endpoint. The endpoint solver
+converts a geometric elevation/range pair into the apparent launch elevation; using
+geometric elevation directly as apparent elevation is explicitly tested as a different
+calculation. Reported delay includes the bent path's additional geometric length and
+its refractive optical-path excess, relative to the original endpoint chord.
+
+The propagation study holds geometry, stations, RF and network settings fixed while
+comparing free space, the reference layer grid, and a grid with twice as many layers.
+It reports maximum differences in gaseous loss, apparent elevation and excess delay,
+plus MODCOD disagreements. A reference 1/2/4-layer refinement case checks decreasing
+differences; this does not prove convergence for every frequency or configuration.
+Nor does a small grid difference quantify atmospheric-model error.
+
+Integration and artifact checks preserve legacy free-space outputs, verify gaseous
+loss subtraction and delay addition, and distinguish schema `1` from the extended
+schema `2`. Exact model definitions, source fingerprints and domain restrictions are
+in [Reference propagation](REFERENCE_PROPAGATION.md). These checks establish reference
+implementation agreement, not local meteorological accuracy or measured RF performance.
 
 ## Validation Still Required
 
@@ -121,3 +172,6 @@ Probabilistic uncertainty propagation additionally needs justified input probabi
 models, standard uncertainties, and correlations. The current synthetic RF assumptions
 do not provide that evidence, so passing the deterministic sensitivity benchmark does
 not establish a GUM combined standard uncertainty.
+
+The complete release gates, including observational evidence and reproducible network
+experiments, are tracked in [v1.0 criteria](V1_0.md).

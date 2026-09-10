@@ -142,7 +142,7 @@ and states the omission explicitly on the figure; the calculation and CSV retain
 
 ## Claim Boundary And Non-Goals
 
-v0.2b1 deliberately does not:
+The standalone `openleo gases` benchmark deliberately does not:
 
 - integrate specific attenuation along a vertical, terrestrial, or slant path;
 - use a P.835 atmospheric profile or model refraction;
@@ -154,3 +154,8 @@ v0.2b1 deliberately does not:
 The current result answers one narrower question: under a declared homogeneous state,
 what specific attenuation does the P.676-13 Annex 1 line-by-line method predict at the
 selected frequencies?
+
+Since v0.4, the separate constellation workflow can integrate these specific losses
+through an idealized P.835-7 reference atmosphere, including refraction and excess
+delay. See [Reference propagation](REFERENCE_PROPAGATION.md). That optional model
+does not change the purpose or values of this homogeneous-state benchmark.
