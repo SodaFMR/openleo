@@ -233,8 +233,11 @@ def build_reference_column(
         raise ValueError("refinement must be the integer 1, 2, or 4")
     boundaries = _layer_boundaries(lower_height_km, upper_height_km, refinement)
     thicknesses = np.diff(boundaries)
-    radii = EARTH_RADIUS_KM + boundaries[:-1]
-    if np.any(thicknesses <= 0) or np.any(radii + thicknesses <= radii):
+    radii = EARTH_RADIUS_KM + boundaries
+    # Subtract shared radii so r_i + delta_i is exactly r_(i+1). Mixing a
+    # height-derived delta with rounded Earth radii creates false interface bends.
+    radial_thicknesses = np.diff(radii)
+    if np.any(thicknesses <= 0) or np.any(radial_thicknesses <= 0):
         raise ValueError("height interval is too small to resolve atmospheric layers")
     states = tuple(
         reference_atmosphere(float(height)) for height in boundaries[:-1] + thicknesses / 2
@@ -253,8 +256,8 @@ def build_reference_column(
         lower_height_km=float(lower_height_km),
         upper_height_km=float(upper_height_km),
         refinement=refinement,
-        radii_km=_readonly(radii),
-        thicknesses_km=_readonly(thicknesses),
+        radii_km=_readonly(radii[:-1]),
+        thicknesses_km=_readonly(radial_thicknesses),
         refractive_indices=_readonly([state.refractive_index for state in states]),
         dry_air_db_per_km=_readonly([value.dry_air_db_per_km for value in attenuation]),
         water_vapour_db_per_km=_readonly([value.water_vapour_db_per_km for value in attenuation]),

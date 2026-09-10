@@ -105,12 +105,20 @@ def test_endpoint_solver_recovers_analytic_uniform_medium_ray(monkeypatch):
 
 
 @pytest.mark.parametrize("elevation", [5.0, 30.0, 90.0])
-def test_vacuum_geometry_has_no_invented_loss_or_delay(monkeypatch, elevation):
+@pytest.mark.parametrize(("height", "refinement"), [(0.0, 1), (0.3, 2), (1.3, 4)])
+def test_vacuum_geometry_has_no_invented_loss_or_delay(monkeypatch, elevation, height, refinement):
     _constant_medium(monkeypatch, 1.0, dry=0.0, water=0.0)
-    result = build_reference_column(20e9, 0.0).for_geometry(elevation, 2_000_000.0)
+    column = build_reference_column(20e9, height, refinement=refinement)
+    result = column.for_geometry(elevation, 2_000_000.0)
     assert result.apparent_elevation_deg == pytest.approx(elevation, abs=1e-9)
     assert result.total_db == 0.0
     assert result.excess_delay_s == pytest.approx(0.0, abs=1e-12)
+
+
+def test_vacuum_layer_interfaces_do_not_introduce_bending(monkeypatch):
+    _constant_medium(monkeypatch, 1.0, dry=0.0, water=0.0)
+    path = build_reference_column(20e9, 0.0).at_apparent_elevation(5.0)
+    assert path.bending_rad == pytest.approx(0.0, abs=1e-15)
 
 
 def test_endpoint_solve_is_distinct_from_geometric_elevation_as_apparent():
