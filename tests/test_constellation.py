@@ -63,6 +63,18 @@ def test_parse_and_portable_document_round_trip_without_mutating_input():
         scenario.name = "changed"
 
 
+def test_portable_document_supports_catalog_on_a_different_windows_drive(monkeypatch):
+    from openleo.constellation import scenario_document
+
+    scenario = _scenario()
+
+    def cross_drive(*args):
+        raise ValueError("path is on another drive")
+
+    monkeypatch.setattr("openleo.constellation.relpath", cross_drive)
+    assert scenario_document(scenario)["orbit"]["path"] == scenario.orbit.path.as_posix()
+
+
 def test_load_checks_raw_input_bytes_and_reports_invalid_files(tmp_path):
     from openleo.constellation import load_constellation
 

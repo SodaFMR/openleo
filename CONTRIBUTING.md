@@ -91,6 +91,22 @@ the repository contains the supporting release or evidence.
 
 ## Required Checks
 
+The workbench also has dependency-free JavaScript checks and a real-browser suite:
+
+```bash
+node --test tests/test_workbench_ui.mjs
+uv run openleo constellation examples/constellations/iridium_global.json --output runs/global
+uv run --group browser playwright install chromium
+uv run --group browser python tests/browser_workbench.py
+```
+
+On Arch Linux, use the installed Chromium with
+`uv run --group browser python tests/browser_workbench.py --executable /usr/bin/chromium`.
+Browser packages are development-only; using the application requires neither
+Playwright nor Node. Changes to the scientific producer must preserve honest source
+and assumption labels in the UI and exports. Never replace the original archived
+catalog bytes when refreshing an example; add a new dated snapshot with its source hash.
+
 Run these before opening a pull request:
 
 ```bash

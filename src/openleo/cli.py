@@ -19,6 +19,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Run OpenLEO scientific benchmarks and render completed artifacts.",
         epilog=(
             "Examples:\n"
+            "  openleo app CONSTELLATION.json\n"
+            "  openleo constellation CONSTELLATION.json --output DIRECTORY\n"
             "  openleo run SCENARIO.json --output DIRECTORY\n"
             "  openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY\n"
             "  openleo gases CONFIG.json --output DIRECTORY\n"
@@ -29,6 +31,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    app_parser = subparsers.add_parser("app", help="open the local scientific workbench")
+    app_parser.add_argument("scenario", metavar="CONSTELLATION.json")
+    app_parser.add_argument("--port", type=int, default=8765)
+    app_parser.add_argument(
+        "--no-browser", action="store_true", help="print the local URL without opening it"
+    )
+    constellation_parser = subparsers.add_parser(
+        "constellation", help="run a constellation experiment and export its interactive report"
+    )
+    constellation_parser.add_argument("scenario", metavar="CONSTELLATION.json")
+    constellation_parser.add_argument("--output", required=True, metavar="DIRECTORY")
 
     run_parser = subparsers.add_parser("run", help="run a scenario and write its artifacts")
     run_parser.add_argument("scenario", metavar="SCENARIO.json", help="scenario input JSON")
@@ -82,6 +96,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    if args.command in {"app", "constellation"}:
+        try:
+            from openleo.constellation import load_constellation, simulate_constellation
+
+            scenario = load_constellation(args.scenario)
+            if args.command == "app":
+                from openleo.app import run_app
+
+                run_app(scenario, port=args.port, open_browser=not args.no_browser)
+            else:
+                from openleo.network import add_network
+                from openleo.workbench import write_workbench
+
+                document = add_network(simulate_constellation(scenario))
+                paths = write_workbench(document, args.output)
+                print(f"experiment: {scenario.name}")
+                print(f"satellites: {len(document['satellites'])}")
+                print(f"stations: {len(document['stations'])}")
+                print(f"samples: {len(document['timestamps_utc'])}")
+                for path in paths:
+                    print(f"{path.name}: {path}")
+            return 0
+        except (ValueError, OSError, UnicodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     if args.command == "run":
         try:
             result = simulate_scenario(load_scenario(args.scenario))

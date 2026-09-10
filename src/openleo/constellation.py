@@ -149,10 +149,15 @@ def _utc_text(timestamp: datetime) -> str:
 def scenario_document(scenario: ConstellationScenario) -> dict[str, Any]:
     """Return an independent input document, with a relative catalog path."""
     provenance = scenario.orbit.provenance
+    try:
+        catalog_path = Path(relpath(scenario.orbit.path, scenario.source_path.parent))
+    except ValueError:
+        # Windows cannot express a relative path across different drives.
+        catalog_path = scenario.orbit.path
     return {
         "name": scenario.name,
         "orbit": {
-            "path": Path(relpath(scenario.orbit.path, scenario.source_path.parent)).as_posix(),
+            "path": catalog_path.as_posix(),
             "source_url": provenance.source_url,
             "retrieved_at_utc": _utc_text(provenance.retrieved_at_utc),
             "terms_url": provenance.terms_url,

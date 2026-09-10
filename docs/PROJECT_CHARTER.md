@@ -1,7 +1,7 @@
 # OpenLEO Research and Engineering Charter
 
 **Status:** Canonical project specification<br>
-**Last reviewed:** 2026-09-01<br>
+**Last reviewed:** 2026-09-11<br>
 **Working software name:** OpenLEO<br>
 **Planned distribution name:** `openleo-link`<br>
 **Planned import package and command:** `openleo`<br>
@@ -224,13 +224,32 @@ retained. The workbook is authoritative validation evidence but is not redistrib
 This establishes implementation agreement for specific attenuation at the declared
 cases, not slant-path loss, weather, or calibrated RF validation.
 
-### 6.5 Later milestones
+### 6.5 v0.3: constellation research workbench
 
-- **v0.2 — propagation and uncertainty:** implement only required subsets of current,
+The application now joins archived multi-satellite geometry, configurable worldwide
+ground stations, free-space budgets, cited DVB-S2 reference adaptation, reciprocal
+snapshot network comparisons, and an interactive local/offline browser workbench.
+The fixed-capacity baseline changes only ground-link rates; ISL assumptions remain
+identical. Every export records complete inputs, models, units, source fingerprints,
+warnings, numerical results and file hashes. The 3D view projects the computed ITRS
+positions and never changes the scientific data.
+
+The canonical experiment uses 80 original CelesTrak GP records, four declared city
+coordinates, 121 UTC samples, and hypothetical Ku-band terminals/network edges. It
+does not claim actual Iridium service performance. Details, commands, schema and
+validation are in [Scientific workbench](WORKBENCH.md).
+
+This functional application does not complete the later atmospheric, observational,
+uncertainty or publication requirements. P.676 remains a separate homogeneous-state
+reference instrument until its path integration is independently validated.
+
+### 6.6 Remaining research milestones
+
+- **Propagation and uncertainty:** implement only required subsets of current,
   in-force ITU-R recommendations; retain deterministic sensitivity and add only
   justified uncertainty intervals.
-- **v0.3 — adaptive link state:** add cited MODCOD thresholds, implementation margin,
-  hysteresis, useful-rate estimates, and outage state.
+- **Adaptive link extensions:** validate additional MODCOD profiles, acquisition and
+  handover dynamics, directional terminals and propagation coupling.
 - **v0.4 — network adapter:** export versioned capacity/delay/availability traces and
   compare fixed and dynamic ground links in a small synthetic network scenario.
 - **v1.0 — paper release:** freeze benchmark inputs, run full ablations and uncertainty

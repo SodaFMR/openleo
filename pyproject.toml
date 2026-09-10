@@ -4,14 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openleo-link"
-version = "0.2.0b1"
-description = "Reproducible time-varying link traces for LEO satellite research"
+version = "0.3.0"
+description = "Reproducible LEO constellation, adaptive-link and routing experiments with a 3D workbench"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.12"
 dependencies = [
     "skyfield>=1.55",
+    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +28,7 @@ dev = [
     "pytest-cov>=6.2",
     "ruff>=0.12",
 ]
+browser = ["playwright==1.58.0"]
 
 [tool.ruff]
 target-version = "py312"
