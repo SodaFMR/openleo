@@ -3,6 +3,9 @@ examples/data/** text eol=lf
 examples/scenarios/** text eol=lf
 examples/sensitivity/** text eol=lf
 examples/atmosphere/** text eol=lf
+examples/constellations/** text eol=lf
+# Preserve the exact archived CelesTrak response, including its original CRLF bytes.
+examples/data/iridium_next_2026-09-10.csv -text
 
 # Matplotlib-generated SVG path data uses trailing spaces for line continuations.
 docs/images/*.svg -whitespace

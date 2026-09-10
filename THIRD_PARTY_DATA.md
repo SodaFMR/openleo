@@ -14,3 +14,31 @@ hardware, Cartagena station hardware, or achieved throughput.
 
 The repository MIT license covers original OpenLEO code and documentation only. It
 does not replace CelesTrak source terms or usage policy for this archived GP record.
+
+## Iridium NEXT constellation geometry
+
+- Archived response: `examples/data/iridium_next_2026-09-10.csv`, 80 GP records.
+- Source: https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-NEXT&FORMAT=CSV
+- Retrieved: 2026-09-10T22:00:25Z.
+- Usage policy: https://celestrak.org/usage-policy.php
+- SHA-256: `e9dac20f80bb4d0ae0090996619827aab1abf16d448ed8b0edf47b965abf6273`.
+- Original response bytes, including CRLF line endings, are preserved.
+
+The public fitted elements support a repeatable multi-satellite geometry experiment.
+The four example ground locations, Ku-band terminals, DVB-S2 adaptation settings and
+reciprocal inter-satellite links are declared OpenLEO assumptions. They do not describe
+Iridium's payload, RF network, gateways, operational topology or measured performance.
+Example city coordinates and heights are approximate scenario choices, not surveys of
+real ground stations. The frozen two-hour window is retrospective.
+
+## Natural Earth coastline
+
+- Packaged map: `src/openleo/_web/coastline.geojson`.
+- Source: https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_110m_coastline.geojson
+- Upstream commit: `ca96624a56bd078437bca8184e78163e5039ad19`.
+- Retrieved: 2026-09-10 UTC.
+- SHA-256: `851f581ff5ffb844deed8ae1a9ce22e3c4bb3d74fa342cadb5d8e39b41ae7c3c`.
+- Terms: https://www.naturalearthdata.com/about/terms-of-use/ (public domain).
+
+This generalized 1:110 million cartography supplies visual geographic context only.
+It is not a terrain, elevation, horizon-obstruction or station-location dataset.
