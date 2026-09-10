@@ -3,6 +3,43 @@
 OpenLEO is an open, reproducible Python tool for studying time-varying
 satellite-to-ground links in Low Earth Orbit (LEO).
 
+Version 0.3 adds a complete local scientific workbench: propagate an archived
+constellation, edit stations and RF assumptions anywhere in the world, compare adaptive
+and fixed-capacity ground links, inspect routes on a 3D Earth, and export the full
+experiment with a standalone interactive report.
+
+![OpenLEO scientific workbench: constellation geometry, link state and routing comparison](docs/images/workbench.png)
+
+## Open The Workbench
+
+```bash
+uv sync --locked --group dev --extra plot
+uv run openleo app examples/constellations/iridium_global.json
+```
+
+Your browser opens the local application at `http://127.0.0.1:8765/`. Select a station
+and satellite, play the UTC timeline, inspect rates and routes, or use **Scenario** to
+edit coordinates, RF assumptions, sampling and network endpoints. Computation runs
+locally; the browser requires no internet connection or map API key.
+
+Generate the same experiment without a server:
+
+```bash
+uv run openleo constellation examples/constellations/iridium_global.json --output runs/global
+```
+
+Open `runs/global/explorer.html` directly in a browser. The directory also contains
+`experiment.json`, `links.csv`, `routes.csv`, and a SHA-256 manifest. The report carries
+all data and application assets, and the live app can export your edited experiment.
+
+The global example uses **80 genuine archived CelesTrak GP records**, with declared
+stations in Madrid, Tromso, Singapore and Quito. Its RF terminals and reciprocal network
+are hypothetical experiment assumptions, separate from Iridium's actual system.
+Adaptive rates use a cited subset of DVB-S2 ideal AWGN reference thresholds. Read the
+[workbench guide](docs/WORKBENCH.md) for the model, input format, bounds and validation.
+
+The earlier scientific instruments remain available:
+
 v0.1 is intentionally narrow: it reads one frozen CelesTrak GP CSV record, one
 ground station, one UTC window, and one transparent RF scenario, then writes a
 deterministic visible-pass trace and summary. v0.2a1 adds a deterministic
@@ -318,8 +355,10 @@ The pass simulation remains free-space only. v0.2b1 calculates homogeneous P.676
 specific attenuation separately, but does not integrate it along a path or apply it to
 `trace.csv`. OpenLEO still has no atmospheric profile, rain, cloud, fog, scintillation,
 refraction, antenna radiation patterns, beam steering, interference, polarization,
-MODCOD tables, packet traffic, routing, live downloads, hardware control, or
-calibrated-observation validation.
+packet traffic, live downloads during scientific runs, hardware control, or
+calibrated-observation validation. The workbench adds a five-mode DVB-S2 reference
+table and hypothetical reciprocal snapshot routing. Acquisition, pointing, contention,
+queues and real operator behavior are not modeled.
 
 Shannon-Hartley capacity is reported only as a theoretical upper bound. It is not
 throughput, achieved goodput, commercial service performance, or validation of any
@@ -339,9 +378,10 @@ free-space model.
   synthetic RF assumptions.
 - v0.2b1: officially validated P.676-13 Annex 1 specific gaseous attenuation at
   declared homogeneous conditions.
-- v0.2: validated propagation-model subsets and justified uncertainty reporting.
-- v0.3: adaptive link state with cited thresholds and useful-rate estimates.
-- v0.4: network-simulator trace export and fixed-versus-dynamic comparison.
+- v0.3: local/offline workbench, archived constellation geometry, configurable stations,
+  reference adaptive links, snapshot routing and fixed-versus-dynamic comparison.
+- Next model work: validated atmospheric path integration and justified uncertainty.
+- v0.4: validated packet-simulator adapters, acquisition/handover dynamics and broader ablations.
 - v1.0: reproducible paper release with archived software/data release.
 
 ## Contributing, Citation, And Data Terms

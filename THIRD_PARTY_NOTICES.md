@@ -31,3 +31,17 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Natural Earth
+
+The workbench includes the unmodified Natural Earth 1:110 million coastline GeoJSON
+from the source and SHA-256 recorded in `THIRD_PARTY_DATA.md`. Natural Earth declares
+its map data public domain: https://www.naturalearthdata.com/about/terms-of-use/.
+
+## DVB-S2 reference parameters
+
+Five numerical mode efficiencies and ideal Es/N0 reference thresholds are cited from
+Table 13 of ETSI EN 302 307-1 V1.4.1 (2014-11), normal 64,800-bit FEC frames without
+pilots: https://www.etsi.org/deliver/etsi_en/302300_302399/30230701/01.04.01_60/en_30230701v010401p.pdf.
+The standard itself is not redistributed. OpenLEO implements an original simplified
+selection policy; it is not an ETSI-certified receiver, waveform or decoder.

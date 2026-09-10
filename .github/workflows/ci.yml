@@ -47,6 +47,19 @@ jobs:
 
       - run: uv run pytest --cov=openleo --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 
+      - run: uv run openleo constellation examples/constellations/iridium_global.json --output runs/global
+
+      - run: uv run python -c "from openleo.workbench import load_experiment; assert len(load_experiment('runs/global')['satellites']) == 80"
+
+      - if: matrix.full-checks
+        run: node --test tests/test_workbench_ui.mjs
+
+      - if: matrix.full-checks
+        run: uv run --group browser --extra plot playwright install --with-deps chromium
+
+      - if: matrix.full-checks
+        run: uv run --group browser --extra plot python tests/browser_workbench.py
+
       - if: matrix.full-checks
         run: uv run python -m build
 
@@ -108,6 +121,12 @@ jobs:
           ]
           if missing_notices:
               raise SystemExit(f"wheel is missing license notices: {missing_notices}")
+          required_assets = {
+              "openleo/_web/workbench.html", "openleo/_web/workbench.css",
+              "openleo/_web/workbench.js", "openleo/_web/coastline.geojson",
+          }
+          if not required_assets.issubset(wheel_names):
+              raise SystemExit(f"wheel missing workbench assets: {required_assets - set(wheel_names)}")
           print(f"distribution members clean: {archives[0]}, {wheels[0]}")
           PY
 
@@ -131,6 +150,9 @@ jobs:
           "$core_env/bin/openleo" gases \
             examples/atmosphere/p676_13_validation.json \
             --output "$core_env/gases"
+          "$core_env/bin/openleo" constellation \
+            examples/constellations/iridium_global.json \
+            --output "$core_env/constellation"
 
       - run: uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
 
