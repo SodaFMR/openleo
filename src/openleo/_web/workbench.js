@@ -56,7 +56,8 @@
   const csv = rows => rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
   const nodeName = (data, node) => node < data.satellites.length ? data.satellites[node]?.name : data.stations[node - data.satellites.length]?.name;
   function linksCSV(data) {
-    const fields = ['station_index', 'satellite_index', 'elevation_deg', 'azimuth_deg', 'range_m', 'range_rate_mps', 'doppler_hz', 'delay_s', 'cn0_db_hz', 'snr_db', 'esn0_db', 'modcod', 'rate_bps', 'shannon_upper_bound_bps', 'margin_db', 'remaining_contact_s', 'contact_truncated'];
+    const propagation = data.schema_version === '2' ? ['gaseous_dry_attenuation_db', 'gaseous_water_attenuation_db', 'gaseous_attenuation_db', 'free_space_cn0_db_hz', 'geometric_delay_s', 'atmospheric_excess_delay_s', 'apparent_elevation_deg'] : [];
+    const fields = ['station_index', 'satellite_index', 'elevation_deg', 'azimuth_deg', 'range_m', 'range_rate_mps', 'doppler_hz', 'delay_s', 'cn0_db_hz', 'snr_db', 'esn0_db', 'modcod', 'rate_bps', 'shannon_upper_bound_bps', 'margin_db', 'remaining_contact_s', 'contact_truncated', ...propagation];
     return csv([['timestamp_utc', 'station', 'satellite', 'norad_id', ...fields], ...data.links.flatMap((links, time) => links.map(link => [data.timestamps_utc[time], data.stations[link.station_index].name, data.satellites[link.satellite_index].name, data.satellites[link.satellite_index].norad_id, ...fields.map(key => link[key])]))]);
   }
   function routesCSV(data) {
@@ -104,6 +105,7 @@
   function refreshExperiment() {
     state = {...state, time: Math.min(state.time, data.timestamps_utc.length - 1), station: Math.min(state.station, data.stations.length - 1), satellite: Math.min(state.satellite, data.satellites.length - 1)};
     text('experiment-name', data.scenario.name); document.title = data.scenario.name + ' · OpenLEO';
+    text('app-version', data.provenance?.software?.['openleo-link'] || 'Workbench');
     options('station-select', data.stations.map(station => station.name), state.station);
     options('satellite-select', data.satellites.map(satellite => satellite.name + ' · ' + satellite.norad_id), state.satellite);
     text('satellite-count', data.satellites.length); text('station-count', data.stations.length);
@@ -162,6 +164,11 @@
     text('link-modcod', link?.modcod || 'No RF lock'); text('link-margin', link?.margin_db == null ? '— margin' : metric(link.margin_db, ' dB margin'));
     const values = {'link-elevation': metric(link?.elevation_deg, '°', 1), 'link-range': metric(link ? link.range_m / 1000 : null, ' km', 1), 'link-doppler': formatSI(link?.doppler_hz, 'Hz'), 'link-delay': metric(link ? link.delay_s * 1000 : null, ' ms'), 'link-cn0': metric(link?.cn0_db_hz, ' dBHz', 1), 'link-esn0': metric(link?.esn0_db, ' dB', 1), 'link-azimuth': metric(link?.azimuth_deg, '°', 1), 'link-contact': link ? (link.contact_truncated ? '≥ ' : '') + metric(link.remaining_contact_s, ' s', 0) : '—'};
     Object.entries(values).forEach(([id, value]) => text(id, value));
+    text('propagation-model', data.schema_version === '2' ? 'ITU reference atmosphere' : 'Free space');
+    el('propagation-values').hidden = data.schema_version !== '2';
+    text('link-gas-loss', metric(link?.gaseous_attenuation_db, ' dB', 3));
+    text('link-apparent-elevation', metric(link?.apparent_elevation_deg, '°', 3));
+    text('link-excess-delay', metric(link?.atmospheric_excess_delay_s == null ? null : link.atmospheric_excess_delay_s * 1e6, ' µs', 3));
     el('link-contact').title = link?.contact_truncated ? 'Contact continues beyond this experiment window; duration is a sampled lower bound.' : 'Sampled look-ahead to the visibility mask crossing.';
     const stats = data.statistics?.find(entry => entry.station_index === state.station);
     text('station-visible', percent(stats?.visible_sample_fraction)); text('station-usable', percent(stats?.usable_sample_fraction));
@@ -172,6 +179,7 @@
   function render() {
     el('timeline').value = state.time; el('timeline').setAttribute('aria-valuetext', utc(data.timestamps_utc[state.time]));
     text('current-time', utc(data.timestamps_utc[state.time])); el('current-time').dateTime = data.timestamps_utc[state.time];
+    text('status-time', utc(data.timestamps_utc[state.time])); el('status-time').dateTime = data.timestamps_utc[state.time];
     text('sample-position', state.time + 1 + ' / ' + data.timestamps_utc.length);
     text('visible-count', data.links[state.time].length); text('usable-count', data.links[state.time].filter(link => link.rate_bps > 0).length + ' RF-usable at this sample');
     el('previous-sample').disabled = state.time === 0; el('next-sample').disabled = state.time === data.timestamps_utc.length - 1;
@@ -187,15 +195,8 @@
     const {width, height} = sizeCanvas(globe); if (!width || !height) return;
     const radius = Math.min(width, height) * .347 * state.zoom, cx = width / 2, cy = height / 2 + 2;
     const screen = point => { const [x, y, z] = project(point, state); return [cx + x * radius, cy + y * radius, z]; };
-    context.fillStyle = '#91b4cf45';
-    for (let i = 0; i < 62; i++) { const x = ((i * 137.509 + 19) % 997) / 997 * width, y = ((i * 79.331 + 173) % 701) / 701 * height; context.fillRect(x, y, i % 5 === 0 ? 1.4 : .8, .8); }
     const ry = radius * Math.sqrt(Math.sin(state.lat) ** 2 + (B / A * Math.cos(state.lat)) ** 2);
-    const halo = context.createRadialGradient(cx, cy, radius * .9, cx, cy, radius * 1.13);
-    halo.addColorStop(0, '#439ca326'); halo.addColorStop(.65, '#5bdbef12'); halo.addColorStop(1, '#5bdbef00');
-    context.fillStyle = halo; context.beginPath(); context.arc(cx, cy, radius * 1.13, 0, Math.PI * 2); context.fill();
-    const ocean = context.createRadialGradient(cx - radius * .35, cy - radius * .4, radius * .05, cx, cy, radius);
-    ocean.addColorStop(0, '#183a49'); ocean.addColorStop(.72, '#112c3a'); ocean.addColorStop(1, '#0a1c29');
-    context.fillStyle = ocean; context.strokeStyle = '#5196aa80'; context.lineWidth = 1;
+    context.fillStyle = '#edf3f6'; context.strokeStyle = '#9caeb9'; context.lineWidth = 1;
     context.beginPath(); context.ellipse(cx, cy, radius, ry, 0, 0, Math.PI * 2); context.fill(); context.stroke();
     function path(points, color, lineWidth = 1, densify = false) {
       context.beginPath(); context.strokeStyle = color; context.lineWidth = lineWidth; let active = false;
@@ -210,26 +211,26 @@
       }
       context.stroke();
     }
-    grid.forEach(line => path(line, '#76adba24', .6));
-    coastlines.forEach(line => path(line, '#78b5b68f', .85));
+    grid.forEach(line => path(line, '#bac8d0', .6));
+    coastlines.forEach(line => path(line, '#6f8793', .85));
     const positions = data.satellites.map(satellite => satellite.positions_ecef_m[state.time]);
     const position = node => node < positions.length ? positions[node] : data.stations[node - positions.length]?.position_ecef_m;
     const frame = data.network?.frames[state.time];
-    if (el('show-isl').checked) (frame?.isl_edges || []).forEach(([a, b]) => path([positions[a], positions[b]], '#54829330', .55, true));
-    if (el('show-ground').checked) data.links[state.time].forEach(link => path([data.stations[link.station_index].position_ecef_m, positions[link.satellite_index]], link.station_index === state.station ? '#f1bd7180' : '#78a1a22b', .7, true));
+    if (el('show-isl').checked) (frame?.isl_edges || []).forEach(([a, b]) => path([positions[a], positions[b]], '#718a9d40', .55, true));
+    if (el('show-ground').checked) data.links[state.time].forEach(link => path([data.stations[link.station_index].position_ecef_m, positions[link.satellite_index]], link.station_index === state.station ? '#b6632280' : '#718a9d40', .7, true));
     const track = data.satellites[state.satellite].positions_ecef_m;
-    path(track, '#e1f5ff8a', 1.05, true);
+    path(track, '#60788c', 1.05, true);
     const route = frame?.[state.route];
-    if (route) path(route.nodes.map(position), '#6de2e8', 1.8, true);
+    if (route) path(route.nodes.map(position), '#267544', 1.8, true);
     function marker(point, color, radiusPx, ring = false) {
       if (!visible(point, state)) return;
       const [x, y] = screen(point); context.fillStyle = color; context.beginPath(); context.arc(x, y, radiusPx, 0, Math.PI * 2); context.fill();
       if (ring) { context.strokeStyle = color; context.lineWidth = 1; context.beginPath(); context.arc(x, y, radiusPx + 4, 0, Math.PI * 2); context.stroke(); }
     }
-    positions.forEach((point, i) => marker(point, i === state.satellite ? '#edfbff' : '#6de2e8', i === state.satellite ? 3.8 : 2.2, i === state.satellite));
+    positions.forEach((point, i) => marker(point, i === state.satellite ? '#004777' : '#006bb6', i === state.satellite ? 3.8 : 2.2, i === state.satellite));
     data.stations.forEach((station, i) => {
-      marker(station.position_ecef_m, '#f1bd71', i === state.station ? 3.6 : 2.8, i === state.station);
-      if (visible(station.position_ecef_m, state)) { const [x, y] = screen(station.position_ecef_m); context.font = '10px "Segoe UI", sans-serif'; context.fillStyle = '#f1cd99'; context.fillText(station.name, x + 10, y - 7); }
+      marker(station.position_ecef_m, '#ae5200', i === state.station ? 3.6 : 2.8, i === state.station);
+      if (visible(station.position_ecef_m, state)) { const [x, y] = screen(station.position_ecef_m); context.font = '11px "Segoe UI", sans-serif'; context.fillStyle = '#884000'; context.fillText(station.name, x + 10, y - 7); }
     });
     text('camera-position', formatNumber(state.lat / RAD, 1) + '° N / ' + formatNumber(state.lon / RAD, 1) + '° E · ' + formatNumber(state.zoom, 1) + '×');
   }
@@ -237,31 +238,32 @@
     const canvas = el(id), {ctx, width, height} = sizeCanvas(canvas); if (!width || !height) return;
     const values = series(data, state.station, state.satellite, key).map(value => value == null ? null : value / divisor);
     const finite = values.filter(value => value != null), min = Math.min(0, ...finite), max = Math.max(1, ...finite);
-    const left = 44, right = width - 8, top = 12, bottom = height - 23;
+    const left = 44, right = width - 8, top = 12, bottom = height - 25;
     const t0 = Date.parse(data.timestamps_utc[0]), duration = Date.parse(data.timestamps_utc.at(-1)) - t0 || 1;
     const x = i => left + (Date.parse(data.timestamps_utc[i]) - t0) / duration * (right - left);
     const y = value => bottom - (value - min) / (max - min) * (bottom - top);
-    ctx.font = '8px ui-monospace, monospace'; ctx.fillStyle = '#95a6b5'; ctx.lineWidth = .6;
+    ctx.font = '10px ui-monospace, monospace'; ctx.fillStyle = '#596570'; ctx.lineWidth = .6;
     for (let i = 0; i <= 2; i++) {
-      const value = min + (max - min) * i / 2, position = y(value); ctx.strokeStyle = '#2c3c485e'; ctx.beginPath(); ctx.moveTo(left, position); ctx.lineTo(right, position); ctx.stroke();
+      const value = min + (max - min) * i / 2, position = y(value); ctx.strokeStyle = '#dbe0e4'; ctx.beginPath(); ctx.moveTo(left, position); ctx.lineTo(right, position); ctx.stroke();
       ctx.fillText(formatNumber(value, 1), 1, position + 3);
     }
     ctx.fillText(unit, 1, height - 3); ctx.fillText(timeOnly(data.timestamps_utc[0]).slice(0, 5), left, height - 3);
     ctx.textAlign = 'right'; ctx.fillText(timeOnly(data.timestamps_utc.at(-1)).slice(0, 5) + ' UTC', right, height - 3); ctx.textAlign = 'left';
+    ctx.strokeStyle = '#99a4ae'; ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, bottom); ctx.lineTo(right, bottom); ctx.stroke();
     ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath(); let active = false;
     values.forEach((value, i) => {
       if (value == null) { active = false; return; }
       if (active) { if (key === 'rate_bps') ctx.lineTo(x(i), y(values[i - 1])); ctx.lineTo(x(i), y(value)); } else ctx.moveTo(x(i), y(value)); active = true;
     }); ctx.stroke();
     ctx.fillStyle = color; values.forEach((value, i) => { if (value != null) { ctx.beginPath(); ctx.arc(x(i), y(value), 1.4, 0, Math.PI * 2); ctx.fill(); } });
-    ctx.strokeStyle = '#d5e5ed75'; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x(state.time), top); ctx.lineTo(x(state.time), bottom); ctx.stroke(); ctx.setLineDash([]);
-    if (values[state.time] != null) { ctx.fillStyle = '#eaf9ff'; ctx.beginPath(); ctx.arc(x(state.time), y(values[state.time]), 3, 0, Math.PI * 2); ctx.fill(); }
-    if (!finite.length) { ctx.fillStyle = '#b8c6d0'; ctx.textAlign = 'center'; ctx.fillText('No above-mask samples for this link', (left + right) / 2, height / 2); ctx.textAlign = 'left'; }
+    ctx.strokeStyle = '#65727e'; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x(state.time), top); ctx.lineTo(x(state.time), bottom); ctx.stroke(); ctx.setLineDash([]);
+    if (values[state.time] != null) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x(state.time), y(values[state.time]), 3, 0, Math.PI * 2); ctx.fill(); }
+    if (!finite.length) { ctx.fillStyle = '#596570'; ctx.textAlign = 'center'; ctx.fillText('No above-mask samples for this link', (left + right) / 2, height / 2); ctx.textAlign = 'left'; }
   }
   function drawCharts() {
-    drawChart('rate-chart', 'rate_bps', '#6de2e8', 'Mbit/s', 1e6);
-    drawChart('elevation-chart', 'elevation_deg', '#f1bd71', '°');
-    drawChart('doppler-chart', 'doppler_hz', '#a7b7f3', 'kHz', 1e3);
+    drawChart('rate-chart', 'rate_bps', '#006bb6', 'Mbit/s', 1e6);
+    drawChart('elevation-chart', 'elevation_deg', '#ae5200', '°');
+    drawChart('doppler-chart', 'doppler_hz', '#267544', 'kHz', 1e3);
   }
   function setTime(value) { state = {...state, time: Math.max(0, Math.min(data.timestamps_utc.length - 1, value))}; render(); }
   function pause() {
@@ -379,7 +381,7 @@
       if (!result.timestamps_utc?.length || !result.satellites?.length || !result.stations?.length) throw new Error('The local process returned an incomplete experiment.');
       data = result; el('experiment-data').textContent = embeddedJSON(data); pause(); state = {...state, time: 0}; refreshExperiment(); el('scenario-dialog').close(); announce('Experiment recomputed. All views and exports now use this run.');
     } catch (error) { editorError(error); }
-    finally { el('run-scenario').disabled = !session.live; text('run-scenario', 'Recompute experiment ↗'); }
+    finally { el('run-scenario').disabled = !session.live; text('run-scenario', 'Recompute experiment'); }
   });
   new ResizeObserver(() => { drawGlobe(); drawCharts(); }).observe(el('main'));
   matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', event => { if (event.matches) pause(); });

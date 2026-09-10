@@ -48,6 +48,7 @@ def _input_error(error: Exception) -> str:
         "time_window",
         "radio_link",
         "adaptation",
+        "propagation",
         "network",
         "stations",
         "ground_station",

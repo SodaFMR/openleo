@@ -113,6 +113,18 @@ test('CSV contains the current exact numeric samples and escapes hostile names',
   assert.ok(ui.linksCSV({...data, links: [[], [], []]}).startsWith('timestamp_utc,'));
 });
 
+test('reference-atmosphere CSV adds exact propagation fields only for schema 2', () => {
+  const propagation = {gaseous_dry_attenuation_db: 0.13, gaseous_water_attenuation_db: 0.07,
+    gaseous_attenuation_db: 0.2, free_space_cn0_db_hz: 70.2, geometric_delay_s: 0.004,
+    atmospheric_excess_delay_s: 0.000000032, apparent_elevation_deg: 30.04};
+  const legacy = ui.linksCSV({...experiment, schema_version: '1'});
+  assert.equal(legacy.includes('gaseous_attenuation_db'), false);
+  const reference = ui.linksCSV({...experiment, schema_version: '2',
+    links: [[{...sampleLink, ...propagation}], [], []]});
+  assert.ok(reference.split('\r\n')[0].endsWith(Object.keys(propagation).join(',')));
+  assert.ok(reference.split('\r\n')[1].endsWith(Object.values(propagation).join(',')));
+});
+
 test('route CSV includes disconnected snapshots rather than inventing paths', () => {
   const csv = ui.routesCSV(experiment);
   assert.ok(csv.includes('minimum_delay,true,0.004,2000000,Madrid → IRIDIUM 1'));

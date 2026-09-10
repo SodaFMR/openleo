@@ -10,6 +10,7 @@ from importlib.metadata import version
 from importlib.resources import files
 from io import StringIO
 from itertools import pairwise
+from math import isclose, log10
 from pathlib import Path
 from string import Template
 
@@ -29,6 +30,8 @@ from openleo.input import (
     _utc,
 )
 from openleo.network import ROUTE_MODELS, _ground_edges, _list, _position
+from openleo.physics import SPEED_OF_LIGHT_MPS
+from openleo.propagation import PROPAGATION_LINK_FIELDS, propagation_metadata
 
 MAX_ARTIFACT_BYTES = 64_000_000
 ARTIFACT_NAMES = ("experiment.json", "links.csv", "routes.csv", "explorer.html")
@@ -95,17 +98,22 @@ def _integer(value, path: str, maximum: int, minimum: int = 0) -> int:
     return value
 
 
-def _validate_metadata(document) -> set[str]:
+def _validate_metadata(document, scenario) -> set[str]:
     models = _object(
         document["models"],
         frozenset(
             ("coordinates", "time", "radio_link", "adaptation", "contacts", "statistics", "network")
-        ),
+        )
+        | ({"propagation"} if scenario.propagation is not None else set()),
         "models",
     )
     for name, section in models.items():
         if not isinstance(section, dict) or not section:
             raise ValueError(f"models.{name} must be a non-empty object")
+    if scenario.propagation is not None and _json(models["propagation"]) != _json(
+        propagation_metadata(scenario.propagation)
+    ):
+        raise ValueError("models.propagation must match the scenario propagation configuration")
     coordinates = models["coordinates"]
     if (coordinates.get("frame"), coordinates.get("units"), coordinates.get("ellipsoid")) != (
         "ITRS",
@@ -131,10 +139,16 @@ def _validate_metadata(document) -> set[str]:
         _finite_number(entry["required_esn0_db"], "modcod.required_esn0_db")
     provenance = document["provenance"]
     _sha256(provenance["scenario_sha256"], "provenance.scenario_sha256")
-    if (
-        "scenario_canonical_json" in provenance
-        or provenance.get("scenario_hash_encoding") == "canonical JSON sorted compact UTF-8"
+    encoding = provenance.get("scenario_hash_encoding")
+    canonical_encoding = "canonical JSON sorted compact UTF-8"
+    if "scenario_hash_encoding" in provenance and encoding not in (
+        canonical_encoding,
+        "original UTF-8 file bytes",
     ):
+        raise ValueError("unsupported scenario_hash_encoding")
+    if "scenario_canonical_json" in provenance and encoding != canonical_encoding:
+        raise ValueError("canonical scenario text requires the canonical hash encoding label")
+    if "scenario_canonical_json" in provenance or encoding == canonical_encoding:
         canonical = provenance.get("scenario_canonical_json")
         if (
             not isinstance(canonical, str)
@@ -196,13 +210,48 @@ def _validate_geometry(satellites, stations, sample_count, scenario) -> None:
         _position(station["position_ecef_m"], "station.position_ecef_m")
 
 
-def _validate_links(frames, satellite_count, station_count, timestamps, modcod_names, mask):
+def _validate_propagation_link(link, scenario) -> None:
+    for field in (
+        "gaseous_dry_attenuation_db",
+        "gaseous_water_attenuation_db",
+        "gaseous_attenuation_db",
+        "atmospheric_excess_delay_s",
+    ):
+        _non_negative_number(link[field], f"link.{field}")
+    _positive_number(link["geometric_delay_s"], "link.geometric_delay_s")
+    _finite_number(link["free_space_cn0_db_hz"], "link.free_space_cn0_db_hz")
+    _range(
+        link["apparent_elevation_deg"], "link.apparent_elevation_deg", link["elevation_deg"], 90.0
+    )
+    expected = {
+        "gaseous_attenuation_db": link["gaseous_dry_attenuation_db"]
+        + link["gaseous_water_attenuation_db"],
+        "cn0_db_hz": link["free_space_cn0_db_hz"] - link["gaseous_attenuation_db"],
+        "geometric_delay_s": link["range_m"] / SPEED_OF_LIGHT_MPS,
+        "delay_s": link["geometric_delay_s"] + link["atmospheric_excess_delay_s"],
+        "snr_db": link["cn0_db_hz"] - 10.0 * log10(scenario.radio_link.channel_bandwidth_hz),
+        "esn0_db": link["cn0_db_hz"] - 10.0 * log10(scenario.adaptation.symbol_rate_baud),
+    }
+    for field, value in expected.items():
+        if not isclose(link[field], value, rel_tol=1e-12, abs_tol=1e-12):
+            raise ValueError(
+                f"link.{field} is inconsistent with the declared propagation quantities"
+            )
+
+
+def _validate_links(frames, satellite_count, station_count, timestamps, modcod_names, scenario):
+    fields = LINK_FIELDS[1:] + (PROPAGATION_LINK_FIELDS if scenario.propagation is not None else ())
     ground_frames = []
     for index, frame in enumerate(frames):
         ground_frames.append(_ground_edges(frame, satellite_count, station_count))
         for link in frame:
-            _object(link, frozenset(LINK_FIELDS[1:]), "link")
-            _range(link["elevation_deg"], "link.elevation_deg", mask, 90.0)
+            _object(link, frozenset(fields), "link")
+            _range(
+                link["elevation_deg"],
+                "link.elevation_deg",
+                scenario.time_window.minimum_elevation_deg,
+                90.0,
+            )
             _range(link["azimuth_deg"], "link.azimuth_deg", 0.0, 360.0, upper_inclusive=False)
             _positive_number(link["range_m"], "link.range_m")
             for field in (
@@ -214,6 +263,8 @@ def _validate_links(frames, satellite_count, station_count, timestamps, modcod_n
                 "margin_db",
             ):
                 _finite_number(link[field], f"link.{field}")
+            if scenario.propagation is not None:
+                _validate_propagation_link(link, scenario)
             _non_negative_number(link["shannon_upper_bound_bps"], "link.shannon_upper_bound_bps")
             _range(
                 link["remaining_contact_s"],
@@ -339,7 +390,10 @@ def _validate_document(document) -> None:
     """Check the renderer's bounded data contract without recomputing any model."""
     try:
         _object(document, DOCUMENT_KEYS, "experiment")
-        if document["schema_version"] != "1" or document["kind"] != "openleo.constellation":
+        if (
+            document["schema_version"] not in ("1", "2")
+            or document["kind"] != "openleo.constellation"
+        ):
             raise ValueError("unsupported constellation experiment schema")
         timestamps = tuple(
             _utc(value, "timestamps_utc")
@@ -355,7 +409,9 @@ def _validate_document(document) -> None:
         scenario = parse_constellation(
             document["scenario"], Path("experiment.json"), document["provenance"]["scenario_sha256"]
         )
-        modcod_names = _validate_metadata(document)
+        if (document["schema_version"] == "2") != (scenario.propagation is not None):
+            raise ValueError("schema_version 2 requires propagation; schema_version 1 excludes it")
+        modcod_names = _validate_metadata(document, scenario)
         _validate_geometry(satellites, stations, count, scenario)
         ground_frames = _validate_links(
             _list(document["links"], "links", count, count),
@@ -363,7 +419,7 @@ def _validate_document(document) -> None:
             len(stations),
             timestamps,
             modcod_names,
-            scenario.time_window.minimum_elevation_deg,
+            scenario,
         )
         _validate_network(
             document["network"], ground_frames, stations, len(satellites), count, scenario.network
@@ -419,7 +475,7 @@ def _csv(fields: tuple[str, ...], rows) -> str:
 
 def links_csv(document: dict) -> str:
     return _csv(
-        LINK_FIELDS,
+        LINK_FIELDS + (PROPAGATION_LINK_FIELDS if document["schema_version"] == "2" else ()),
         (
             {"timestamp_utc": timestamp, **link}
             for timestamp, frame in zip(document["timestamps_utc"], document["links"], strict=True)

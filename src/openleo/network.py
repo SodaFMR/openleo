@@ -288,8 +288,13 @@ def add_network(document: Mapping[str, Any]) -> dict[str, Any]:
     probability or measured throughput.
     """
     try:
-        if document["kind"] != "openleo.constellation" or document["schema_version"] != "1":
-            raise ValueError("network requires an openleo.constellation schema_version 1 document")
+        if document["kind"] != "openleo.constellation" or document["schema_version"] not in (
+            "1",
+            "2",
+        ):
+            raise ValueError(
+                "network requires an openleo.constellation schema_version 1 or 2 document"
+            )
         stations = _list(document["stations"], "stations", 2, 16)
         names = tuple(_string(station["name"], "stations.name") for station in stations)
         settings = parse_network(document["scenario"]["network"], names)
