@@ -1,0 +1,9 @@
+{
+  "schema_version": "1",
+  "name": "Ground-link propagation and sampling study",
+  "cases": [
+    {"id": "12ghz", "scenario": "reference_12ghz.json"},
+    {"id": "20ghz", "scenario": "reference_20ghz.json"}
+  ],
+  "sampling_steps_s": [30.0, 60.0, 120.0]
+}
