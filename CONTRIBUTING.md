@@ -1,159 +1,127 @@
 # Contributing
 
-OpenLEO work is English-only for code, documentation, commit messages, issues, pull
-requests, examples, and generated artifacts intended for the repository.
+OpenLEO accepts focused changes that preserve reproducibility, scientific provenance,
+and explicit claim boundaries. Repository code, documentation, examples, generated
+artifacts, issues, and pull requests are written in English.
 
-## Setup
+## Development setup
 
-Recommended:
-
-```bash
-uv sync --group dev --extra plot
-```
-
-Standard Python fallback:
-
-```bash
-python -m venv .venv
-```
-
-Activate the virtual environment:
-
-```bash
-source .venv/bin/activate
-```
-
-Windows PowerShell:
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-Then install the package and development tools:
-
-```bash
-python -m pip install -e ".[plot]"
-python -m pip install build pytest pytest-cov ruff
-```
-
-## Development Workflow
-
-Use focused branches named for the change, such as:
-
-- `feat/pass-trace`
-- `fix/reject-naive-timestamps`
-- `docs/link-budget-note`
-- `ci/platform-matrix`
-
-Use Conventional Commits:
-
-```text
-feat: add visible pass simulation
-fix: reject invalid RF bandwidth
-docs: explain synthetic RF assumptions
-test: cover CLI input errors
-ci: test supported Python versions
-```
-
-Behavior changes follow TDD:
-
-1. Add one failing test for the behavior.
-2. Run the focused test and confirm the expected failure.
-3. Implement the smallest correct change.
-4. Run the focused test again.
-5. Run the full verification commands before committing.
-
-Coverage must stay at or above 80%.
-
-## Scientific Provenance
-
-Read [docs/PROJECT_CHARTER.md](docs/PROJECT_CHARTER.md) before changing scientific
-behavior.
-
-Every external scientific input must record its source URL, retrieval timestamp,
-terms or license URL, checksum when practical, units, and assumptions. Synthetic
-scenarios must be labelled synthetic even when their orbital geometry is sourced
-from public records.
-
-The frozen ISS example uses real/frozen CelesTrak GP geometry. Its RF values are
-synthetic OpenLEO assumptions. See [THIRD_PARTY_DATA.md](THIRD_PARTY_DATA.md).
-
-The P.676-13 benchmark uses official ITU validation outputs and attributed coefficient
-data adapted from a pinned MIT-licensed ITU-Rpy commit. Preserve exact Recommendation
-versions, source URLs, checksums, adapted-file lists, and the full notice in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Do not commit or redistribute the
-official workbook. Describe these outputs as specific attenuation in dB/km at declared
-homogeneous conditions, never as integrated path loss or weather.
-
-The optional constellation propagation model has a separate
-[reference-profile validation contract](docs/REFERENCE_PROPAGATION.md). Preserve
-the distinction between geometric and apparent elevation, AMSL and ellipsoid
-heights, and numerical refinement and physical uncertainty. Do not interpret the
-idealized profile as measured weather.
-
-Do not claim PyPI publication, DOI, calibrated validation, peer-reviewed results,
-operator performance, achieved throughput, or commercial service behavior unless
-the repository contains the supporting release or evidence.
-
-## Required Checks
-
-The workbench also has dependency-free JavaScript checks and a real-browser suite:
-
-```bash
-node --test tests/test_workbench_ui.mjs
-uv run openleo constellation examples/constellations/iridium_global.json --output runs/global
-uv run --group browser playwright install chromium
-uv run --group browser python tests/browser_workbench.py
-uv run --group browser python tests/browser_workbench.py --scenario examples/constellations/iridium_global_reference.json
-```
-
-On Arch Linux, use the installed Chromium with
-`uv run --group browser python tests/browser_workbench.py --executable /usr/bin/chromium`.
-Browser packages are development-only; using the application requires neither
-Playwright nor Node. Changes to the scientific producer must preserve honest source
-and assumption labels in the UI and exports. Never replace the original archived
-catalog bytes when refreshing an example; add a new dated snapshot with its source hash.
-
-Run these before opening a pull request:
+Install Python 3.12 or newer and `uv`, then create the contributor environment:
 
 ```bash
 uv sync --locked --group dev --extra plot
+```
+
+Browser tests use a separate dependency group:
+
+```bash
+uv sync --locked --group dev --group browser --extra plot
+uv run --group browser playwright install chromium
+```
+
+Users do not need the development or browser groups; the user setup is documented in
+the [README](README.md).
+
+## Before changing scientific behavior
+
+Read the [scope](docs/SCOPE.md), [methods](docs/METHODS.md), and the model-specific
+document for the code you are changing.
+
+- Record source URL, retrieval time, terms or license, checksum, units, and assumptions
+  for every external scientific input.
+- Label synthetic station, RF, terminal, and network values as assumptions.
+- Keep public times in timezone-aware UTC and identify coordinate frames.
+- Keep units in schema and column names.
+- Fail on invalid or non-finite inputs; do not silently discard failed propagation.
+- Describe Shannon-Hartley results as theoretical upper bounds and DVB-S2 values as
+  reference rates, never measured throughput.
+- Do not claim PyPI availability, a DOI, calibrated validation, peer review, operator
+  performance, or commercial service behavior without repository evidence.
+
+Preserve the exact Recommendation versions, source URLs, hashes, adapted-file lists,
+and full notice associated with the P.676-13 implementation. The official workbook is
+validation evidence and must not be redistributed. See
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+Reference-profile changes must preserve the distinctions between geometric and
+apparent elevation, ellipsoidal and AMSL height, total and dry pressure, numerical
+refinement and physical uncertainty, and reference atmosphere and measured weather.
+
+Never replace an archived catalog in place. Add a new dated snapshot with its source
+metadata and checksum.
+
+## Development workflow
+
+Behavior changes use test-driven development:
+
+1. Add a focused test and confirm the expected failure.
+2. Implement the smallest correct change.
+3. Run the focused test until it passes.
+4. Run the complete checks below.
+
+Keep coverage at or above 80%. Prefer immutable values and existing repository
+patterns. Validate external data at the boundary and include useful error context
+without leaking secrets or local credentials.
+
+Use Conventional Commits, for example:
+
+```text
+feat: add study metric
+fix: reject invalid sampling grid
+docs: clarify propagation assumptions
+test: cover output hash mismatch
+```
+
+## Required checks
+
+```bash
 uv lock --check
 uv run ruff check src tests
 uv run ruff format --check src tests
-uv run pytest --cov=openleo --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+uv run pytest --cov=openleo --cov-report=term-missing \
+  --cov-report=xml --cov-fail-under=80
 uv run python -m build
-uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
-uv run openleo plot runs/iss --output docs/images/iss-cartagena-pass-overview.svg
-uv run openleo sensitivity examples/scenarios/iss_cartagena.json \
-  examples/sensitivity/iss_cartagena_oat.json --output runs/iss-sensitivity
-uv run openleo plot-sensitivity runs/iss-sensitivity \
-  --output docs/images/iss-cartagena-sensitivity-overview.svg
-uv run openleo gases examples/atmosphere/p676_13_validation.json \
-  --output runs/p676-validation
-uv run openleo plot-gases runs/p676-validation \
-  --output docs/images/p676-13-specific-attenuation.svg
 uvx cffconvert==2.0.0 --validate
-git diff --exit-code -- docs/images/iss-cartagena-pass-overview.svg \
-  docs/images/iss-cartagena-sensitivity-overview.svg \
-  docs/images/p676-13-specific-attenuation.svg
 git diff --check
 ```
 
-Inspect `runs/iss/summary.json` and
-`runs/iss-sensitivity/sensitivity-summary.json`, plus both files in
-`runs/p676-validation/`, when documentation or examples mention reference values. Leave
-`runs/` untracked. Deterministic OAT ranges must not be described as uncertainty
-intervals, and heterogeneous RF sweep spans must not be ranked as though they were
-comparable uncertainties.
+Run the dependency-free browser checks:
 
-## Pull Requests
+```bash
+node --test tests/test_workbench_ui.mjs
+```
 
-Pull requests should state:
+Run real-browser coverage for workbench or UI changes:
+
+```bash
+uv run openleo constellation \
+  examples/constellations/iridium_global.json \
+  --output runs/global
+uv run --group browser python tests/browser_workbench.py
+uv run --group browser python tests/browser_workbench.py \
+  --scenario examples/constellations/iridium_global_reference.json
+```
+
+On systems with an existing Chromium installation, pass it explicitly:
+
+```bash
+uv run --group browser python tests/browser_workbench.py \
+  --executable /usr/bin/chromium
+```
+
+Regenerate only artifacts affected by the change. Inspect the generated summary,
+manifest, units, assumptions, limitations, and source fingerprints. Leave `runs/`
+untracked unless a task explicitly adds a reviewed fixture.
+
+## Pull requests
+
+A pull request should state:
 
 - the scientific or software change;
 - assumptions and provenance;
-- tests and generated artifacts;
+- tests and regenerated artifacts;
 - cross-platform impact;
 - limitations or deferred work; and
-- any data terms that apply.
+- applicable data or license terms.
+
+Do not commit secrets, local credentials, generated environments, or unrelated output.

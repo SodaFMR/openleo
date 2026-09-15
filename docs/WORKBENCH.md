@@ -108,8 +108,8 @@ Neither sampled contact duration nor orbit prediction establishes measured recep
 
 ## RF and adaptation
 
-Every ground link reuses the original free-space, thermal-noise and first-order Doppler
-equations described in [Fundamentals](FUNDAMENTALS.md). A common declared terminal
+Every ground link reuses the free-space, thermal-noise and first-order Doppler
+equations described in [Methods](METHODS.md). A common declared terminal
 model applies to the example links. It is independent of Iridium's actual radio system.
 
 For symbol rate $R_s$ and root-raised-cosine roll-off $\alpha$, the scenario must satisfy
@@ -235,12 +235,3 @@ reference cases, analytic homogeneous-shell and vacuum checks, endpoint recovery
 grid refinement and schema-1 compatibility. Browser tests exercise offline reports,
 simulation edits, downloads, timeline synchronization and narrow layouts. Source provenance is in
 [Third-party data](../THIRD_PARTY_DATA.md).
-
-## Release boundary
-
-Version 0.4 supplies an executable research workflow for the models above, including
-reference-profile path verification and a controlled propagation ablation. Completing
-v1.0 still requires broader ablations, justified uncertainty inputs and propagation,
-observational comparisons, packet-simulator adapter validation and an archived release
-with a DOI. The [v1.0 checklist](V1_0.md) defines those gates. Scientific tests verify
-implemented calculations; they do not supply absent measurements.

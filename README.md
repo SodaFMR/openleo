@@ -1,441 +1,188 @@
 # OpenLEO
 
-OpenLEO is an open, reproducible Python tool for studying time-varying
-satellite-to-ground links in Low Earth Orbit (LEO).
+OpenLEO is an open Python tool for reproducible studies of time-varying
+low-Earth-orbit satellite-to-ground links. It combines archived GP orbital data,
+explicit station and RF assumptions, reference atmospheric propagation, adaptive
+reference rates, snapshot routing, and portable scientific artifacts.
 
-Version 0.4 adds an optional ITU reference atmosphere to the constellation workbench:
-integrate gaseous attenuation along a refracted path, inspect apparent elevation and
-excess delay, and compare the result with an unchanged free-space scenario. A compact,
-light scientific workspace brings the 3D Earth, numerical readouts, plots and route
-table together without requiring a hosted service.
+It is designed for researchers who need inspectable model inputs and repeatable
+comparisons, not an operational link planner or a reconstruction of a commercial
+network.
 
-![OpenLEO scientific workbench: constellation geometry, link state and routing comparison](docs/images/workbench.png)
+![OpenLEO scientific workbench](docs/images/workbench.png)
 
-## Open The Workbench
+## Choose a workflow
 
-```bash
-uv sync --locked --group dev --extra plot
-uv run openleo app examples/constellations/iridium_global_reference.json
-```
+| Goal | Command or entry point |
+| --- | --- |
+| Inspect a constellation locally | `openleo app CONSTELLATION.json` |
+| Export an interactive constellation report | `openleo constellation CONSTELLATION.json --output DIRECTORY` |
+| Compare sampling and propagation fidelity | `openleo fidelity-study STUDY.json --output DIRECTORY` |
+| Compare free space and reference atmosphere | `openleo propagation-study CONSTELLATION.json --output DIRECTORY` |
+| Generate a single visible-pass trace | `openleo run SCENARIO.json --output DIRECTORY` |
+| Run a deterministic one-at-a-time study | `openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY` |
+| Check homogeneous P.676-13 attenuation | `openleo gases CONFIG.json --output DIRECTORY` |
 
-Your browser opens the local application at `http://127.0.0.1:8765/`. Select a station
-and satellite, play the UTC timeline, inspect rates and routes, or use **Scenario** to
-edit coordinates, RF assumptions, sampling and network endpoints. Computation runs
-locally; the browser requires no internet connection or map API key. The timeline
-replays computed samples from archived elements, not live satellite telemetry.
+The [scope and claim boundary](docs/SCOPE.md) explains what each workflow can and
+cannot establish.
 
-Generate the same experiment without a server:
+## Install from the repository
 
-```bash
-uv run openleo constellation examples/constellations/iridium_global_reference.json --output runs/global
-```
-
-Open `runs/global/explorer.html` directly in a browser. The directory also contains
-`experiment.json`, `links.csv`, `routes.csv`, and a SHA-256 manifest. The report carries
-all data and application assets, and the live app can export your edited experiment.
-
-The global example uses **80 genuine archived CelesTrak GP records**, with declared
-stations in Madrid, Tromso, Singapore and Quito. Its RF terminals and reciprocal network
-are hypothetical experiment assumptions, separate from Iridium's actual system.
-Adaptive rates use a cited subset of DVB-S2 ideal AWGN reference thresholds. The
-atmosphere is the P.835-7 global reference profile, not measured weather at those cities;
-the station heights and fixed receiver noise temperature are declared assumptions.
-Read the [workbench guide](docs/WORKBENCH.md) for the model, input format and bounds,
-and [reference propagation](docs/REFERENCE_PROPAGATION.md) for equations and validation.
-The original `examples/constellations/iridium_global.json` remains the free-space example.
-
-## Compare Propagation Models
+OpenLEO requires Python 3.12 or newer. The recommended user installation uses
+[`uv`](https://docs.astral.sh/uv/):
 
 ```bash
-uv run openleo propagation-study examples/constellations/iridium_global_reference.json \
-  --output runs/propagation-study --figure runs/propagation-study/comparison.svg
+git clone https://github.com/SodaFMR/openleo.git
+cd openleo
+uv sync --locked --no-dev
 ```
 
-This runs three otherwise identical cases: `free_space`, `reference`, and `refined`
-(twice as many atmospheric layers). Each has its own complete interactive report and
-CSV/JSON bundle. `propagation-study.json` records the case provenance and maximum
-refinement differences; `comparison.csv` summarizes station metrics. The optional
-figure shows best-link integrated reference bits and the layer-refinement loss
-difference. Omit `--figure` when the optional `plot` extra is not installed.
-
-Changing the layer grid checks numerical resolution, not physical accuracy or input
-uncertainty. Neither reference rates nor integrated reference bits are measured
-throughput. See the [v1.0 release criteria](docs/V1_0.md) for the evidence still needed.
-
-![Reference-atmosphere ablation and numerical layer-refinement comparison](docs/images/reference-propagation-ablation.svg)
-
-## Earlier Instruments
-
-The earlier scientific instruments remain available:
-
-v0.1 is intentionally narrow: it reads one frozen CelesTrak GP CSV record, one
-ground station, one UTC window, and one transparent RF scenario, then writes a
-deterministic visible-pass trace and summary. v0.2a1 adds a deterministic
-one-at-a-time sensitivity benchmark over declared sampling, elevation-mask, and
-synthetic RF assumptions without adding probabilistic uncertainty claims. v0.2b1
-adds an officially benchmarked ITU-R P.676-13 Annex 1 specific gaseous-attenuation
-instrument without applying atmosphere to the pass trace.
-
-OpenLEO is research software. It is not an orbit-determination system, waveform
-simulator, operational network-planning tool, calibrated validation study, or
-peer-reviewed performance result.
-
-## Install
-
-Prerequisites:
-
-- Python 3.12 or newer
-- `uv` for the recommended workflow
-
-Recommended setup:
+Commands below use `uv run --no-dev` so development dependencies are not installed.
+Static figures additionally require the optional plotting dependency:
 
 ```bash
-uv sync --locked --group dev --extra plot
+uv sync --locked --no-dev --extra plot
 ```
 
-Standard Python fallback:
+See [Contributing](CONTRIBUTING.md) for the separate development environment.
+
+## Quick start: constellation workbench
+
+Launch the reference-atmosphere example:
 
 ```bash
-python -m venv .venv
+uv run --no-dev openleo app \
+  examples/constellations/iridium_global_reference.json
 ```
 
-Activate the virtual environment:
+The browser opens a local application at `http://127.0.0.1:8765/`. Select stations
+and satellites, move through the UTC samples, inspect link budgets, and compare route
+models. Computation stays local; the display replays model samples from archived
+elements and is not live telemetry.
+
+Export the same experiment without running a server:
 
 ```bash
-source .venv/bin/activate
+uv run --no-dev openleo constellation \
+  examples/constellations/iridium_global_reference.json \
+  --output runs/global
 ```
 
-Windows PowerShell:
+Open `runs/global/explorer.html` directly in a browser. The bundle also includes
+`experiment.json`, `links.csv`, `routes.csv`, and `manifest.json`.
 
-```powershell
-.venv\Scripts\Activate.ps1
-```
+The example uses 80 archived public CelesTrak GP records and four declared station
+locations. Its terminal, network, and RF settings are research assumptions, not
+descriptions of Iridium hardware or service.
 
-Then install the package and development tools:
+## Reproducible fidelity study
+
+Run the committed comparison across two declared frequencies and three sampling
+steps:
 
 ```bash
-python -m pip install -e ".[plot]"
-python -m pip install build pytest pytest-cov ruff
+uv run --no-dev openleo fidelity-study \
+  examples/studies/reference_fidelity.json \
+  --output runs/fidelity
 ```
 
-## Run The Frozen Example
+Open `runs/fidelity/index.html`. The study keeps each scenario's station, frequency,
+and RF settings intact while comparing `free_space`, `reference`, and `refined`
+propagation variants at 30, 60, and 120 second sampling. The two cases use explicit
+12 GHz and 20 GHz frequencies with the same declared gains and EIRP; this is not a
+fixed-aperture comparison or a claim about Ka-band or operator performance.
 
-```bash
-uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
-uv run openleo plot runs/iss --output runs/iss/pass-overview.svg
+The bundle contains:
+
+| File | Contents |
+| --- | --- |
+| `fidelity-study.json` | Study inputs, run provenance, metrics, comparisons, and limitations |
+| `station-metrics.csv` | Per-station visibility, RF usability, rates, and integrated-bit deltas |
+| `route-metrics.csv` | Per-routing-model connectivity, bottleneck rates, and integrated-bit deltas |
+| `index.html` | Self-contained visual comparison |
+| `manifest.json` | SHA-256 fingerprints for the top-level artifacts |
+
+Every child run remains a normal workbench bundle under `cases/`. The finest
+declared time step and doubled atmospheric layer grid are numerical references, not
+truth, convergence proofs, observations, or uncertainty estimates. See
+[Fidelity studies](docs/FIDELITY_STUDIES.md) for the input contract, duration
+semantics, metrics, and validation rules.
+
+## Python API
+
+Run and write a constellation experiment:
+
+```python
+from openleo import (
+    add_network,
+    load_constellation,
+    simulate_constellation,
+    write_workbench,
+)
+
+scenario = load_constellation(
+    "examples/constellations/iridium_global_reference.json"
+)
+document = add_network(simulate_constellation(scenario))
+write_workbench(document, "runs/global-python")
 ```
 
-The commands exit with status 0 and write:
+Run a fidelity study and verify the resulting bundle:
 
-- `runs/iss/trace.csv`
-- `runs/iss/summary.json`
-- `runs/iss/pass-overview.svg`
+```python
+from openleo.fidelity_io import load_fidelity_result
+from openleo.fidelity_study import load_fidelity_study, run_fidelity_study
 
-They also print stable labels suitable for CI:
-
-```text
-scenario: iss-cartagena-s-band-free-space
-rows: 40
-sampled AOS: 2026-08-30T06:15:30Z
-sampled LOS: 2026-08-30T06:22:00Z
-trace: runs/iss/trace.csv
-summary: runs/iss/summary.json
-plot: runs/iss/pass-overview.svg
+study = load_fidelity_study("examples/studies/reference_fidelity.json")
+run_fidelity_study(study, "runs/fidelity-python")
+summary = load_fidelity_result("runs/fidelity-python")
 ```
 
-`runs/` is ignored by Git so regenerated examples do not pollute commits.
+Public paths accept strings or `pathlib.Path` values. Invalid schemas, non-finite
+inputs, unsupported physical domains, source-hash mismatches, and inconsistent output
+bundles raise errors rather than being silently ignored.
 
-The ISS pass geometry is sourced from the frozen CelesTrak GP record described in
-[THIRD_PARTY_DATA.md](THIRD_PARTY_DATA.md). All RF values in the example scenario
-are synthetic OpenLEO assumptions, not measurements of ISS hardware, Cartagena
-station hardware, commercial service, or achieved throughput.
+## Models and methods
 
-![ISS Cartagena pass overview: sky track, Doppler, C/N₀, and capacity upper bound](docs/images/iss-cartagena-pass-overview.svg)
+- [Methods](docs/METHODS.md): frames, time, sampling, link-budget equations, adaptation,
+  routing, and worked calculations.
+- [Scientific workbench](docs/WORKBENCH.md): configuration, exported schemas, UI, and
+  security boundaries.
+- [Reference propagation](docs/REFERENCE_PROPAGATION.md): P.835-7, P.453-14, and
+  P.676-13 profile integration, refraction, and delay.
+- [Deterministic sensitivity](docs/SENSITIVITY.md): one-at-a-time method and exact
+  frozen benchmark.
+- [P.676-13 specific attenuation](docs/GASES.md): homogeneous-state equations,
+  official cases, and source attribution.
+- [Validation](docs/VALIDATION.md): regression evidence, independent checks, and
+  validation still required.
 
-The figure reads the frozen `trace.csv` and `summary.json` artifacts; it does not
-recompute the pass. Its orbital geometry is frozen and its RF inputs are synthetic.
-It is free-space only, and its Shannon-Hartley curve is an upper bound, not throughput.
-Regenerate the committed figure after the command above with:
+Numeric public fields carry units in their names. UTC timestamps are timezone-aware.
+Raw input bytes, source records, generated artifacts, software versions, and
+limitations are fingerprinted or recorded where the workflow supports them.
 
-```bash
-uv run openleo plot runs/iss --output docs/images/iss-cartagena-pass-overview.svg
-```
+## Important limitations
 
-Repository attributes force LF endings for frozen CSV and JSON inputs so their
-raw-byte fingerprints remain identical on Linux, macOS, and Windows.
+OpenLEO does not model local weather, rain, cloud, fog, scintillation, antenna
+radiation patterns, beam scheduling, interference, packet traffic, queues,
+retransmissions, transport protocols, or real operator behavior.
 
-## Run The Deterministic Sensitivity Benchmark
+The reference atmosphere is an idealized global profile. Receiver noise temperature
+stays fixed; atmospheric emission and frequency-dependent group delay are absent.
+Snapshot routes contain no traffic demand or contention.
 
-```bash
-uv run openleo sensitivity \
-  examples/scenarios/iss_cartagena.json \
-  examples/sensitivity/iss_cartagena_oat.json \
-  --output runs/iss-sensitivity
-uv run openleo plot-sensitivity runs/iss-sensitivity \
-  --output runs/iss-sensitivity/sensitivity-overview.svg
-```
-
-The commands write:
-
-- `runs/iss-sensitivity/sensitivity.csv`, with one row for each of 20 declared cases;
-- `runs/iss-sensitivity/sensitivity-summary.json`, with the complete portable baseline,
-  fitted-record epoch/age and leap-table context, warnings, sweeps, fingerprints,
-  versions, formatting rules, and limitations; and
-- `runs/iss-sensitivity/sensitivity-overview.svg`, rendered from those completed
-  artifacts without rerunning the cases.
-
-The computation command does not require Matplotlib. The committed figure is regenerated
-with:
-
-```bash
-uv run openleo plot-sensitivity runs/iss-sensitivity \
-  --output docs/images/iss-cartagena-sensitivity-overview.svg
-```
-
-![Deterministic sensitivity overview for the frozen ISS Cartagena example](docs/images/iss-cartagena-sensitivity-overview.svg)
-
-The [deterministic sensitivity method and frozen benchmark](docs/SENSITIVITY.md)
-document the exact configuration, fields, results, references, and allowed claims. The
-study changes one input at a time across assumed values. It is not an uncertainty
-interval; the figure's 1 s sampling case is a numerical reference, not truth; and the
-heterogeneous RF spans are not a parameter-importance ranking.
-
-The baseline context is retrospective: it is copied from the completed unchanged
-baseline run against one frozen fitted GP record. It is not a pre-pass prediction
-artifact or an orbit-accuracy guarantee.
-
-## Run The P.676-13 Specific-Attenuation Benchmark
-
-```bash
-uv run openleo gases examples/atmosphere/p676_13_validation.json \
-  --output runs/p676-validation
-uv run openleo plot-gases runs/p676-validation \
-  --output runs/p676-validation/p676-13-specific-attenuation.svg
-```
-
-The commands write:
-
-- `gaseous-specific-attenuation.csv`, containing dry-air, water-vapour, and total
-  specific attenuation in dB/km at five official validation frequencies;
-- `gaseous-specific-attenuation-summary.json`, containing declared and derived
-  conditions, configuration, source, and CSV-artifact fingerprints, versions,
-  formatting, and limitations; and
-- an optional static SVG rendered only from those completed artifacts.
-
-The calculation uses standard-library math and does not require Matplotlib. Its five
-dry-air, water-vapour, and total values reproduce the official ITU validation workbook
-within the declared tolerances. The workbook itself is not redistributed.
-
-![P.676-13 specific gaseous attenuation at the five official validation frequencies](docs/images/p676-13-specific-attenuation.svg)
-
-Read [ITU-R P.676-13 Specific Gaseous Attenuation](docs/GASES.md) for the equations,
-units, literal validation values, authoritative workbook URL and hash, implementation
-attribution, commands, and claim boundary. The figure connects validation points only
-as a visual guide. This standalone benchmark does not calculate slant-path loss or
-weather and does not modify the existing free-space pass outputs. The constellation
-workbench uses a separate [reference-profile path calculation](docs/REFERENCE_PROPAGATION.md).
-
-## Outputs
-
-`trace.csv` contains one row per visible sample at or above the configured elevation
-mask. Public numeric fields include units in their names:
-
-- `timestamp_utc`: sample time in ISO 8601 UTC
-- `azimuth_deg`, `elevation_deg`: topocentric look angles
-- `range_m`, `range_rate_mps`: slant range and radial range rate
-- `delay_s`: one-way vacuum propagation delay
-- `doppler_hz`: nominal first-order downlink Doppler shift
-- `free_space_path_loss_db`: free-space path loss
-- `received_carrier_power_dbw`: received carrier power
-- `noise_density_dbw_per_hz`: thermal noise density
-- `carrier_to_noise_density_db_hz`: `C/N0`
-- `signal_to_noise_ratio_db`: SNR over the configured bandwidth
-- `shannon_capacity_upper_bound_bps`: Shannon-Hartley theoretical upper bound
-
-The public sign convention is `range_rate_mps < 0` while approaching and
-`range_rate_mps > 0` while separating. Downlink Doppler uses the opposite sign:
-approach produces positive `doppler_hz`, and departure produces negative `doppler_hz`.
-
-`summary.json` records schema version, scenario name, every parsed station,
-time-window, and RF input, the authoritative scenario-byte SHA-256, orbit and
-leap-second-table provenance, element epoch and signed endpoint ages, package versions,
-warnings, limitations, row count, sampling interval, sampled AOS/LOS, sampled duration,
-extrema, and `integrated_capacity_upper_bound_bits`. The frozen scenario JSON bytes are
-authoritative and fingerprinted before parsing; JSON output repeats parsed values with
-12 significant digits for finite floats, so it does not preserve their original textual
-precision. AOS/LOS are sample-grid estimates; true elevation-mask crossings are not
-interpolated.
-
-The inclusive time grid is limited to 100,000 samples. Sampling intervals must be
-positive and exactly representable by Python's microsecond-resolution `timedelta`
-within `1e-12` seconds; sub-microsecond intervals or values requiring more rounding
-are rejected.
-
-## Reference Result
-
-These values are from the verified frozen example command above.
-
-| Field | Value |
-| --- | ---: |
-| `row_count` | 40 |
-| `sampled_aos_utc` | `2026-08-30T06:15:30Z` |
-| `sampled_los_utc` | `2026-08-30T06:22:00Z` |
-| `sampled_duration_s` | 390 |
-| `maximum_elevation_deg` | 61.5799734359 |
-| `minimum_range_m` | 473676.7193 |
-| `maximum_capacity_upper_bound_bps` | 6336955.32414 |
-| `integrated_capacity_upper_bound_bits` | 1867325705.98 |
-
-## Study The Model
-
-Start with [OpenLEO Fundamentals](docs/FUNDAMENTALS.md). It is a self-contained
-six-lesson mini-course covering only the concepts used by v0.1, with worked reference
-examples, focused test commands, checkpoints, exercises, and answer keys.
-
-The [Project Charter](docs/PROJECT_CHARTER.md) is the advanced reference for the
-research question, future scope, scientific integrity rules, paper plan, and complete
-standards list. You do not need to read it before the Fundamentals course.
-
-[Validation](docs/VALIDATION.md) separates engine regression, hand-derived checks,
-finite-difference checks, and the calibrated observation still required for physical
+Shannon-Hartley capacity is a theoretical upper bound. DVB-S2 values are ideal AWGN
+reference rates. Neither is measured throughput or achieved goodput. Archived fitted
+orbital elements are not exact trajectories, and checksum agreement is not physical
 validation.
 
-Read [Deterministic Sensitivity](docs/SENSITIVITY.md) for the v0.2a1 OAT method,
-canonical 20-case configuration, frozen results, GUM terminology boundary, and
-prohibited claims.
+## Citation, license, and data terms
 
-Read [ITU-R P.676-13 Specific Gaseous Attenuation](docs/GASES.md) for the v0.2b1
-line-by-line specific-attenuation method, official cases, provenance, and non-goals.
+If OpenLEO supports your work, cite the software using [`CITATION.cff`](CITATION.cff).
+No DOI is claimed. OpenLEO source code is MIT licensed; see [`LICENSE`](LICENSE).
 
-Read [Reference-Atmosphere Propagation](docs/REFERENCE_PROPAGATION.md) for the v0.4
-profile, slant-path model, height conventions and controlled propagation study.
+Archived input provenance and terms are documented in
+[`THIRD_PARTY_DATA.md`](THIRD_PARTY_DATA.md). Adapted implementation notices are in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
-Then read the source in this order:
-
-1. [src/openleo/model.py](src/openleo/model.py) for validated scenario objects.
-2. [src/openleo/input.py](src/openleo/input.py) for scenario JSON loading and validation.
-3. [src/openleo/orbit.py](src/openleo/orbit.py) for frozen GP CSV loading and
-   Skyfield/SGP4 propagation.
-4. [src/openleo/physics.py](src/openleo/physics.py) for delay, Doppler, link-budget,
-   and capacity equations.
-5. [src/openleo/simulation.py](src/openleo/simulation.py) for pass assembly and
-   integration.
-6. [src/openleo/output.py](src/openleo/output.py) for deterministic CSV/JSON output.
-7. [src/openleo/sensitivity.py](src/openleo/sensitivity.py) for deterministic study
-   validation, immutable case execution, and sensitivity CSV/JSON output.
-8. [src/openleo/gases.py](src/openleo/gases.py) for P.676-13 physics, strict benchmark
-   loading, and gaseous specific-attenuation CSV/JSON output.
-9. [src/openleo/plotting.py](src/openleo/plotting.py) for static pass plots from
-   completed run artifacts.
-10. [src/openleo/sensitivity_plotting.py](src/openleo/sensitivity_plotting.py) for strict
-   sensitivity-artifact reading and static sensitivity plots.
-11. [src/openleo/gases_plotting.py](src/openleo/gases_plotting.py) for strict
-    gases-artifact reading and the static logarithmic validation figure.
-12. [src/openleo/constellation.py](src/openleo/constellation.py) and
-    [src/openleo/network.py](src/openleo/network.py) for multi-satellite experiments
-    and snapshot routes.
-13. [src/openleo/reference_atmosphere.py](src/openleo/reference_atmosphere.py) and
-    [src/openleo/atmospheric_path.py](src/openleo/atmospheric_path.py) for reference
-    states, refracted paths and optical-path excess.
-14. [src/openleo/propagation_study.py](src/openleo/propagation_study.py) for controlled
-    ablation and layer refinement.
-15. [src/openleo/cli.py](src/openleo/cli.py) for the public commands.
-
-## Verification Commands
-
-```bash
-uv sync --locked --group dev --extra plot
-uv lock --check
-uv run ruff check src tests
-uv run ruff format --check src tests
-uv run pytest --cov=openleo --cov-report=term-missing --cov-report=xml --cov-fail-under=80
-uv run python -m build
-uv run python - <<'PY'
-from pathlib import Path, PurePosixPath
-import tarfile
-
-archives = list(Path("dist").glob("*.tar.gz"))
-assert len(archives) == 1, f"expected one sdist, found {len(archives)}"
-forbidden = {"coverage.xml", "dist", "runs"}
-with tarfile.open(archives[0], "r:gz") as archive:
-    invalid = [
-        member.name
-        for member in archive.getmembers()
-        if (path := PurePosixPath(member.name)).is_absolute()
-        or (
-            len(path.parts) > 1
-            and path.parts[1].startswith(".")
-            and path.parts[1] != ".gitignore"
-        )
-        or forbidden.intersection(path.parts)
-    ]
-assert not invalid, f"invalid sdist members: {invalid}"
-print(f"sdist members clean: {archives[0]}")
-PY
-uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
-uv run openleo plot runs/iss --output docs/images/iss-cartagena-pass-overview.svg
-uv run openleo sensitivity examples/scenarios/iss_cartagena.json \
-  examples/sensitivity/iss_cartagena_oat.json --output runs/iss-sensitivity
-uv run openleo plot-sensitivity runs/iss-sensitivity \
-  --output docs/images/iss-cartagena-sensitivity-overview.svg
-uv run openleo gases examples/atmosphere/p676_13_validation.json \
-  --output runs/p676-validation
-uv run openleo plot-gases runs/p676-validation \
-  --output docs/images/p676-13-specific-attenuation.svg
-uvx cffconvert==2.0.0 --validate
-git diff --exit-code -- docs/images/iss-cartagena-pass-overview.svg \
-  docs/images/iss-cartagena-sensitivity-overview.svg \
-  docs/images/p676-13-specific-attenuation.svg
-git diff --check
-```
-
-## Limitations
-
-The single-pass `run` command remains free-space only; its `trace.csv` is unchanged.
-The constellation workbench optionally adds reference-profile gaseous loss and
-non-dispersive refracted-path delay. Its 6,371 km mean-sphere ray approximates the
-WGS84 local geometry; explicit AMSL heights are separate from ellipsoidal station
-heights. Receiver noise temperature stays fixed: atmospheric emission, refractive
-Doppler and refraction-corrected contact boundaries are not modeled.
-
-There is no local weather, rain, cloud, fog, scintillation, antenna radiation pattern,
-beam steering, interference, polarization model, packet traffic, automatic live data
-download, hardware control or calibrated-observation validation. The five-mode DVB-S2
-reference table and reciprocal snapshot routing omit acquisition, pointing, contention,
-queues and real operator behavior.
-
-Shannon-Hartley capacity is reported only as a theoretical upper bound. It is not
-throughput, achieved goodput, commercial service performance, or validation of any
-real RF link.
-
-The OAT benchmark uses deterministic assumed ranges, not probability distributions.
-It propagates no input uncertainty or covariance and reports no confidence, credible,
-coverage, or standard-uncertainty interval. Its results apply only to the frozen public
-orbit record, selected time window and station, synthetic RF assumptions, and
-free-space model.
-
-## Roadmap
-
-- v0.1: deterministic free-space pass trace, static pass overview, CLI, example, tests,
-  and CI.
-- v0.2a1: deterministic OAT sensitivity reporting for sampling, elevation-mask, and
-  synthetic RF assumptions.
-- v0.2b1: officially validated P.676-13 Annex 1 specific gaseous attenuation at
-  declared homogeneous conditions.
-- v0.3: local/offline workbench, archived constellation geometry, configurable stations,
-  reference adaptive links, snapshot routing and fixed-versus-dynamic comparison.
-- v0.4: officially checked reference-atmosphere slant paths, propagation ablation and
-  grid-refinement reporting, with a compact scientific workbench.
-- Before v1.0: broader ablations, justified uncertainty, observational comparison,
-  validated packet-simulator integration and explicit acquisition/handover assumptions.
-- v1.0: the bounded research workflow meets the [release criteria](docs/V1_0.md), with
-  a reproducible paper artifact and archived software/data release. A version number
-  alone does not establish scientific completeness.
-
-## Contributing, Citation, And Data Terms
-
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-- [CITATION.cff](CITATION.cff)
-- [THIRD_PARTY_DATA.md](THIRD_PARTY_DATA.md)
-- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
-- [LICENSE](LICENSE)
+Contributions are welcome; start with [`CONTRIBUTING.md`](CONTRIBUTING.md).
