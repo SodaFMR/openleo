@@ -1,6 +1,6 @@
 # ITU-R P.676-13 Specific Gaseous Attenuation
 
-OpenLEO v0.2b1 implements the line-by-line method in Recommendation
+OpenLEO implements the line-by-line method in Recommendation
 [ITU-R P.676-13](https://www.itu.int/rec/R-REC-P.676-13-202208-I/en), Annex 1,
 for one homogeneous thermodynamic state. The result is **specific attenuation in
 dB/km**. It is not a path-integrated loss, an Earth-space slant-path model, or a
@@ -155,7 +155,7 @@ The current result answers one narrower question: under a declared homogeneous s
 what specific attenuation does the P.676-13 Annex 1 line-by-line method predict at the
 selected frequencies?
 
-Since v0.4, the separate constellation workflow can integrate these specific losses
-through an idealized P.835-7 reference atmosphere, including refraction and excess
-delay. See [Reference propagation](REFERENCE_PROPAGATION.md). That optional model
-does not change the purpose or values of this homogeneous-state benchmark.
+The separate constellation workflow can integrate these specific losses through an
+idealized P.835-7 reference atmosphere, including refraction and excess delay. See
+[Reference propagation](REFERENCE_PROPAGATION.md). That optional model does not change
+the purpose or values of this homogeneous-state benchmark.

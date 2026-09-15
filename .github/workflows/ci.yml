@@ -55,6 +55,10 @@ jobs:
 
       - run: uv run python -c "from openleo.workbench import load_experiment; d = load_experiment('runs/global-reference'); assert d['schema_version'] == '2' and len(d['satellites']) == 80 and any(d['links'])"
 
+      - run: uv run openleo fidelity-study examples/studies/reference_fidelity.json --output runs/fidelity
+
+      - run: uv run python -c "from openleo.fidelity_io import load_fidelity_result; d = load_fidelity_result('runs/fidelity'); assert len(d['runs']) == 18 and len(d['station_metrics']) == 72 and len(d['route_metrics']) == 54"
+
       - name: Prepare a short reference-atmosphere study
         shell: bash
         run: |
@@ -106,6 +110,9 @@ jobs:
 
       - if: matrix.full-checks
         run: uv run --group browser --extra plot python tests/browser_workbench.py --scenario examples/constellations/iridium_global_reference.json
+
+      - if: matrix.full-checks
+        run: uv run --group browser --extra plot python tests/browser_fidelity.py runs/fidelity
 
       - if: matrix.full-checks
         run: uv run python -m build
@@ -206,6 +213,9 @@ jobs:
           "$core_env/bin/openleo" propagation-study \
             runs/reference-study-scenario.json \
             --output "$core_env/reference-study"
+          "$core_env/bin/openleo" fidelity-study \
+            examples/studies/reference_fidelity.json \
+            --output "$core_env/fidelity"
 
       - run: uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
 

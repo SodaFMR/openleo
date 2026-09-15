@@ -22,6 +22,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "  openleo app CONSTELLATION.json\n"
             "  openleo constellation CONSTELLATION.json --output DIRECTORY\n"
             "  openleo propagation-study CONSTELLATION.json --output DIRECTORY\n"
+            "  openleo fidelity-study STUDY.json --output DIRECTORY\n"
             "  openleo run SCENARIO.json --output DIRECTORY\n"
             "  openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY\n"
             "  openleo gases CONFIG.json --output DIRECTORY\n"
@@ -53,6 +54,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     propagation_parser.add_argument(
         "--figure", metavar="FILE.svg|FILE.png", help="optional figure; requires the plot extra"
     )
+
+    fidelity_parser = subparsers.add_parser(
+        "fidelity-study", help="compare declared constellation scenarios and sampling grids"
+    )
+    fidelity_parser.add_argument("study", metavar="STUDY.json")
+    fidelity_parser.add_argument("--output", required=True, metavar="DIRECTORY")
 
     run_parser = subparsers.add_parser("run", help="run a scenario and write its artifacts")
     run_parser.add_argument("scenario", metavar="SCENARIO.json", help="scenario input JSON")
@@ -106,6 +113,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    if args.command == "fidelity-study":
+        try:
+            from pathlib import Path
+
+            from openleo.fidelity_study import load_fidelity_study, run_fidelity_study
+
+            summary = run_fidelity_study(load_fidelity_study(args.study), args.output)
+            print(f"study: {summary['name']}")
+            print(f"runs: {len(summary['runs'])}")
+            print(f"report: {Path(args.output) / 'index.html'}")
+            return 0
+        except (ValueError, OSError, UnicodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     if args.command == "propagation-study":
         try:
             from openleo.constellation import load_constellation

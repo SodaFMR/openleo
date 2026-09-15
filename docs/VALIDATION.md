@@ -30,7 +30,7 @@ independent orbit propagator or a calibrated measurement.
 
 Tests use literal values calculated independently of production helpers for vacuum
 delay, first-order Doppler, free-space path loss, receiver noise, and Shannon capacity.
-The charter receiver check uses 10 dBW EIRP, 161 dB path loss, 23.010299956639813 dBi
+The reference receiver check uses 10 dBW EIRP, 161 dB path loss, 23.010299956639813 dBi
 receiver gain, 200 K system noise temperature, and zero miscellaneous loss to obtain
 $C/N_0=77.59916717321767\,\mathrm{dB\,Hz}$.
 
@@ -50,7 +50,7 @@ range-rate calculation.
 
 ## Deterministic Sensitivity Verification
 
-The v0.2a1 benchmark reruns the complete pass while changing one declared input at a
+The deterministic benchmark reruns the complete pass while changing one declared input at a
 time. Tests prove that every nominal sweep row exactly reproduces the single unchanged
 baseline and that every non-nominal case replaces only its named field. Independent
 link-budget invariants require a 1 dB EIRP increase to add 1 dB to `C/N0`, a 1 dB loss
@@ -83,7 +83,8 @@ an importance ranking. The full method and terminology boundary are documented i
 
 ## P.676-13 Official Workbook Verification
 
-The v0.2b1 implementation evaluates the ITU-R P.676-13 Annex 1 line-by-line method with
+The specific-attenuation implementation evaluates the ITU-R P.676-13 Annex 1
+line-by-line method with
 dry-air pressure 1013.25 hPa, temperature 288.15 K, and water-vapour density 7.5 g/m³.
 The derived water-vapour partial pressure is 9.97288878634056 hPa using
 $e=\rho T/216.7$.
@@ -111,7 +112,7 @@ links are in [P.676-13 Specific Gaseous Attenuation](GASES.md).
 
 ## Reference Profile and Slant-Path Verification
 
-The v0.4 constellation model implements the P.835-7 Annex 1 global reference profile
+The constellation model implements the P.835-7 Annex 1 global reference profile
 and P.453-14 refractivity. Profile tests compare 14 literal midpoint states spanning
 approximately 0–100 km with the official workbook: temperature, total pressure,
 water-vapour density, vapour pressure and refractive index. The workbook labels the
@@ -172,6 +173,3 @@ Probabilistic uncertainty propagation additionally needs justified input probabi
 models, standard uncertainties, and correlations. The current synthetic RF assumptions
 do not provide that evidence, so passing the deterministic sensitivity benchmark does
 not establish a GUM combined standard uncertainty.
-
-The complete release gates, including observational evidence and reproducible network
-experiments, are tracked in [v1.0 criteria](V1_0.md).

@@ -1,6 +1,6 @@
 # Deterministic Sensitivity Benchmark
 
-OpenLEO v0.2a1 adds a deterministic one-at-a-time (OAT) study to the frozen
+OpenLEO includes a deterministic one-at-a-time (OAT) study for the frozen
 ISS–Cartagena free-space example. Its question is deliberately limited:
 
 > How do pass-level model outputs change when one declared input assumption is
@@ -20,9 +20,9 @@ The benchmark keeps three evidence classes separate:
 | Model-derived outputs | Sampled geometry, link-budget quantities, Shannon-Hartley upper bounds, OAT changes, CSV/JSON artifacts, and both figures | These outputs are not measured RF performance, achieved throughput, confidence intervals, or calibrated validation |
 
 The orbit record and its data terms are documented in
-[THIRD_PARTY_DATA.md](../THIRD_PARTY_DATA.md). The physical model and claim rules are
-defined in the [Project Charter](PROJECT_CHARTER.md), and the distinction between
-software verification and physical validation is maintained in
+[THIRD_PARTY_DATA.md](../THIRD_PARTY_DATA.md). The physical model is summarized in
+[Methods](METHODS.md), its claim rules are defined in [Scope](SCOPE.md), and the
+distinction between software verification and physical validation is maintained in
 [Validation](VALIDATION.md).
 
 ## Method and terminology
