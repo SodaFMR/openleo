@@ -1,91 +1,100 @@
 # Scope and scientific claim boundary
 
-OpenLEO produces inspectable, reproducible model outputs for time-varying
-satellite-to-ground link and snapshot-routing studies. It connects archived public
-orbital elements to explicit geometry, RF, propagation, adaptation, and network
-assumptions without presenting those assumptions as descriptions of an operational
-system.
+OpenLEO produces inspectable model outputs for time-varying satellite-to-ground
+links, snapshot routes, and bounded synthetic packet experiments. Archived
+public orbital elements and explicit geometry, RF, atmosphere, and network
+assumptions support repeatable comparisons; they do not describe an
+operational system.
 
 ## Supported research uses
 
 OpenLEO can:
 
-- generate a deterministic free-space trace for one visible pass;
-- compare declared inputs with a deterministic one-at-a-time study;
+- generate a deterministic free-space trace for a visible pass;
+- compare declared inputs in one-at-a-time sensitivity studies;
 - calculate homogeneous P.676-13 gaseous specific attenuation;
-- calculate standalone P.838-3 rain specific attenuation and P.840-9 cloud
-  slant attenuation from explicitly supplied inputs;
+- calculate standalone P.838-3 rain and P.840-9 cloud cases;
 - simulate bounded constellations and station sets from archived GP records;
-- apply ideal AWGN reference MODCOD thresholds and report RF outages;
-- compare minimum-delay, maximum-bottleneck, and fixed-ground-capacity snapshot routes;
-- integrate an idealized P.835-7/P.453-14/P.676-13 reference atmosphere;
-- compare free-space, reference-grid, and refined-grid propagation variants;
-- compare multiple declared scenarios and sampling steps in a fidelity study;
-- replay one ground link with synthetic full-duplex UDP traffic and finite queues
-  through an optional, separately built ns-3.48 backend; and
-- export portable CSV, JSON, manifest, and self-contained HTML artifacts.
+- integrate an idealized P.835-7/P.453-14/P.676-13 atmosphere;
+- optionally subtract declared uniform rain and cloud loss before adaptation;
+- select ideal AWGN reference MODCODs and report RF outages;
+- compare minimum-delay, maximum-rate, and fixed-capacity snapshot routes;
+- compare gas grids and sampling steps as numerical sensitivity studies;
+- run aligned propagation experiments with optional native packet replay;
+- replay one ground link or selected multi-hop routes with actual ns-3.48 UDP,
+  finite shared device queues, and declared endpoint acquisition timing;
+- check a published Vallado TEME numerical orbit reference;
+- run a frozen benchmark and require native evidence for complete reproduction; and
+- export portable JSON, CSV, manifests, inputs, and offline HTML reports.
 
-These capabilities support controlled numerical experiments. They do not by themselves
-establish that one model is accurate enough for an operational decision.
+These are controlled numerical experiments. Their outputs alone do not
+establish operational prediction accuracy.
 
-The [hydrometeor workflow](HYDROMETEORS.md) returns rain specific attenuation in dB/km,
-not rain path loss; cloud slant loss in dB requires a declared vertically
-integrated liquid-water column. Neither calculation infers weather from humidity
-or automatically changes constellation `C/N0`, rates, routes, or packet results.
+## Atmosphere and packet boundaries
 
-The [packet workflow](PACKET_REPLAY.md) uses actual ns-3 devices and scheduling
-for one full-duplex link, with the same rate and delay trace in both directions.
-Its finite-queue synthetic UDP experiment reports simulated payload goodput and
-one-way delay. It is separate from snapshot routing and is not an independently
-modeled physical uplink, multi-hop packet network, or traffic observation.
+The [standalone hydrometeor workflow](HYDROMETEORS.md) reports rain specific
+attenuation in dB/km and cloud loss in dB from supplied water. Optional
+[coupling](COUPLED_PROPAGATION.md) converts P.838-3 attenuation to rain loss
+through a declared uniform spherical layer, adds P.840-9 cloud loss, and
+subtracts both from the reference-gas budget before rates and routes are
+computed. States remain fixed during a run. This geometry is an OpenLEO
+sensitivity model; it is not P.618 effective-path reduction, exceedance
+statistics, inferred weather, or a climatological availability calculation.
+
+[Single-link replay](PACKET_REPLAY.md) uses one reciprocal full-duplex trace.
+[Network replay](NETWORK_REPLAY.md) uses only the union of edges selected by a
+routing model during the measurement window. It has native IPv4 forwarding,
+shared per-device FIFO queues, and simultaneous synthetic UDP flows in both
+directions. Acquisition gates selected ground interfaces at initial contact,
+endpoint-satellite changes, and recovery after route loss. Route updates can
+change subsequent forwarding of in-flight packets.
+
+These service rates and queue events are simulated conditions, not hardware,
+physical packet-loss calibration, independent uplink modeling, observed
+traffic, or commercial goodput. Goodput counts payload received inside the
+measurement window; late and censored packets remain separately identified.
 
 ## Evidence classes
 
-Keep these categories separate when interpreting a result:
-
-| Evidence class | OpenLEO examples | What it establishes |
+| Evidence class | Examples | What it establishes |
 | --- | --- | --- |
-| Archived public input | CelesTrak GP records, official ITU workbook values | The exact external record used, with source and fingerprint |
-| Declared assumption | Station coordinates, terminal gains, EIRP, sampling, network edges, rain rate, cloud liquid water, UDP load and queue size | The conditions selected for the experiment |
-| Model-derived output | Geometry, loss, rate, route, integrated bits, refinement difference, simulated packet goodput and delay | The result of the declared implementation and inputs |
-| Independent observation | Not included in the committed examples | A possible basis for physical validation when calibration and context are sufficient |
+| Archived public input | CelesTrak GP records, official ITU values, Vallado states | The external record used, with source and fingerprint |
+| Declared assumption | Stations, RF/noise, uniform rain/cloud, topology, UDP load, queues, acquisition | Conditions chosen for the experiment |
+| Model-derived output | Geometry, attenuation, reference rate, route, simulated goodput and delay | Results of those inputs and the implementation |
+| Numerical verification | Published TEME states, scalar workbook comparisons, analytic queue checks | Agreement within a named numerical domain |
+| Independent observation | Not provided as calibrated RF evidence | Potential physical validation with adequate metadata and calibration |
 
-A real archived orbit record does not make synthetic RF or network assumptions
-observations. A checksum proves byte identity, not scientific correctness.
+An archived orbit does not turn RF or weather assumptions into observations.
+A checksum establishes byte identity. Shared SGP4/Vallado lineage limits the
+independence of a published numerical orbit comparison.
 
 ## Scientific integrity rules
 
-- Record source, retrieval time, applicable terms, checksum, units, and assumptions
-  for external scientific data.
-- Name time scales and coordinate frames; public timestamps are timezone-aware UTC.
-- Put units in public field names or schema documentation.
-- Distinguish geometric from apparent elevation and WGS84 ellipsoid height from AMSL.
-- Treat fitted orbital elements as model inputs, not exact trajectories.
-- Treat the global reference atmosphere as an idealized profile, not local weather.
-- Label Shannon-Hartley capacity as a theoretical upper bound.
-- Label DVB-S2 values as ideal AWGN reference rates, not achieved throughput.
-- Treat deterministic ranges and refinement differences as numerical comparisons, not
-  probability distributions, uncertainty intervals, or measurement errors.
-- Fail explicitly on invalid inputs, stale-source warnings, propagation failures, and
-  inconsistent artifacts.
+- Record source, retrieval time, terms, checksum, units, and external-data assumptions.
+- Name frames and time scales; public timestamps are timezone-aware UTC.
+- Identify units in public field names or schema documentation.
+- Distinguish geometric from apparent elevation and ellipsoid from AMSL height.
+- Treat fitted elements and the idealized atmosphere as model inputs.
+- Label Shannon capacity as an upper bound and DVB-S2 rates as ideal AWGN references.
+- Distinguish reference rates from receive-event simulated payload goodput.
+- Preserve unchanged, zero-effect, and missing-evidence cases.
+- Treat deterministic and refinement differences as comparisons, not uncertainty intervals.
+- Reject invalid domains and inconsistent artifacts; retain source-age warnings in provenance.
+- Identify the original configuration and each derived configuration by their own hashes.
 
 ## Outside the current model
 
-OpenLEO does not currently provide:
+OpenLEO does not provide orbit determination, covariance propagation, maneuver
+inference, observed local weather, weather maps, P.618 rain statistics,
+scintillation, atmospheric emission, frequency-dependent group delay,
+calibrated antenna patterns, beam scheduling, interference, terminal hardware,
+waveform/decoder simulation, a satellite MAC/PHY, TCP, retransmissions, or
+measured service goodput. It does not replace live catalogs during a scientific
+run or reconstruct an operator's constellation behavior.
 
-- orbit determination, covariance propagation, maneuver inference, or operational
-  prediction;
-- local-weather inference, hydrometeor maps, rain path loss, exceedance probability,
-  scintillation, or atmospheric emission;
-- antenna patterns, beam steering, polarization mismatch, interference, or terminal
-  scheduling;
-- waveform, coding, BER, FER, acquisition, or modem simulation;
-- constellation-wide traffic demand or packet routing, congestion control,
-  retransmissions, TCP, or measured service goodput;
-- live catalog replacement during a scientific run;
-- calibrated received-power validation; or
-- reconstruction or prediction of real operator or commercial-service performance.
-
-New models need their own provenance, supported domain, verification, limitations, and
-claim boundary. The current [validation evidence](VALIDATION.md) documents what has and
-has not been checked.
+The frozen 12/20 GHz benchmark keeps gains and EIRP identical; it does not
+establish fixed-aperture performance or compare frequency-specific hardware.
+Numerical refinement cannot quantify unknown physical model discrepancy.
+New models need their own provenance, domains, verification, and limitations.
+See [Validation](VALIDATION.md), [Experiments](EXPERIMENTS.md), and
+[Reproducibility](REPRODUCIBILITY.md).

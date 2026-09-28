@@ -61,6 +61,12 @@ jobs:
 
       - run: uv run openleo hydrometeors examples/atmosphere/hydrometeors_reference.json --output runs/hydrometeors
 
+      - run: uv run openleo constellation examples/constellations/iridium_global_hydrometeors.json --output runs/coupled
+
+      - run: uv run openleo experiment examples/constellations/iridium_global_hydrometeors.json --duration-s 120 --output runs/experiment
+
+      - run: uv run openleo verify-orbit examples/validation/vallado_06251.json
+
       - name: Prepare a short reference-atmosphere study
         shell: bash
         run: |
@@ -114,7 +120,13 @@ jobs:
         run: uv run --group browser --extra plot python tests/browser_workbench.py --scenario examples/constellations/iridium_global_reference.json
 
       - if: matrix.full-checks
+        run: uv run --group browser --extra plot python tests/browser_workbench.py --scenario examples/constellations/iridium_global_hydrometeors.json
+
+      - if: matrix.full-checks
         run: uv run --group browser --extra plot python tests/browser_fidelity.py runs/fidelity
+
+      - if: matrix.full-checks
+        run: uv run --group browser --extra plot python tests/browser_experiment.py
 
       - if: matrix.full-checks
         run: uv run python -m build
@@ -225,6 +237,10 @@ jobs:
           "$core_env/bin/openleo" hydrometeors \
             examples/atmosphere/hydrometeors_reference.json \
             --output "$core_env/hydrometeors"
+          "$core_env/bin/openleo" experiment \
+            examples/constellations/iridium_global_hydrometeors.json \
+            --duration-s 120 --output "$core_env/experiment"
+          "$core_env/bin/openleo" verify-orbit examples/validation/vallado_06251.json
 
       - run: uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
 
@@ -275,16 +291,23 @@ jobs:
           git clone --depth 1 --branch ns-3.48 https://gitlab.com/nsnam/ns-3-dev.git "$RUNNER_TEMP/ns-3.48"
           test "$(git -C "$RUNNER_TEMP/ns-3.48" rev-parse HEAD)" = d2add90b452d600cfb4859baed8e9ea633519447
           cp adapters/ns3/openleo-replay.cc "$RUNNER_TEMP/ns-3.48/scratch/openleo-replay.cc"
+          cp adapters/ns3/openleo-network-replay.cc "$RUNNER_TEMP/ns-3.48/scratch/openleo-network-replay.cc"
+          cp adapters/ns3/replay-common.h "$RUNNER_TEMP/ns-3.48/scratch/replay-common.h"
           cd "$RUNNER_TEMP/ns-3.48"
           ./ns3 configure --build-profile=release --enable-modules='core;network;internet;point-to-point;applications' --enable-build-version --enable-examples --enable-tests --disable-python-bindings --disable-precompiled-headers --disable-gtk --disable-gsl --disable-werror
           ./ns3 build openleo-replay -j 2
+          ./ns3 build openleo-network-replay -j 2
           build/scratch/ns3.48-openleo-replay --PrintVersion
+          build/scratch/ns3.48-openleo-network-replay --PrintVersion
       - name: Verify real packet event semantics
         run: uv run python tests/ns3_replay_checks.py "$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-replay"
+      - name: Verify native multi-hop event semantics
+        run: uv run python tests/ns3_network_checks.py "$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-network-replay"
       - name: Verify Python-to-simulator integration
-        run: OPENLEO_NS3_REPLAY="$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-replay" uv run pytest tests/test_packet_replay.py tests/test_packet_cli.py
+        run: OPENLEO_NS3_REPLAY="$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-replay" OPENLEO_NS3_NETWORK="$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-network-replay" uv run pytest tests/test_packet_replay.py tests/test_packet_cli.py tests/test_network_replay.py tests/test_experiment.py tests/test_benchmark.py tests/test_release_evidence.py
       - name: Replay an archived-orbit model trace
         run: |
           uv run openleo constellation examples/constellations/iridium_global_reference.json --output runs/packet-source
           uv run openleo packet-replay runs/packet-source --station Madrid --norad 42960 --duration-s 300 --backend "$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-replay" --output runs/packets
           uv run python -c "import json; from pathlib import Path; d=json.loads(Path('runs/packets/packet-summary.json').read_text()); assert len(d['directions']) == 2; assert sum(r['offered_packets'] for r in d['directions']) > 0"
+          uv run openleo network-replay runs/packet-source --duration-s 300 --flows-per-direction 2 --acquisition-delay-s 0.1 --backend "$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-network-replay" --output runs/network-packets

@@ -2,8 +2,11 @@
 
 ## Optional ns-3 adapter
 
-The original integration program `adapters/ns3/openleo-replay.cc` is licensed
-GPL-2.0-only under [its license](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/LICENSE). It links to the separately
+Both original integration programs, `adapters/ns3/openleo-replay.cc` and
+`adapters/ns3/openleo-network-replay.cc`, and their shared `replay-common.h`
+header are GPL-2.0-only under
+[their license](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/LICENSE).
+The programs link to the separately
 built ns-3.48 simulator, whose upstream license notices must also be preserved
 when distributing compiled software. OpenLEO does not bundle ns-3 source or
 libraries. The Python core remains MIT licensed and communicates with the

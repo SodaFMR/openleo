@@ -1,8 +1,27 @@
 # OpenLEO Validation Boundaries
 
 OpenLEO separates software regression checks from physical validation. Passing the
-checks below shows that the frozen inputs produce internally consistent results; it
-does not show agreement with an independently measured RF link.
+checks below shows numerical agreement or artifact consistency in the named
+domains; it does not show agreement with an independently measured RF link.
+
+## Published TEME numerical reference
+
+`openleo verify-orbit examples/validation/vallado_06251.json` prints JSON for
+five published Vallado case 06251 TEME states. Position and velocity vector
+residuals must pass `1e-6 km` and `1e-9 km/s` respectively at every epoch.
+The check exercises TLE-to-OMM conversion, the checksum-verifying catalog
+loader, Skyfield propagation, and TEME state extraction. Expected vectors are
+fixed literals from the published ephemeris, independent of production output.
+
+The result records the fixture and converted OMM hashes, source fingerprints,
+frame, units, epoch convention, residuals, tolerances, and package versions.
+Elapsed times are referenced to the loaded SGP4 epoch; conversion precision and
+its reported epoch shift do not establish absolute UTC accuracy. The case is
+one near-Earth moderate-drag orbit and shares SGP4/Vallado theory and lineage.
+It is numerical verification, not independent observation, deep-space or frame
+transformation validation, or end-to-end RF evidence. Details and primary
+attribution are in [Orbit verification](ORBIT_VERIFICATION.md) and
+[Third-party data](../THIRD_PARTY_DATA.md).
 
 ## Engine Regression
 
@@ -125,8 +144,8 @@ Additional checks cover zero hydrometeors, polarization limits, cloud-water
 linearity, supported domains, non-finite inputs and outputs, immutable results,
 strict batch configuration, escaped report labels, and artifact fingerprints.
 The public fixture contains only inputs; expected results remain separate test
-oracles. This verifies the declared scalar calculations, not weather inference,
-rain path loss, availability, or automatic constellation coupling. Exact cells,
+oracles. These scalar checks do not by themselves verify a rain-layer path or
+constellation coupling, and do not infer weather or availability. Exact cells,
 equations, sources, and the batch command are in [Rain and cloud attenuation](HYDROMETEORS.md).
 
 ## Reference Profile and Slant-Path Verification
@@ -180,7 +199,23 @@ schema `2`. Exact model definitions, source fingerprints and domain restrictions
 in [Reference propagation](REFERENCE_PROPAGATION.md). These checks establish reference
 implementation agreement, not local meteorological accuracy or measured RF performance.
 
-## Optional ns-3 Packet Replay Verification
+## Coupled declared hydrometeor verification
+
+`tests/test_hydrometeor_path.py` checks analytic zenith, zero-thickness and
+slant spherical-shell paths, zero rain, supported domains, finite arithmetic,
+and conversion from dB/km to dB. Constellation integration checks cover exact
+gas-only equivalence for zero declared rain/cloud, cloud-water linearity,
+attenuation sums, CN0 subtraction before adaptation, unchanged geometric
+visibility/Doppler and gaseous delay, and route use of corrected rates.
+
+Schema-3 artifact checks verify configuration pairing, the shell path, cloud and
+rain fields, total atmospheric loss, budget relations, and fingerprints.
+These establish implementation and artifact consistency for declared uniform
+layers. They do not establish local weather, P.618 effective paths/exceedance
+statistics, atmospheric emission, or physical RF accuracy. See
+[Coupled propagation](COUPLED_PROPAGATION.md).
+
+## Optional ns-3 single-link replay verification
 
 The executable checks in `tests/ns3_replay_checks.py` run against the separately
 compiled ns-3.48 backend. They cover deterministic underload and overload, finite
@@ -211,6 +246,67 @@ including finite queues and measurement-window accounting. They do not validate
 physical packet loss, a satellite MAC/PHY, multi-hop routing, TCP, real traffic,
 or operator performance. See [Packet replay](PACKET_REPLAY.md) for the precise
 service model and simulated-goodput definition.
+
+## Optional ns-3 multi-hop verification
+
+`tests/ns3_network_checks.py` runs the actual compiled network executable.
+Its literal two-hop case uses a 970-byte UDP payload, 30 wire-header bytes,
+1 Mbit/s links, and 2 ms delay per edge to require 20 ms end-to-end delay.
+Native checks cover reciprocal flows, contention in shared finite queues,
+route changes while packets travel, atomic boundaries, source suppression
+during acquisition, missing routes, queue flushing, TX/RX outage intervals,
+after-window delivery, stop/drain behavior, maximum path length, TTL-bounded
+route-change loops, determinism, and invalid input/budget rejection.
+
+Python checks validate selected-route edge unions, rate/delay quantization,
+endpoint acquisition and recovery, complete offer identity, causal hop chains,
+actual service timing and shared FIFO/overflow consistency, packet conservation,
+window censoring, source/backend hashes, and atomic publication. Equal-time
+callback ordering is checked only to the bounds observable in CSV timestamps;
+it does not justify impossible losses or idle service. See
+[Network replay](NETWORK_REPLAY.md).
+
+```bash
+uv run --no-dev python tests/ns3_network_checks.py \
+  ../ns-3.48/build/scratch/ns3.48-openleo-network-replay
+OPENLEO_NS3_NETWORK=../ns-3.48/build/scratch/ns3.48-openleo-network-replay \
+  uv run pytest tests/test_network_replay.py tests/test_experiment.py \
+    tests/test_benchmark.py tests/test_release_evidence.py
+```
+
+Without `OPENLEO_NS3_NETWORK`, optional native integration checks are skipped.
+Passing a core-only suite does not verify the native simulator. Network packet
+metrics use validated actual UDP receive events; they remain simulated outputs
+from declared service rates, geometry, queues, and traffic.
+
+## Integrated studies and release evidence
+
+`tests/test_experiment.py` checks aligned recomputation of the same bounded
+window in every propagation case, case-specific hashes, portable full-window
+inputs, metrics, native evidence selection, and failure-safe publication.
+The selected interval must fit the original scenario, span at least one
+sampling step, and remain within 3600 s even for model-only studies.
+
+HTTP/UI checks cover catalog pinning, Host/Origin and session-token checks,
+trusted startup backend selection, invalid/duplicate/non-finite input rejection,
+60 matching local requests per second, the 64 MB study-artifact ceiling,
+portable ZIP contents, and preservation of prior results after failure.
+Run `node --test tests/test_workbench_ui.mjs` and the real-browser
+`tests/browser_experiment.py` check for study-interface changes.
+
+`tests/test_benchmark.py` checks the frozen matrix, scalar units, aligned
+effects, zero baselines, missing packet evidence, fingerprints, and an explicit
+uncertainty inventory. `tests/test_release_evidence.py` checks that reproduction
+requires both a passing published orbit reference and actual native packets,
+with no unresolved packets or source send errors. The committed configuration
+expects 16 experiments and 144 native replays; those counts are configuration
+expectations until a complete execution supplies its own evidence.
+
+Sampling and gas-grid effects measure numerical sensitivity. Unknown orbital,
+station, RF/weather, and MAC/PHY discrepancies remain unknown rather than being
+converted to confidence intervals. The 12/20 GHz cases use identical declared
+gains and EIRP. See [Benchmark](BENCHMARK.md),
+[Experiments](EXPERIMENTS.md), and [Reproducibility](REPRODUCIBILITY.md).
 
 ## Validation Still Required
 
