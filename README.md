@@ -22,6 +22,8 @@ network.
 | Generate a single visible-pass trace | `openleo run SCENARIO.json --output DIRECTORY` |
 | Run a deterministic one-at-a-time study | `openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY` |
 | Check homogeneous P.676-13 attenuation | `openleo gases CONFIG.json --output DIRECTORY` |
+| Calculate declared rain and cloud attenuation | `openleo hydrometeors CONFIG.json --output DIRECTORY` |
+| Replay one link with synthetic UDP traffic | [`openleo packet-replay`](docs/PACKET_REPLAY.md), with a separately built ns-3 backend |
 
 The [scope and claim boundary](docs/SCOPE.md) explains what each workflow can and
 cannot establish.
@@ -36,6 +38,10 @@ git clone https://github.com/SodaFMR/openleo.git
 cd openleo
 uv sync --locked --no-dev
 ```
+
+The Python core runs on Linux, macOS, and Windows. Optional packet replay requires
+a separate ns-3.48 build on Linux or macOS; on Windows, run both the backend and
+its Python caller inside WSL2. See the [backend setup](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/README.md).
 
 Commands below use `uv run --no-dev` so development dependencies are not installed.
 Static figures additionally require the optional plotting dependency:
@@ -108,6 +114,34 @@ truth, convergence proofs, observations, or uncertainty estimates. See
 [Fidelity studies](docs/FIDELITY_STUDIES.md) for the input contract, duration
 semantics, metrics, and validation rules.
 
+## Rain, cloud, and packet experiments
+
+Run the standalone ITU reference cases:
+
+```bash
+uv run --no-dev openleo hydrometeors \
+  examples/atmosphere/hydrometeors_reference.json --output runs/hydrometeors
+```
+
+Open `runs/hydrometeors/index.html`. P.838-3 gives rain specific attenuation in
+dB/km; P.840-9 gives cloud slant attenuation in dB from a declared liquid-water
+column. These calculations do not infer weather or change constellation link
+budgets. See [Rain and cloud attenuation](docs/HYDROMETEORS.md).
+
+After [building the optional backend](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/README.md), replay one link
+from the workbench bundle generated above:
+
+```bash
+uv run --no-dev openleo packet-replay runs/global \
+  --station Madrid --norad 42960 --duration-s 300 \
+  --backend ../ns-3.48/build/scratch/ns3.48-openleo-replay --output runs/packets
+```
+
+This uses real ns-3.48 for a single full-duplex link with synthetic UDP traffic
+and finite queues. Packet records, simulated payload goodput, and one-way delay
+are saved with source and backend fingerprints. [Packet replay](docs/PACKET_REPLAY.md)
+defines outage handling, measurement windows, and the limits of this experiment.
+
 ## Python API
 
 Run and write a constellation experiment:
@@ -154,22 +188,30 @@ bundles raise errors rather than being silently ignored.
   frozen benchmark.
 - [P.676-13 specific attenuation](docs/GASES.md): homogeneous-state equations,
   official cases, and source attribution.
+- [Rain and cloud attenuation](docs/HYDROMETEORS.md): standalone P.838-3 and
+  P.840-9 calculations, declared inputs, and official workbook checks.
+- [Packet replay](docs/PACKET_REPLAY.md): optional ns-3.48 single-link UDP
+  experiment, queue semantics, and simulated goodput.
 - [Validation](docs/VALIDATION.md): regression evidence, independent checks, and
   validation still required.
 
-Numeric public fields carry units in their names. UTC timestamps are timezone-aware.
+Physical units are identified in public field names or schema documentation.
+UTC timestamps are timezone-aware.
 Raw input bytes, source records, generated artifacts, software versions, and
 limitations are fingerprinted or recorded where the workflow supports them.
 
 ## Important limitations
 
-OpenLEO does not model local weather, rain, cloud, fog, scintillation, antenna
-radiation patterns, beam scheduling, interference, packet traffic, queues,
-retransmissions, transport protocols, or real operator behavior.
+OpenLEO does not infer local weather or model scintillation, antenna radiation
+patterns, beam scheduling, interference, or real operator behavior. Rain and cloud
+calculations require declared inputs and remain separate from constellation
+propagation; rain path loss and availability are not calculated.
 
 The reference atmosphere is an idealized global profile. Receiver noise temperature
 stays fixed; atmospheric emission and frequency-dependent group delay are absent.
-Snapshot routes contain no traffic demand or contention.
+Snapshot routes contain no traffic demand or contention. Optional packet replay
+is limited to one link; it does not simulate multi-hop packet routing, TCP, or
+retransmissions.
 
 Shannon-Hartley capacity is a theoretical upper bound. DVB-S2 values are ideal AWGN
 reference rates. Neither is measured throughput or achieved goodput. Archived fitted
@@ -179,7 +221,11 @@ validation.
 ## Citation, license, and data terms
 
 If OpenLEO supports your work, cite the software using [`CITATION.cff`](CITATION.cff).
-No DOI is claimed. OpenLEO source code is MIT licensed; see [`LICENSE`](LICENSE).
+No DOI is claimed. The Python core is MIT licensed; see [`LICENSE`](LICENSE).
+The separately built ns-3 adapter is GPL-2.0-only; see its
+[`LICENSE`](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/LICENSE).
+The adapter is available in the Git repository, not bundled in the MIT core
+wheel or source distribution.
 
 Archived input provenance and terms are documented in
 [`THIRD_PARTY_DATA.md`](THIRD_PARTY_DATA.md). Adapted implementation notices are in

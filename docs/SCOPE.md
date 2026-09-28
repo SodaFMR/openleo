@@ -13,16 +13,31 @@ OpenLEO can:
 - generate a deterministic free-space trace for one visible pass;
 - compare declared inputs with a deterministic one-at-a-time study;
 - calculate homogeneous P.676-13 gaseous specific attenuation;
+- calculate standalone P.838-3 rain specific attenuation and P.840-9 cloud
+  slant attenuation from explicitly supplied inputs;
 - simulate bounded constellations and station sets from archived GP records;
 - apply ideal AWGN reference MODCOD thresholds and report RF outages;
 - compare minimum-delay, maximum-bottleneck, and fixed-ground-capacity snapshot routes;
 - integrate an idealized P.835-7/P.453-14/P.676-13 reference atmosphere;
 - compare free-space, reference-grid, and refined-grid propagation variants;
-- compare multiple declared scenarios and sampling steps in a fidelity study; and
+- compare multiple declared scenarios and sampling steps in a fidelity study;
+- replay one ground link with synthetic full-duplex UDP traffic and finite queues
+  through an optional, separately built ns-3.48 backend; and
 - export portable CSV, JSON, manifest, and self-contained HTML artifacts.
 
 These capabilities support controlled numerical experiments. They do not by themselves
 establish that one model is accurate enough for an operational decision.
+
+The [hydrometeor workflow](HYDROMETEORS.md) returns rain specific attenuation in dB/km,
+not rain path loss; cloud slant loss in dB requires a declared vertically
+integrated liquid-water column. Neither calculation infers weather from humidity
+or automatically changes constellation `C/N0`, rates, routes, or packet results.
+
+The [packet workflow](PACKET_REPLAY.md) uses actual ns-3 devices and scheduling
+for one full-duplex link, with the same rate and delay trace in both directions.
+Its finite-queue synthetic UDP experiment reports simulated payload goodput and
+one-way delay. It is separate from snapshot routing and is not an independently
+modeled physical uplink, multi-hop packet network, or traffic observation.
 
 ## Evidence classes
 
@@ -31,8 +46,8 @@ Keep these categories separate when interpreting a result:
 | Evidence class | OpenLEO examples | What it establishes |
 | --- | --- | --- |
 | Archived public input | CelesTrak GP records, official ITU workbook values | The exact external record used, with source and fingerprint |
-| Declared assumption | Station coordinates, terminal gains, EIRP, sampling, network edges | The conditions selected for the experiment |
-| Model-derived output | Geometry, loss, rate, route, integrated bits, refinement difference | The result of the declared implementation and inputs |
+| Declared assumption | Station coordinates, terminal gains, EIRP, sampling, network edges, rain rate, cloud liquid water, UDP load and queue size | The conditions selected for the experiment |
+| Model-derived output | Geometry, loss, rate, route, integrated bits, refinement difference, simulated packet goodput and delay | The result of the declared implementation and inputs |
 | Independent observation | Not included in the committed examples | A possible basis for physical validation when calibration and context are sufficient |
 
 A real archived orbit record does not make synthetic RF or network assumptions
@@ -60,10 +75,13 @@ OpenLEO does not currently provide:
 
 - orbit determination, covariance propagation, maneuver inference, or operational
   prediction;
-- local weather, rain, cloud, fog, scintillation, or atmospheric emission;
-- antenna patterns, beam steering, polarization, interference, or terminal scheduling;
+- local-weather inference, hydrometeor maps, rain path loss, exceedance probability,
+  scintillation, or atmospheric emission;
+- antenna patterns, beam steering, polarization mismatch, interference, or terminal
+  scheduling;
 - waveform, coding, BER, FER, acquisition, or modem simulation;
-- traffic demand, packet queues, congestion, retransmissions, TCP/UDP, or goodput;
+- constellation-wide traffic demand or packet routing, congestion control,
+  retransmissions, TCP, or measured service goodput;
 - live catalog replacement during a scientific run;
 - calibrated received-power validation; or
 - reconstruction or prediction of real operator or commercial-service performance.

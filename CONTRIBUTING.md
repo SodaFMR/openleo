@@ -109,6 +109,18 @@ uv run --group browser python tests/browser_workbench.py \
   --executable /usr/bin/chromium
 ```
 
+Changes to packet replay also require the actual simulator, not just parser tests.
+Build the [optional ns-3 backend](adapters/ns3/README.md), then run:
+
+```bash
+uv run python tests/ns3_replay_checks.py ../ns-3.48/build/scratch/ns3.48-openleo-replay
+OPENLEO_NS3_REPLAY=../ns-3.48/build/scratch/ns3.48-openleo-replay \
+  uv run pytest tests/test_packet_replay.py tests/test_packet_cli.py
+```
+
+Use Linux, macOS, or WSL2 for these optional backend checks. The core remains
+independent of ns-3; its distributions exclude the separately GPL-licensed adapter.
+
 Regenerate only artifacts affected by the change. Inspect the generated summary,
 manifest, units, assumptions, limitations, and source fingerprints. Leave `runs/`
 untracked unless a task explicitly adds a reviewed fixture.

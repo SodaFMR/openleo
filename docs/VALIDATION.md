@@ -110,6 +110,25 @@ loss, atmospheric profile, local weather, rain, cloud, scintillation, availabili
 received power, or operator performance. Exact equations, values, commands, and source
 links are in [P.676-13 Specific Gaseous Attenuation](GASES.md).
 
+## P.838-3 and P.840-9 Official Workbook Verification
+
+Standalone hydrometeor tests compare three rain cases and three cloud cases with
+literal oracles from official workbook Rev8.3.0, using the same workbook hash
+above. Rain checks cover `k`, `alpha`, and specific attenuation in dB/km; cloud
+checks cover mass absorption and instantaneous slant attenuation in dB. The cloud
+calculation includes the P.840-9 equation (12) correction at 273.75 K. Each oracle
+comparison uses relative tolerance `1e-12`, with small component-specific absolute
+tolerances. Rain coefficients are also checked against rounded P.838-3 Table 5
+values.
+
+Additional checks cover zero hydrometeors, polarization limits, cloud-water
+linearity, supported domains, non-finite inputs and outputs, immutable results,
+strict batch configuration, escaped report labels, and artifact fingerprints.
+The public fixture contains only inputs; expected results remain separate test
+oracles. This verifies the declared scalar calculations, not weather inference,
+rain path loss, availability, or automatic constellation coupling. Exact cells,
+equations, sources, and the batch command are in [Rain and cloud attenuation](HYDROMETEORS.md).
+
 ## Reference Profile and Slant-Path Verification
 
 The constellation model implements the P.835-7 Annex 1 global reference profile
@@ -160,6 +179,38 @@ loss subtraction and delay addition, and distinguish schema `1` from the extende
 schema `2`. Exact model definitions, source fingerprints and domain restrictions are
 in [Reference propagation](REFERENCE_PROPAGATION.md). These checks establish reference
 implementation agreement, not local meteorological accuracy or measured RF performance.
+
+## Optional ns-3 Packet Replay Verification
+
+The executable checks in `tests/ns3_replay_checks.py` run against the separately
+compiled ns-3.48 backend. They cover deterministic underload and overload, finite
+queue capacity, outage suppression and queue flushing, TX/RX outage intersections,
+recovery, changes during transmission, simultaneous events, draining, and invalid
+inputs. A literal constant-link case requires a 970-byte UDP payload, 30 bytes of
+wire headers, 1 Mbit/s serialization, and 2 ms propagation to produce a 10 ms
+one-way delay. Both full-duplex directions are checked.
+
+Python checks cover source selection, time and rate quantization, input bounds,
+packet accounting, causal record validation, and refusal to overwrite existing
+results. The real-backend bundle test additionally checks source and executable
+fingerprints, after-window deliveries, and end-of-window queue censoring; it is
+enabled by setting `OPENLEO_NS3_REPLAY` to the compiled executable. Without that
+setting, the integration test is skipped, so a core-only test run does not verify
+the simulator.
+
+Follow the [backend build and check instructions](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/README.md), then
+run the analytical checks from the repository root:
+
+```bash
+uv run --no-dev python tests/ns3_replay_checks.py \
+  ../ns-3.48/build/scratch/ns3.48-openleo-replay
+```
+
+These checks establish the documented single-link synthetic UDP experiment,
+including finite queues and measurement-window accounting. They do not validate
+physical packet loss, a satellite MAC/PHY, multi-hop routing, TCP, real traffic,
+or operator performance. See [Packet replay](PACKET_REPLAY.md) for the precise
+service model and simulated-goodput definition.
 
 ## Validation Still Required
 
