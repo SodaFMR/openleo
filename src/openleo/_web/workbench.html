@@ -16,6 +16,7 @@
     <h1 id="experiment-name">Constellation experiment</h1>
     <nav aria-label="Workbench actions">
       <button id="scenario-open" class="quiet" type="button">Scenario</button>
+      <button id="comparison-open" class="quiet" type="button">Compare models</button>
       <button id="provenance-open" class="quiet" type="button">Sources &amp; assumptions</button>
       <button id="download-report" class="primary" type="button">Export report</button>
     </nav>
@@ -61,7 +62,7 @@
           <div><dt>C/N₀</dt><dd id="link-cn0">—</dd></div><div><dt>Eₛ/N₀</dt><dd id="link-esn0">—</dd></div>
           <div><dt>Azimuth</dt><dd id="link-azimuth">—</dd></div><div><dt>Remaining contact</dt><dd id="link-contact">—</dd></div>
         </dl>
-        <div class="propagation-summary"><h3>Propagation <span id="propagation-model">Free space</span></h3><dl id="propagation-values" hidden><div><dt>Gaseous attenuation</dt><dd id="link-gas-loss">—</dd></div><div><dt>Apparent elevation</dt><dd id="link-apparent-elevation">—</dd></div><div><dt>Atmospheric excess delay</dt><dd id="link-excess-delay">—</dd></div></dl></div>
+        <div class="propagation-summary"><h3>Propagation <span id="propagation-model">Free space</span></h3><dl id="propagation-values" hidden><div><dt>Gaseous attenuation</dt><dd id="link-gas-loss">—</dd></div><div><dt>Apparent elevation</dt><dd id="link-apparent-elevation">—</dd></div><div><dt>Atmospheric excess delay</dt><dd id="link-excess-delay">—</dd></div></dl><dl id="hydrometeor-values" hidden><div><dt>Cloud attenuation</dt><dd id="link-cloud-loss">—</dd></div><div><dt>Rain specific attenuation</dt><dd id="link-rain-specific">—</dd></div><div><dt>Rain path length</dt><dd id="link-rain-path">—</dd></div><div><dt>Rain attenuation</dt><dd id="link-rain-loss">—</dd></div><div><dt>Hydrometeor attenuation</dt><dd id="link-hydrometeor-loss">—</dd></div><div><dt>Total atmospheric attenuation</dt><dd id="link-total-loss">—</dd></div></dl></div>
         <div class="station-summary"><h3>Station summary <span>Full window</span></h3><dl><div><dt>Visible sample fraction</dt><dd id="station-visible">—</dd></div><div><dt>RF-usable sample fraction</dt><dd id="station-usable">—</dd></div><div><dt>Best-link integrated bits</dt><dd id="station-bits">—</dd></div><div><dt>Fixed baseline integrated bits</dt><dd id="station-fixed-bits">—</dd></div><div><dt>Handovers</dt><dd id="station-handovers">—</dd></div></dl></div>
         <details class="panel-note"><summary>Link interpretation</summary><p>Visibility is geometric. RF usability follows declared link assumptions and ideal DVB-S2 thresholds; it is not measured service availability.</p></details>
       </aside>
@@ -90,19 +91,50 @@
     <form id="scenario-form">
       <fieldset id="quick-fields"><legend>Station &amp; radio controls</legend><div class="editor-grid">
         <label>Station<select id="editor-station"></select></label><label>Position preset<select id="station-preset"><option value="">Custom coordinates</option><option value="madrid">Madrid</option><option value="tromso">Tromso</option><option value="singapore">Singapore</option><option value="quito">Quito</option></select></label>
+        <label>Station name<input id="edit-station-name" type="text" maxlength="160" required></label><div class="station-actions"><button id="add-station" type="button">Add station</button><button id="remove-station" type="button">Remove station</button></div>
         <label>Latitude / °<input id="edit-latitude" type="number" min="-90" max="90" step="any" required></label><label>Longitude / °<input id="edit-longitude" type="number" min="-180" max="180" step="any" required></label><label>Height / m<input id="edit-height" type="number" step="any" required></label><label>Elevation mask / °<input id="edit-mask" type="number" min="0" max="89.999" step="any" required></label>
         <label>Carrier / GHz<input id="edit-frequency" type="number" min="0.000001" step="any" required></label><label>Bandwidth / MHz<input id="edit-bandwidth" type="number" min="0.000001" step="any" required></label><label>EIRP / dBW<input id="edit-eirp" type="number" step="any" required></label><label>Receiver gain / dBi<input id="edit-gain" type="number" step="any" required></label><label>Symbol rate / Mbaud<input id="edit-symbols" type="number" min="0.000001" step="any" required></label><label>Implementation margin / dB<input id="edit-margin" type="number" min="0" step="any" required></label>
-      </div></fieldset>
+      </div>
+      <fieldset><legend>Declared atmospheric assumptions</legend><div class="editor-grid atmosphere-grid">
+        <label>Gas propagation<select id="edit-gas"><option value="none">Free space</option><option value="itu_reference">ITU reference atmosphere</option></select></label>
+        <label>Layer refinement<select id="edit-refinement"><option value="1">1</option><option value="2">2</option><option value="4">4</option></select></label>
+        <label>Selected station AMSL / m<input id="edit-amsl" type="number" min="0" max="10000" step="any"></label>
+        <label class="check-label"><input id="edit-hydrometeors" type="checkbox"> Declared cloud &amp; rain layers</label>
+        <label>Liquid water / kg·m⁻²<input id="edit-cloud" type="number" min="0" step="any"></label>
+        <label>Rain rate / mm·h⁻¹<input id="edit-rain" type="number" min="0" step="any"></label>
+        <label>Rain top AMSL / m<input id="edit-rain-top" type="number" min="0" max="20000" step="any"></label>
+        <label>Polarization tilt / °<input id="edit-tilt" type="number" min="0" max="180" step="any"></label>
+      </div><p class="muted">New atmospheric entries declare 0 m AMSL, zero liquid water and zero rain; rain top starts at station AMSL. Edit these assumptions explicitly. Ellipsoidal heights and city presets do not supply AMSL or local weather. Cloud/rain: 1–200 GHz, mask ≥ 5°. Uniform rain layers use a geometric path approximation; receiver noise stays fixed.</p></fieldset>
+      </fieldset>
       <label class="json-label" for="scenario-json">Complete scenario <span>JSON · UTC timestamps · SI units</span></label><textarea id="scenario-json" rows="10" spellcheck="false" aria-describedby="scenario-help"></textarea>
       <p id="scenario-help" class="muted">Presets move the selected station and preserve its name. All coordinates and RF values are scenario choices. The catalog path and provenance remain pinned by the local server.</p>
       <p id="editor-error" class="error-message" role="alert" hidden></p><div class="dialog-actions"><button id="reset-scenario" class="quiet" type="button">Reset to current run</button><button id="run-scenario" class="primary" type="submit">Recompute experiment</button></div>
     </form>
+  </dialog>
+  <dialog id="comparison-dialog" aria-labelledby="comparison-title">
+    <div class="dialog-heading"><h2 id="comparison-title">Integrated model comparison</h2><button class="icon-button close-dialog" type="button" aria-label="Close model comparison">×</button></div>
+    <p class="muted">Source: last successful scenario <strong id="comparison-scenario"></strong>. Uncomputed editor changes are excluded. The same UTC window applies to every case.</p>
+    <form id="comparison-form"><fieldset id="comparison-fields"><legend>Comparison settings</legend><div class="editor-grid comparison-grid">
+      <label>Packet replay<select id="packet-mode"><option value="none">Model only</option><option value="link" disabled>Selected downlink</option><option value="network" disabled>Scenario network</option></select></label>
+      <label>Start offset / s<input id="study-start" type="number" min="0" step="0.000001" value="0" required></label>
+      <label>Duration / s<input id="study-duration" type="number" min="0.000001" max="3600" step="0.000001" value="60" required></label>
+      <label>Random seed<input id="study-seed" type="number" min="1" max="2147483647" value="1" required></label>
+    </div><div id="packet-fields" class="editor-grid comparison-grid" hidden>
+      <label>Offered load / bit·s⁻¹<input id="study-load" type="number" min="1" max="1000000000" step="any" value="100000" required></label>
+      <label>Packet size / bytes<input id="study-size" type="number" min="64" max="1400" value="512" required></label>
+      <label>Queue / packets<input id="study-queue" type="number" min="1" max="10000" value="32" required></label>
+      <label>Flows per direction<input id="study-flows" type="number" min="1" max="4" value="1" required></label>
+      <label>Acquisition delay / s<input id="study-acquisition" type="number" min="0" max="60" step="0.000001" value="0" required></label>
+    </div></fieldset><p id="comparison-sampling" class="muted"></p><p id="comparison-backend" class="muted">Packet replay requires a trusted backend configured when starting the local server.</p><p id="comparison-selection" class="muted"></p>
+    <p id="comparison-error" class="error-message" role="alert" hidden></p><div class="dialog-actions"><span id="comparison-status" class="muted" role="status" aria-live="polite"></span><button id="run-comparison" type="submit" class="primary">Run comparison</button></div></form>
+    <section id="comparison-results" aria-label="Last successful comparison" hidden><h3 id="comparison-result-name"></h3><p id="comparison-result-source" class="muted"></p><p id="comparison-links"><a id="comparison-report" target="_blank" rel="noopener">Open full report</a> · <a id="comparison-archive" download>Download portable ZIP</a></p><p id="comparison-retention" class="muted">A completed comparison replaces the local report cache; prior URLs expire. Download the ZIP to preserve this run.</p><div id="comparison-case-list"></div><h3>Comparison limitations</h3><ul id="comparison-limitations"></ul></section>
   </dialog>
   <dialog id="provenance-dialog" aria-labelledby="provenance-title"><div class="dialog-heading"><h2 id="provenance-title">Sources &amp; assumptions</h2><button class="icon-button close-dialog" type="button" aria-label="Close sources and assumptions">×</button></div><p class="muted">Included with every JSON and standalone report export.</p><h3>Warnings</h3><ul id="warnings-list"></ul><h3>Research limitations</h3><ul id="limitations-list"></ul><details open><summary>Model definitions</summary><pre id="models-json"></pre></details><details><summary>Catalog &amp; scenario provenance</summary><pre id="provenance-json"></pre></details><details><summary>Satellite element epochs</summary><pre id="epochs-json"></pre></details></dialog>
   <div id="announcement" class="announcement" role="status" aria-live="polite" hidden></div>
   <script type="application/json" id="experiment-data">$experiment_json</script>
   <script type="application/json" id="coastline-data">$coastline_json</script>
   <script type="application/json" id="session-data">$session_json</script>
+  <script type="application/json" id="comparison-data">{}</script>
   <script>$javascript</script>
 </body>
 </html>

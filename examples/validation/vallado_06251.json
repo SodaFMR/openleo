@@ -1,0 +1,30 @@
+{
+  "schema_version": "1",
+  "name": "Vallado 2006 case 06251 DELTA 1 DEB",
+  "frame": "TEME",
+  "units": {"position": "km", "velocity": "km/s", "elapsed_time": "s"},
+  "scenario_epoch_utc": "2006-06-25T19:46:43.980095999Z",
+  "tle": [
+    "1 06251U 62025E   06176.82412014  .00008885  00000-0  12808-3 0  3985",
+    "2 06251  58.0579  54.0425 0030035 139.1568 221.1854 15.56387291  6774"
+  ],
+  "source": {
+    "publication_url": "https://celestrak.org/publications/AIAA/2006-6753/",
+    "terms_url": "https://celestrak.org/publications/AIAA/2006-6753/faq.php",
+    "archive_url": "https://celestrak.org/publications/AIAA/2006-6753/AIAA-2006-6753.zip",
+    "archive_sha256": "3642043b706c76be87cf012db3f22e04da6b80498d00f515e51879e0ffadc115",
+    "tle_member": "sgp4/cpp/testsgp4/SGP4-VER.TLE",
+    "tle_sha256": "d246d1d9d768ace445a38a965713fa9ba52d80fd8a41a0502ff83d7acffe2881",
+    "ephemeris_member": "sgp4/cpp/testsgp4/TestSGP4/06251.e",
+    "ephemeris_sha256": "d806df44648b1009dfd0ba7d8ff5348638c35255df94945299ce7b29cb1718aa",
+    "verified_at_utc": "2026-09-28T14:16:19Z"
+  },
+  "tolerances": {"position_km": 0.000001, "velocity_km_s": 0.000000001},
+  "states": [
+    {"elapsed_s": 0, "position_km": [3988.31022699, 5498.96657235, 0.90055879], "velocity_km_s": [-3.290032738, 2.357652820, 6.496623475]},
+    {"elapsed_s": 7200, "position_km": [-3935.69800083, 409.10980837, 5471.33577327], "velocity_km_s": [-3.374784183, -6.635211043, -1.942056221]},
+    {"elapsed_s": 14400, "position_km": [-1675.12766915, -5683.30432352, -3286.21510937], "velocity_km_s": [5.282496925, 1.508674259, -5.354872978]},
+    {"elapsed_s": 21600, "position_km": [4993.62642836, 2890.54969900, -3600.40145627], "velocity_km_s": [0.347333429, 5.707031557, 5.070699638]},
+    {"elapsed_s": 28800, "position_km": [-1115.07959514, 4015.11691491, 5326.99727718], "velocity_km_s": [-5.524279443, -4.765738774, 2.402255961]}
+  ]
+}

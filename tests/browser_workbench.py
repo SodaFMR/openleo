@@ -25,7 +25,11 @@ def check_propagation(page, document, directory):
         expect(page.locator("#propagation-model")).to_have_text("Free space")
         expect(page.locator("#propagation-values")).not_to_be_visible()
         return
-    expect(page.locator("#propagation-model")).to_have_text("ITU reference atmosphere")
+    expect(page.locator("#propagation-model")).to_have_text(
+        "ITU gas + declared cloud/rain"
+        if document["schema_version"] == "3"
+        else "ITU reference atmosphere"
+    )
     expect(page.locator("#propagation-values")).to_be_visible()
     station = int(page.locator("#station-select").input_value())
     satellite = int(page.locator("#satellite-select").input_value())
@@ -49,7 +53,12 @@ def check_propagation(page, document, directory):
     rate, unit = page.locator("#link-rate").inner_text().split()
     scale = {"bit/s": 1, "kbit/s": 1e3, "Mbit/s": 1e6, "Gbit/s": 1e9}[unit]
     assert isclose(float(rate.replace(",", "")) * scale, link["rate_bps"], abs_tol=0.005001 * scale)
-    assert isclose(link["cn0_db_hz"], link["free_space_cn0_db_hz"] - link["gaseous_attenuation_db"])
+    attenuation = (
+        "total_atmospheric_attenuation_db"
+        if document["schema_version"] == "3"
+        else "gaseous_attenuation_db"
+    )
+    assert isclose(link["cn0_db_hz"], link["free_space_cn0_db_hz"] - link[attenuation])
     assert isclose(link["delay_s"], link["geometric_delay_s"] + link["atmospheric_excess_delay_s"])
     with page.expect_download() as saved:
         page.locator("#download-links").click()
@@ -173,9 +182,11 @@ def check_browser(
                 expect(offline_page.locator("#session-badge")).to_have_text("OFFLINE REPORT")
                 expect(offline_page.locator("#experiment-name")).to_have_text("Browser experiment")
                 expect(offline_page.locator("#propagation-model")).to_have_text(
-                    "ITU reference atmosphere"
-                    if document["schema_version"] == "2"
-                    else "Free space"
+                    {
+                        "1": "Free space",
+                        "2": "ITU reference atmosphere",
+                        "3": "ITU gas + declared cloud/rain",
+                    }[document["schema_version"]]
                 )
                 offline_page.locator("#next-sample").click()
                 expect(offline_page.locator("#sample-position")).to_have_text("2 / 121")

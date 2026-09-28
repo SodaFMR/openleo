@@ -31,14 +31,22 @@ Playback advances through archived-orbit model samples; it is not a real-time
 telemetry feed. The inspector identifies the active propagation model and, when
 enabled, shows gaseous loss, apparent elevation and atmospheric excess delay.
 
-**Scenario** opens the experiment editor. Change station coordinates, RF assumptions,
-sampling, adaptation, or network endpoints and recompute. The JSON editor supports
-adding/removing stations within the documented bounds. Names must be unique, and the
-network source and destination must name two distinct stations. Coordinates and city
-presets are scenario choices; they do not assert that a calibrated station exists there.
-Reference-atmosphere scenarios also require an explicit AMSL height for every station
-in the JSON `propagation` object. Update those assumptions when relocating or renaming
-stations; a city preset does not supply a surveyed height or a geoid conversion.
+**Scenario** opens the experiment editor. Guided controls add, rename and remove
+stations, choose free space or reference gases, and edit the selected station's AMSL
+height and declared cloud/rain layer. Station edits synchronize the atmospheric maps
+and network endpoint names. Network scenarios retain at least two stations with
+distinct endpoints. The complete JSON editor remains available for sampling,
+adaptation and network settings.
+
+Coordinates and city presets are declared choices; they do not establish a calibrated
+station, surveyed AMSL height, geoid conversion or local weather. New atmospheric
+entries explicitly default to 0 m AMSL, zero liquid water and zero rain, with rain top
+at the declared station AMSL. Review these assumptions before computing. Ellipsoidal
+height changes do not change AMSL. Rain top must remain between station AMSL and
+20,000 m; raise it before raising AMSL above the current rain top. Atmospheric
+controls edit only the selected station. Cloud/rain calculations require 1–200 GHz
+and a mask of at least 5°. Uniform rain layers use a geometric path approximation,
+and receiver system noise remains fixed. See [Hydrometeors](HYDROMETEORS.md).
 
 The application keeps the original catalog path and provenance pinned. To use another
 catalog, start the application with another local configuration and its verified hash.
@@ -74,8 +82,47 @@ Free-space configurations omit `propagation` and retain experiment schema `1` an
 the original link-column set. Reference-atmosphere configurations use schema `2`,
 adding dry, wet and total gaseous loss, free-space `C/N0`, geometric delay,
 atmospheric excess delay and apparent elevation. Exported model metadata records the
-Recommendation versions, source hashes and approximation boundaries. Both schemas
-remain readable; the original `iridium_global.json` is still a free-space example.
+Recommendation versions, source hashes and approximation boundaries. Declared
+hydrometeor layers use schema `3`, retaining gas fields and adding cloud loss (dB),
+rain specific attenuation (dB/km), rain path length (m), rain loss (dB), hydrometeor
+loss (dB) and total atmospheric loss (dB). The inspector and browser CSV expose
+these exact computed samples. All three schemas remain readable; the original
+`iridium_global.json` is still a free-space example.
+
+## Integrated comparison
+
+**Compare models** runs the models actually declared in the last successful scenario.
+Uncomputed editor changes are excluded. Free space is always included; reference
+gases and declared hydrometeors are included when configured. Every case uses the
+same comparison UTC window, including any requested packet replay. The default
+duration is the larger of 60 seconds and the declared sampling interval, capped
+by the source span and the 3,600-second comparison limit. Duration must include
+at least one sampling interval, and the complete offset/duration window must fit
+the source scenario. A sampling interval exceeding the comparison limit disables
+comparison with an instruction to reduce the scenario interval and recompute;
+the application never resamples implicitly. Offsets and durations have microsecond
+resolution.
+
+Model-only comparison works without a packet backend. Link replay uses the active
+station and NORAD selection; network replay uses the scenario's endpoint stations.
+Unavailable packet modes are disabled with a setup hint. Backends are trusted
+executables configured when starting the local application; the browser offers no
+executable or filesystem path inputs. Network mode additionally exposes concurrent
+flows per direction and acquisition delay. These settings are reset when changing
+to link or model-only mode.
+
+The dialog reports per-case station rates, integrated bits, visibility, RF outages,
+handovers and route connectivity, including zero results. **Open full report** gives
+plots, tables and links to each case's 3D explorer and packet evidence. **Download
+portable ZIP** preserves the complete study, declared inputs and source catalog.
+A completed comparison replaces the server's report cache; old versioned URLs return
+404. Download the ZIP to retain a study before running another one.
+
+Busy controls prevent duplicate submissions. Errors retain the preceding successful
+comparison and the current globe, charts and experiment exports. A standalone
+workbench export carries the last comparison's numerical summary. Offline reports
+make no API requests and cannot launch new comparisons; full case reports and packet
+CSVs travel in the separate portable ZIP.
 
 `openleo.workbench.load_experiment(directory)` verifies all four artifact hashes before
 returning the experiment. Checksums detect a changed artifact relative to its manifest;
@@ -167,7 +214,8 @@ The coupled model accepts frequencies from 1 to 1,000 GHz, station AMSL heights 
 0 to 10,000 m, a geometric elevation mask of at least 5 degrees, and ray endpoints
 above 100 km. `refinement` is 1, 2 or 4, splitting each reference layer evenly.
 These are calculation bounds, not an assertion of measured accuracy throughout the
-domain. Rain, cloud, scintillation and local weather are absent.
+domain. Reference gases alone exclude rain and cloud; optional declared hydrometeor
+layers add those losses. Scintillation and inferred local weather remain absent.
 
 To isolate this model's effect and check its grid resolution:
 
