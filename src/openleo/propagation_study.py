@@ -71,6 +71,10 @@ def run_propagation_study(scenario) -> dict:
     """Run one baseline and two layer grids with all other inputs fixed."""
     if scenario.propagation is None:
         raise ValueError("a declared reference propagation model is required")
+    if scenario.propagation.hydrometeors is not None:
+        raise ValueError(
+            "propagation studies exclude declared hydrometeors; use an integrated experiment instead"
+        )
     if scenario.propagation.refinement not in (1, 2):
         raise ValueError("study refinement must start at 1 or 2 so a finer grid is available")
     configurations = (

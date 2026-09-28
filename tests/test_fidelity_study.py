@@ -126,6 +126,35 @@ def test_loaded_study_is_frozen_and_sorts_steps_without_mutating_json(tmp_path):
         study.name = "changed"
 
 
+@pytest.mark.parametrize("rain_rate", [0.0, 25.0])
+def test_fidelity_study_rejects_hydrometeors_before_any_output(tmp_path, capsys, rain_rate):
+    path = _study(tmp_path)
+    previously_loaded = load_fidelity_study(path)
+    scenario_path = tmp_path / "scenario.json"
+    raw = json.loads(scenario_path.read_text())
+    raw["propagation"]["hydrometeors"] = {
+        "model": "declared_uniform_layers",
+        "stations": {
+            name: {
+                "liquid_water_kg_m2": 0.0,
+                "rain_rate_mm_h": rain_rate,
+                "rain_top_height_amsl_m": 5000.0,
+                "polarization_tilt_deg": 0.0,
+            }
+            for name in raw["propagation"]["station_heights_amsl_m"]
+        },
+    }
+    scenario_path.write_text(json.dumps(raw))
+    with pytest.raises(ValueError, match="hydrometeors.*integrated experiment"):
+        load_fidelity_study(path)
+    output = tmp_path / "new-parent" / "study"
+    with pytest.raises(ValueError, match="hydrometeors.*integrated experiment"):
+        run_fidelity_study(previously_loaded, output)
+    assert main(["fidelity-study", str(path), "--output", str(output)]) == 2
+    assert "integrated experiment" in capsys.readouterr().err
+    assert not output.parent.exists()
+
+
 def _analytic_document():
     source = Path("examples/scenarios/iss_cartagena.json")
     original = json.loads(source.read_text(encoding="utf-8"))

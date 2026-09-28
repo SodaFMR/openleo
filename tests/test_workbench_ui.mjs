@@ -131,3 +131,93 @@ test('route CSV includes disconnected snapshots rather than inventing paths', ()
   assert.ok(csv.includes('maximum_rate,false,,,\r\n'));
   assert.equal(csv.trim().split('\r\n').length, 10);
 });
+
+const guidedScenario = {stations: [{name: 'A', latitude_deg: 10, longitude_deg: 20, height_m: 50},
+  {name: 'B', latitude_deg: 0, longitude_deg: 0, height_m: 0}],
+  network: {source_station: 'A', target_station: 'B'},
+  propagation: {model: 'itu_reference', refinement: 1, station_heights_amsl_m: {A: 40, B: 0},
+    hydrometeors: {model: 'declared_uniform_layers', stations: {
+      A: {liquid_water_kg_m2: 1, rain_rate_mm_h: 2, rain_top_height_amsl_m: 5000, polarization_tilt_deg: 45},
+      B: {liquid_water_kg_m2: 0, rain_rate_mm_h: 0, rain_top_height_amsl_m: 0, polarization_tilt_deg: 0}}}}};
+
+test('guided rename synchronizes endpoints and both atmospheric maps immutably', () => {
+  const before = JSON.stringify(guidedScenario);
+  const renamed = ui.changeStation(guidedScenario, 0, 'rename', 'Renamed');
+  assert.equal(renamed.stations[0].name, 'Renamed');
+  assert.equal(renamed.network.source_station, 'Renamed');
+  assert.deepEqual(renamed.propagation.station_heights_amsl_m, {Renamed: 40, B: 0});
+  assert.equal(renamed.propagation.hydrometeors.stations.Renamed.rain_rate_mm_h, 2);
+  assert.equal('A' in renamed.propagation.hydrometeors.stations, false);
+  assert.equal(JSON.stringify(guidedScenario), before);
+  assert.throws(() => ui.changeStation(guidedScenario, 0, 'rename', 'B'), /unique/);
+  assert.throws(() => ui.changeStation(guidedScenario, 0, 'rename', ''), /name/);
+});
+
+test('guided add and removal keep every station map and distinct network endpoints valid', () => {
+  const added = ui.changeStation(guidedScenario, 0, 'add');
+  assert.equal(added.stations.length, 3);
+  const name = added.stations[2].name;
+  assert.equal(added.propagation.station_heights_amsl_m[name], 0);
+  assert.deepEqual(added.propagation.hydrometeors.stations[name], {
+    liquid_water_kg_m2: 0, rain_rate_mm_h: 0, rain_top_height_amsl_m: 0, polarization_tilt_deg: 0});
+  const removed = ui.changeStation(added, 0, 'remove');
+  assert.equal(removed.network.source_station, name);
+  assert.equal(removed.network.target_station, 'B');
+  assert.equal('A' in removed.propagation.station_heights_amsl_m, false);
+  assert.throws(() => ui.changeStation(guidedScenario, 0, 'remove'), /two stations/);
+});
+
+test('declared atmosphere defaults cover all stations without inferring ellipsoid heights or weather', () => {
+  const bare = {...guidedScenario}; delete bare.propagation;
+  const gas = ui.changeAtmosphere(bare, 0, 'gas', true);
+  assert.deepEqual(gas.propagation.station_heights_amsl_m, {A: 0, B: 0});
+  const hydro = ui.changeAtmosphere(gas, 0, 'hydrometeors', true);
+  assert.equal(hydro.propagation.hydrometeors.stations.A.rain_rate_mm_h, 0);
+  const edited = ui.changeAtmosphere(hydro, 0, 'liquid_water_kg_m2', 2);
+  assert.equal(edited.propagation.hydrometeors.stations.A.liquid_water_kg_m2, 2);
+  assert.equal(edited.propagation.hydrometeors.stations.B.liquid_water_kg_m2, 0);
+  assert.equal(hydro.propagation.hydrometeors.stations.A.liquid_water_kg_m2, 0);
+  assert.throws(() => ui.changeAtmosphere(hydro, 0, 'rain_top_height_amsl_m', 20001), /rain top/i);
+  assert.throws(() => ui.changeAtmosphere(hydro, 0, 'amsl', 100), /rain top/i);
+  assert.equal(ui.changeAtmosphere(hydro, 0, 'polarization_tilt_deg', 180).propagation.hydrometeors.stations.A.polarization_tilt_deg, 180);
+});
+
+test('schema 3 CSV retains gas fields and adds exact cloud and rain metrics including zero', () => {
+  const fields = {gaseous_attenuation_db: .2, cloud_attenuation_db: 0,
+    rain_specific_attenuation_db_per_km: 2, rain_path_length_m: 3000,
+    rain_attenuation_db: 6, hydrometeor_attenuation_db: 6.1,
+    total_atmospheric_attenuation_db: 6.3};
+  const rows = ui.linksCSV({...experiment, schema_version: '3', links: [[{...sampleLink, ...fields}], [], []]}).split('\r\n');
+  const header = rows[0].split(','), values = rows[1].split(',');
+  for (const [key, value] of Object.entries(fields)) assert.equal(values[header.indexOf(key)], String(value));
+});
+
+test('study response links must share a fixed local versioned experiment hash', () => {
+  const hash = 'a'.repeat(64), report_url = `/api/study/${hash}/index.html`, archive_url = `/api/study/${hash}/archive.zip`;
+  assert.deepEqual(ui.studyLinks({report_url, archive_url}), {report_url, archive_url});
+  for (const bad of ['https://example.com/index.html', '/api/study/../index.html', `/api/study/${hash}/index.html?x=1`]) {
+    assert.throws(() => ui.studyLinks({report_url: bad, archive_url}), /report/i);
+  }
+  assert.throws(() => ui.studyLinks({report_url, archive_url: `/api/study/${'b'.repeat(64)}/archive.zip`}), /archive/i);
+});
+
+test('comparison defaults and limits preserve the declared sampling interval', () => {
+  const source = {time_window: {start_utc: '2026-09-10T12:00:00Z', stop_utc: '2026-09-10T12:02:00Z', step_s: 90}};
+  assert.deepEqual(ui.comparisonWindow(source), {minimum: 90, maximum: 120, duration: 90,
+    maximumOffset: 30, supported: true, valid: true});
+  assert.deepEqual(ui.comparisonWindow(source, 30, 90), {minimum: 90, maximum: 90, duration: 90,
+    maximumOffset: 30, supported: true, valid: true});
+  assert.equal(ui.comparisonWindow(source, 31, 90).valid, false);
+  assert.equal(ui.comparisonWindow(source, 0, 89).valid, false);
+  const short = {time_window: {...source.time_window, stop_utc: '2026-09-10T12:00:30Z', step_s: 15}};
+  assert.equal(ui.comparisonWindow(short).duration, 30);
+  const long = {time_window: {...source.time_window, stop_utc: '2026-09-10T14:00:00Z', step_s: 3600}};
+  assert.equal(ui.comparisonWindow(long).duration, 3600);
+  assert.equal(ui.comparisonWindow(long).supported, true);
+  const coarse = {time_window: {...long.time_window, step_s: 4000}};
+  assert.equal(ui.comparisonWindow(coarse).supported, false);
+  assert.equal(ui.comparisonWindow(coarse).valid, false);
+  const micro = {time_window: {start_utc: '2026-09-10T12:00:00.123456Z', stop_utc: '2026-09-10T12:00:00.123458Z', step_s: .000001}};
+  assert.equal(ui.comparisonWindow(micro).duration, .000002);
+  assert.equal(ui.comparisonWindow(micro).supported, true);
+});

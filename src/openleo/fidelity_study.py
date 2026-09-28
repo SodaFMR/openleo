@@ -134,6 +134,10 @@ def load_fidelity_study(path: str | Path) -> FidelityStudy:
             scenario = load_constellation((study_path.parent / scenario_name).resolve())
             if scenario.propagation is None or scenario.propagation.model != "itu_reference":
                 raise ValueError(f"case {identifier!r} requires itu_reference propagation")
+            if scenario.propagation.hydrometeors is not None:
+                raise ValueError(
+                    f"case {identifier!r} excludes declared hydrometeors; use an integrated experiment instead"
+                )
             if scenario.propagation.refinement not in (1, 2):
                 raise ValueError(f"case {identifier!r} propagation refinement must be 1 or 2")
             cases.append(_FidelityCase(identifier, scenario))

@@ -21,6 +21,7 @@ from skyfield.framelib import itrs
 from openleo.adaptation import ETSI_SOURCE_URL, MODCODS, AdaptationConfig, select_modcod
 from openleo.atmospheric_path import GroundPathResult, build_reference_column
 from openleo.catalog import load_catalog
+from openleo.hydrometeor_path import HydrometeorPathResult, evaluate_hydrometeor_path
 from openleo.input import (
     _finite_number,
     _ground_station,
@@ -225,7 +226,11 @@ def simulate_constellation(scenario: ConstellationScenario) -> dict[str, Any]:
     ]
     links = _links(scenario, timestamps, times, states, sites)
     return {
-        "schema_version": "2" if scenario.propagation else "1",
+        "schema_version": "3"
+        if scenario.propagation and scenario.propagation.hydrometeors is not None
+        else "2"
+        if scenario.propagation
+        else "1",
         "kind": "openleo.constellation",
         "scenario": scenario_document(scenario),
         "provenance": _provenance(scenario),
@@ -278,6 +283,11 @@ def _satellite_document(orbit, state, timestamps):
 def _links(scenario, timestamps, times, states, sites):
     frames = [[] for _ in timestamps]
     heights = dict(scenario.propagation.station_heights_amsl_m) if scenario.propagation else {}
+    hydrometeors = (
+        dict(scenario.propagation.hydrometeors.stations)
+        if scenario.propagation and scenario.propagation.hydrometeors is not None
+        else {}
+    )
     for station_index, site in enumerate(sites):
         site_state = site.at(times)
         column = (
@@ -305,7 +315,20 @@ def _links(scenario, timestamps, times, states, sites):
                     if column
                     else None
                 )
-                radio = _radio_metrics(scenario.radio_link, float(distance.m[index]), path)
+                station_name = scenario.stations[station_index].name
+                hydrometeor_path = (
+                    evaluate_hydrometeor_path(
+                        scenario.radio_link.carrier_frequency_hz,
+                        float(elevation.degrees[index]),
+                        heights[station_name],
+                        hydrometeors[station_name],
+                    )
+                    if hydrometeors
+                    else None
+                )
+                radio = _radio_metrics(
+                    scenario.radio_link, float(distance.m[index]), path, hydrometeor_path
+                )
                 esn0_db = signal_to_noise_ratio_db(
                     radio["cn0_db_hz"], scenario.adaptation.symbol_rate_baud
                 )
@@ -366,7 +389,10 @@ def _remaining_contacts(timestamps, visible):
 
 
 def _radio_metrics(
-    radio: RadioLink, range_m: float, path: GroundPathResult | None = None
+    radio: RadioLink,
+    range_m: float,
+    path: GroundPathResult | None = None,
+    hydrometeor_path: HydrometeorPathResult | None = None,
 ) -> dict[str, float]:
     path_loss_db = free_space_path_loss_db(range_m, radio.carrier_frequency_hz)
     carrier_power_dbw = received_carrier_power_dbw(
@@ -375,7 +401,12 @@ def _radio_metrics(
     free_space_cn0_db_hz = carrier_to_noise_density_db_hz(
         carrier_power_dbw, noise_density_dbw_per_hz(radio.system_noise_temperature_k)
     )
-    cn0_db_hz = free_space_cn0_db_hz - path.total_db if path else free_space_cn0_db_hz
+    total_atmospheric_db = _finite_number(
+        (path.total_db if path else 0.0)
+        + (hydrometeor_path.hydrometeor_attenuation_db if hydrometeor_path else 0.0),
+        "total_atmospheric_attenuation_db",
+    )
+    cn0_db_hz = free_space_cn0_db_hz - total_atmospheric_db
     geometric_delay_s = propagation_delay_s(range_m)
     snr_db = signal_to_noise_ratio_db(cn0_db_hz, radio.channel_bandwidth_hz)
     return {
@@ -385,6 +416,11 @@ def _radio_metrics(
         "shannon_upper_bound_bps": _finite_number(
             shannon_capacity_upper_bound_bps(snr_db, radio.channel_bandwidth_hz),
             "shannon_upper_bound_bps",
+        ),
+        **(
+            {**asdict(hydrometeor_path), "total_atmospheric_attenuation_db": total_atmospheric_db}
+            if hydrometeor_path
+            else {}
         ),
         **(
             {
@@ -480,7 +516,9 @@ def _models(timescale, propagation=None):
             "integration": "Left-hold rates over adjacent sample intervals; UTC datetime differences (POSIX convention)",
         },
         "radio_link": {
-            "channel": "Free-space plus reference gaseous loss, fixed-noise AWGN; one declared reciprocal radio link budget for every satellite and station"
+            "channel": "Free-space plus reference gaseous and declared hydrometeor loss, fixed-noise AWGN; one declared reciprocal radio link budget for every satellite and station"
+            if propagation and propagation.hydrometeors is not None
+            else "Free-space plus reference gaseous loss, fixed-noise AWGN; one declared reciprocal radio link budget for every satellite and station"
             if propagation
             else "Free-space AWGN; one declared reciprocal radio link budget for every satellite and station",
             "doppler": "First order: -carrier_frequency_hz * range_rate_mps / c; receding is negative",
@@ -526,7 +564,9 @@ def _limitations(propagation=None):
         "Archived GP elements are propagated predictions, not measured satellite positions; age is reported without an uncertainty distribution.",
         "Station coordinates and every RF/ISL parameter are declared experiment assumptions, not surveyed infrastructure or real constellation specifications.",
         "DVB-S2 reference rates are synthetic link adaptation, not Iridium waveform or receiver measurements.",
-        "Reference gaseous atmosphere only: no local weather, rain, cloud, fog, scintillation, terrain, antenna patterns, interference, RF acquisition delay or tracking dynamics are modeled."
+        "Reference gaseous atmosphere with fixed declared clouds and uniform spherical rain layers; no measured local weather, P.618 exceedance statistics, scintillation, terrain, antenna patterns, interference, RF acquisition delay or tracking dynamics are modeled."
+        if propagation and propagation.hydrometeors is not None
+        else "Reference gaseous atmosphere only: no local weather, rain, cloud, fog, scintillation, terrain, antenna patterns, interference, RF acquisition delay or tracking dynamics are modeled."
         if propagation
         else "No atmosphere, rain, scintillation, terrain, antenna patterns, interference, RF acquisition delay or tracking dynamics are modeled.",
         "Contact boundaries and route choices are sampled; finer events between samples can be missed.",

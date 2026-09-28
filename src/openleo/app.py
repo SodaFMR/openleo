@@ -10,6 +10,12 @@ import webbrowser
 from dataclasses import replace
 from hashlib import sha256
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from io import BytesIO
+from mimetypes import guess_type
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from time import monotonic
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from openleo.constellation import (
     ConstellationScenario,
@@ -59,13 +65,59 @@ def _input_error(error: Exception) -> str:
     return "Could not run this scenario. Check its fields and catalog."
 
 
-def create_server(scenario: ConstellationScenario, port: int = 0) -> HTTPServer:
+def _study_artifacts(scenario, settings, packet_backend, network_backend):
+    from openleo.experiment import parse_experiment_config, run_experiment
+
+    config = parse_experiment_config(settings)
+    with TemporaryDirectory(prefix="openleo-experiment-") as temporary:
+        directory = Path(temporary) / "result"
+        summary = run_experiment(
+            scenario,
+            config,
+            directory,
+            packet_backend=packet_backend,
+            network_backend=network_backend,
+        )
+        paths = tuple(path for path in sorted(directory.rglob("*")) if path.is_file())
+        if sum(path.stat().st_size for path in paths) > 64_000_000:
+            raise ValueError("experiment exceeds the 64 MB browser artifact limit; use the CLI")
+        contents = {path.relative_to(directory).as_posix(): path.read_bytes() for path in paths}
+    identifier = sha256(contents["experiment-study.json"]).hexdigest()
+    prefix = f"/api/study/{identifier}/"
+    archive_data = BytesIO()
+    with ZipFile(archive_data, "w", compression=ZIP_DEFLATED) as archive:
+        for name, content in contents.items():
+            info = ZipInfo(name, date_time=(2000, 1, 1, 0, 0, 0))
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, content, compress_type=ZIP_DEFLATED)
+    artifacts = {
+        prefix + name: (content, guess_type(name)[0] or "application/octet-stream")
+        for name, content in contents.items()
+    }
+    artifacts = {**artifacts, prefix + "archive.zip": (archive_data.getvalue(), "application/zip")}
+    response = {
+        "summary": summary,
+        "report_url": prefix + "index.html",
+        "archive_url": prefix + "archive.zip",
+    }
+    return response, artifacts
+
+
+def create_server(
+    scenario: ConstellationScenario,
+    port: int = 0,
+    *,
+    packet_backend: str | Path | None = None,
+    network_backend: str | Path | None = None,
+) -> HTTPServer:
     """Compute the initial experiment and bind exclusively to IPv4 loopback."""
     if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
         raise ValueError("port must be an integer between 0 and 65535")
     token = secrets.token_urlsafe(32)
     pinned_orbit = scenario_document(scenario)["orbit"]
     current = _snapshot(scenario, token)
+    study_files = {}
+    recent_requests = ()
 
     class Handler(BaseHTTPRequestHandler):
         timeout = 5
@@ -79,7 +131,12 @@ def create_server(scenario: ConstellationScenario, port: int = 0) -> HTTPServer:
 
         def _reply(self, status: int, content: bytes, content_type="application/json"):
             self.send_response(status)
-            self.send_header("Content-Type", f"{content_type}; charset=utf-8")
+            encoding = (
+                "; charset=utf-8"
+                if content_type.startswith("text/") or content_type == "application/json"
+                else ""
+            )
+            self.send_header("Content-Type", content_type + encoding)
             self.send_header("Content-Length", str(len(content)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
@@ -91,6 +148,7 @@ def create_server(scenario: ConstellationScenario, port: int = 0) -> HTTPServer:
             self._reply(status, _json({"error": message}).encode("utf-8"))
 
         def parse_request(self):
+            nonlocal recent_requests
             if not super().parse_request():
                 return False
             hosts = self.headers.get_all("Host", [])
@@ -105,6 +163,12 @@ def create_server(scenario: ConstellationScenario, port: int = 0) -> HTTPServer:
             if origins and origins != [f"http://{hosts[0]}"]:
                 self._error(403, "The request origin must match this local application.")
                 return False
+            now = monotonic()
+            recent_requests = tuple(when for when in recent_requests if now - when < 1.0)
+            if len(recent_requests) >= 60:
+                self._error(429, "Too many requests; retry after one second.")
+                return False
+            recent_requests = (*recent_requests, now)
             return True
 
         def do_GET(self):
@@ -112,12 +176,25 @@ def create_server(scenario: ConstellationScenario, port: int = 0) -> HTTPServer:
                 self._reply(200, current[1], "text/html")
             elif self.path == "/api/experiment":
                 self._reply(200, current[0])
+            elif self.path == "/api/capabilities":
+                self._reply(
+                    200,
+                    _json(
+                        {
+                            "link_replay": packet_backend is not None,
+                            "network_replay": network_backend is not None,
+                        }
+                    ).encode("utf-8"),
+                )
+            elif self.path in study_files:
+                content, content_type = study_files[self.path]
+                self._reply(200, content, content_type)
             else:
                 self._error(404, "Unknown endpoint.")
 
         def do_POST(self):
-            nonlocal current
-            if self.path != "/api/simulate":
+            nonlocal current, study_files
+            if self.path not in ("/api/simulate", "/api/study"):
                 self._error(404, "Unknown endpoint.")
                 return
             tokens = self.headers.get_all("X-OpenLEO-Token", [])
@@ -156,7 +233,8 @@ def create_server(scenario: ConstellationScenario, port: int = 0) -> HTTPServer:
                 if len(body) != length:
                     raise ValueError("incomplete request")
                 payload = json.loads(body.decode("utf-8"), object_pairs_hook=_unique_object)
-                if not isinstance(payload, dict) or set(payload) != {"scenario"}:
+                required = {"scenario", "settings"} if self.path == "/api/study" else {"scenario"}
+                if not isinstance(payload, dict) or set(payload) != required:
                     raise ValueError("invalid envelope")
                 raw = payload["scenario"]
                 _json(raw).encode("utf-8")  # Reject non-finite values at any depth.
@@ -166,6 +244,13 @@ def create_server(scenario: ConstellationScenario, port: int = 0) -> HTTPServer:
                 updated = parse_constellation(raw, scenario.source_path, scenario.source_sha256)
                 canonical = _json(scenario_document(updated)).encode("utf-8")
                 updated = replace(updated, source_sha256=sha256(canonical).hexdigest())
+                if self.path == "/api/study":
+                    result, next_files = _study_artifacts(
+                        updated, payload["settings"], packet_backend, network_backend
+                    )
+                    study_files = next_files
+                    self._reply(200, _json(result).encode("utf-8"))
+                    return
                 next_snapshot = _snapshot(
                     updated, token, "canonical JSON sorted compact UTF-8", canonical.decode("utf-8")
                 )
@@ -185,9 +270,18 @@ def create_server(scenario: ConstellationScenario, port: int = 0) -> HTTPServer:
     return HTTPServer(("127.0.0.1", port), Handler)
 
 
-def run_app(scenario: ConstellationScenario, port: int = 8765, open_browser: bool = True) -> None:
+def run_app(
+    scenario: ConstellationScenario,
+    port: int = 8765,
+    open_browser: bool = True,
+    *,
+    packet_backend: str | Path | None = None,
+    network_backend: str | Path | None = None,
+) -> None:
     """Serve the local workbench until Ctrl-C, then release its listening socket."""
-    with create_server(scenario, port) as server:
+    with create_server(
+        scenario, port, packet_backend=packet_backend, network_backend=network_backend
+    ) as server:
         url = f"http://127.0.0.1:{server.server_port}/"
         print(f"workbench: {url}", flush=True)
         if open_browser:

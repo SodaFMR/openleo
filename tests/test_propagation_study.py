@@ -69,6 +69,44 @@ def test_study_rejects_a_grid_without_a_supported_refinement(tmp_path):
         run_propagation_study(scenario)
 
 
+@pytest.mark.parametrize("rain_rate", [0.0, 25.0])
+def test_gas_only_study_rejects_declared_hydrometeors_before_output(tmp_path, capsys, rain_rate):
+    scenario = _short_scenario(tmp_path)
+    raw = json.loads(scenario.source_path.read_text())
+    raw["propagation"]["hydrometeors"] = {
+        "model": "declared_uniform_layers",
+        "stations": {
+            name: {
+                "liquid_water_kg_m2": 0.0,
+                "rain_rate_mm_h": rain_rate,
+                "rain_top_height_amsl_m": 5000.0,
+                "polarization_tilt_deg": 0.0,
+            }
+            for name in raw["propagation"]["station_heights_amsl_m"]
+        },
+    }
+    scenario.source_path.write_text(json.dumps(raw))
+    with pytest.raises(ValueError, match="hydrometeors.*integrated experiment"):
+        run_propagation_study(load_constellation(scenario.source_path))
+    output = tmp_path / "new-parent" / "study"
+    figure = tmp_path / "new-parent" / "figure.svg"
+    assert (
+        main(
+            [
+                "propagation-study",
+                str(scenario.source_path),
+                "--output",
+                str(output),
+                "--figure",
+                str(figure),
+            ]
+        )
+        == 2
+    )
+    assert "integrated experiment" in capsys.readouterr().err
+    assert not output.parent.exists()
+
+
 def test_study_cli_exports_three_cases_and_figure(tmp_path, capsys):
     scenario = _short_scenario(tmp_path)
     output = tmp_path / "study"

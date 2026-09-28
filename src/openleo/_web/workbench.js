@@ -55,8 +55,74 @@
   }
   const csv = rows => rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
   const nodeName = (data, node) => node < data.satellites.length ? data.satellites[node]?.name : data.stations[node - data.satellites.length]?.name;
+  const HYDRO_FIELDS = ['cloud_attenuation_db', 'rain_specific_attenuation_db_per_km', 'rain_path_length_m', 'rain_attenuation_db', 'hydrometeor_attenuation_db', 'total_atmospheric_attenuation_db'];
+  const dryLayer = height => ({liquid_water_kg_m2: 0, rain_rate_mm_h: 0, rain_top_height_amsl_m: height, polarization_tilt_deg: 0});
+  function changeStation(value, selected, action, name) {
+    const oldName = value.stations[selected]?.name;
+    if (!oldName) throw new Error('Select a station.');
+    if (action === 'rename') {
+      name = String(name || '').trim();
+      if (!name) throw new Error('Enter a station name.');
+      if (value.stations.some((station, i) => i !== selected && station.name === name)) throw new Error('Station names must be unique.');
+    } else if (action === 'add') {
+      if (value.stations.length >= 16) throw new Error('At most 16 stations are supported.');
+      let n = 1; while (value.stations.some(station => station.name === 'Station ' + n)) n++;
+      name = 'Station ' + n;
+    } else if (action === 'remove') {
+      if (value.stations.length <= (value.network ? 2 : 1)) throw new Error(value.network ? 'Network scenarios need at least two stations.' : 'Keep at least one station.');
+    } else throw new Error('Unknown station edit.');
+    const stations = action === 'add' ? [...value.stations, {name, latitude_deg: 0, longitude_deg: 0, height_m: 0}] : action === 'remove' ? value.stations.filter((_, i) => i !== selected) : value.stations.map((station, i) => i === selected ? {...station, name} : station);
+    const remap = (map, fallback) => Object.fromEntries(stations.map(station => [station.name, action === 'rename' && station.name === name ? map[oldName] : map[station.name] ?? fallback(station.name)]));
+    const propagation = value.propagation && {...value.propagation, station_heights_amsl_m: remap(value.propagation.station_heights_amsl_m, () => 0)};
+    if (propagation?.hydrometeors) propagation.hydrometeors = {...propagation.hydrometeors, stations: remap(propagation.hydrometeors.stations, station => dryLayer(propagation.station_heights_amsl_m[station]))};
+    const network = value.network && {...value.network};
+    if (network) for (const [key, other] of [['source_station', 'target_station'], ['target_station', 'source_station']]) {
+      if (network[key] === oldName && action === 'rename') network[key] = name;
+      if (network[key] === oldName && action === 'remove') network[key] = stations.find(station => station.name !== network[other]).name;
+    }
+    return {...value, stations, ...(propagation ? {propagation} : {}), ...(network ? {network} : {})};
+  }
+  function changeAtmosphere(value, selected, key, number) {
+    if (key === 'gas' && !number) { const {propagation, ...rest} = value; return rest; }
+    const name = value.stations[selected].name;
+    let propagation = value.propagation || {model: 'itu_reference', refinement: 1, station_heights_amsl_m: Object.fromEntries(value.stations.map(station => [station.name, 0]))};
+    if (key === 'hydrometeors') {
+      const {hydrometeors, ...gas} = propagation;
+      propagation = number ? {...gas, hydrometeors: hydrometeors || {model: 'declared_uniform_layers', stations: Object.fromEntries(value.stations.map(station => [station.name, dryLayer(propagation.station_heights_amsl_m[station.name])]))}} : gas;
+    } else if (key !== 'gas') {
+      if (!Number.isFinite(number)) throw new Error('Enter a finite atmospheric value.');
+      if (key === 'amsl') {
+        if (number < 0 || number > 10000) throw new Error('AMSL height must be in 0..10000 m.');
+        if (propagation.hydrometeors && number > propagation.hydrometeors.stations[name].rain_top_height_amsl_m) throw new Error('Raise the declared rain top before raising station AMSL.');
+        propagation = {...propagation, station_heights_amsl_m: {...propagation.station_heights_amsl_m, [name]: number}};
+      } else if (key === 'refinement') {
+        if (![1, 2, 4].includes(number)) throw new Error('Refinement must be 1, 2 or 4.');
+        propagation = {...propagation, refinement: number};
+      } else {
+        if (key === 'rain_top_height_amsl_m' && (number < propagation.station_heights_amsl_m[name] || number > 20000)) throw new Error('Rain top must be between station AMSL and 20000 m.');
+        if (number < 0 || (key === 'polarization_tilt_deg' && number > 180)) throw new Error('Atmospheric values are outside the declared bounds.');
+        if (!propagation.hydrometeors) throw new Error('Enable declared hydrometeor layers first.');
+        propagation = {...propagation, hydrometeors: {...propagation.hydrometeors, stations: {...propagation.hydrometeors.stations, [name]: {...propagation.hydrometeors.stations[name], [key]: number}}}};
+      }
+    }
+    return {...value, propagation};
+  }
+  function studyLinks(result) {
+    const match = /^\/api\/study\/([a-f0-9]{64})\/index\.html$/.exec(result.report_url);
+    if (!match) throw new Error('The local process returned an invalid report URL.');
+    if (result.archive_url !== '/api/study/' + match[1] + '/archive.zip') throw new Error('The local process returned an invalid archive URL.');
+    return {report_url: result.report_url, archive_url: result.archive_url};
+  }
+  function comparisonWindow(scenario, startOffset = 0, duration) {
+    const window = scenario.time_window;
+    const micros = value => Date.parse(value) * 1000 + Number((value.match(/\.(\d+)Z$/)?.[1] || '').padEnd(6, '0').slice(3, 6));
+    const span = (micros(window.stop_utc) - micros(window.start_utc)) / 1e6, minimum = window.step_s;
+    const maximum = Math.min(3600, Math.max(0, span - startOffset));
+    duration = duration ?? Math.min(Math.max(60, minimum), maximum);
+    return {minimum, maximum, duration, maximumOffset: Math.max(0, span - duration), supported: minimum <= Math.min(3600, span), valid: startOffset >= 0 && duration >= minimum && duration <= maximum};
+  }
   function linksCSV(data) {
-    const propagation = data.schema_version === '2' ? ['gaseous_dry_attenuation_db', 'gaseous_water_attenuation_db', 'gaseous_attenuation_db', 'free_space_cn0_db_hz', 'geometric_delay_s', 'atmospheric_excess_delay_s', 'apparent_elevation_deg'] : [];
+    const propagation = ['2', '3'].includes(data.schema_version) ? ['gaseous_dry_attenuation_db', 'gaseous_water_attenuation_db', 'gaseous_attenuation_db', 'free_space_cn0_db_hz', 'geometric_delay_s', 'atmospheric_excess_delay_s', 'apparent_elevation_deg', ...(data.schema_version === '3' ? HYDRO_FIELDS : [])] : [];
     const fields = ['station_index', 'satellite_index', 'elevation_deg', 'azimuth_deg', 'range_m', 'range_rate_mps', 'doppler_hz', 'delay_s', 'cn0_db_hz', 'snr_db', 'esn0_db', 'modcod', 'rate_bps', 'shannon_upper_bound_bps', 'margin_db', 'remaining_contact_s', 'contact_truncated', ...propagation];
     return csv([['timestamp_utc', 'station', 'satellite', 'norad_id', ...fields], ...data.links.flatMap((links, time) => links.map(link => [data.timestamps_utc[time], data.stations[link.station_index].name, data.satellites[link.satellite_index].name, data.satellites[link.satellite_index].norad_id, ...fields.map(key => link[key])]))]);
   }
@@ -66,7 +132,7 @@
       return [time, key, !!route, route?.delay_s, route?.bottleneck_bps, route?.nodes.map(node => nodeName(data, node)).join(' → ')];
     }))]);
   }
-  if (typeof module !== 'undefined' && module.exports) module.exports = {ecef, project, visible, segmentCount, getLink, initialSatellite, series, formatNumber, formatSI, embeddedJSON, standaloneHTML, linksCSV, routesCSV};
+  if (typeof module !== 'undefined' && module.exports) module.exports = {ecef, project, visible, segmentCount, getLink, initialSatellite, series, formatNumber, formatSI, embeddedJSON, standaloneHTML, linksCSV, routesCSV, changeStation, changeAtmosphere, studyLinks, comparisonWindow};
   if (typeof document === 'undefined') return;
   const el = id => document.getElementById(id);
   const text = (id, value) => { el(id).textContent = value; };
@@ -164,11 +230,13 @@
     text('link-modcod', link?.modcod || 'No RF lock'); text('link-margin', link?.margin_db == null ? '— margin' : metric(link.margin_db, ' dB margin'));
     const values = {'link-elevation': metric(link?.elevation_deg, '°', 1), 'link-range': metric(link ? link.range_m / 1000 : null, ' km', 1), 'link-doppler': formatSI(link?.doppler_hz, 'Hz'), 'link-delay': metric(link ? link.delay_s * 1000 : null, ' ms'), 'link-cn0': metric(link?.cn0_db_hz, ' dBHz', 1), 'link-esn0': metric(link?.esn0_db, ' dB', 1), 'link-azimuth': metric(link?.azimuth_deg, '°', 1), 'link-contact': link ? (link.contact_truncated ? '≥ ' : '') + metric(link.remaining_contact_s, ' s', 0) : '—'};
     Object.entries(values).forEach(([id, value]) => text(id, value));
-    text('propagation-model', data.schema_version === '2' ? 'ITU reference atmosphere' : 'Free space');
-    el('propagation-values').hidden = data.schema_version !== '2';
+    text('propagation-model', data.schema_version === '3' ? 'ITU gas + declared cloud/rain' : data.schema_version === '2' ? 'ITU reference atmosphere' : 'Free space');
+    el('propagation-values').hidden = !['2', '3'].includes(data.schema_version);
+    el('hydrometeor-values').hidden = data.schema_version !== '3';
     text('link-gas-loss', metric(link?.gaseous_attenuation_db, ' dB', 3));
     text('link-apparent-elevation', metric(link?.apparent_elevation_deg, '°', 3));
     text('link-excess-delay', metric(link?.atmospheric_excess_delay_s == null ? null : link.atmospheric_excess_delay_s * 1e6, ' µs', 3));
+    for (const [id, key, unit] of [['link-cloud-loss', HYDRO_FIELDS[0], ' dB'], ['link-rain-specific', HYDRO_FIELDS[1], ' dB/km'], ['link-rain-path', HYDRO_FIELDS[2], ' m'], ['link-rain-loss', HYDRO_FIELDS[3], ' dB'], ['link-hydrometeor-loss', HYDRO_FIELDS[4], ' dB'], ['link-total-loss', HYDRO_FIELDS[5], ' dB']]) text(id, metric(link?.[key], unit, 3));
     el('link-contact').title = link?.contact_truncated ? 'Contact continues beyond this experiment window; duration is a sampled lower bound.' : 'Sampled look-ahead to the visibility mask crossing.';
     const stats = data.statistics?.find(entry => entry.station_index === state.station);
     text('station-visible', percent(stats?.visible_sample_fraction)); text('station-usable', percent(stats?.usable_sample_fraction));
@@ -346,10 +414,43 @@
       const value = draft(), selected = Math.min(Number(el('editor-station').value) || 0, value.stations.length - 1);
       options('editor-station', value.stations.map(station => station.name), selected);
       fields.forEach(([id, group, key, scale]) => { const source = group === 'stations' ? value.stations[selected] : value[group]; el(id).value = source?.[key] == null ? '' : source[key] / scale; });
+      const name = value.stations[selected].name, propagation = value.propagation, layer = propagation?.hydrometeors?.stations[name];
+      el('edit-station-name').value = name;
+      el('remove-station').disabled = !session.live || value.stations.length <= (value.network ? 2 : 1);
+      el('add-station').disabled = !session.live || value.stations.length >= 16;
+      el('edit-gas').value = propagation ? 'itu_reference' : 'none';
+      el('edit-refinement').value = propagation?.refinement || 1;
+      el('edit-amsl').value = propagation?.station_heights_amsl_m[name] ?? '';
+      el('edit-hydrometeors').checked = !!propagation?.hydrometeors;
+      for (const id of ['edit-refinement', 'edit-amsl', 'edit-hydrometeors']) el(id).disabled = !session.live || !propagation;
+      el('edit-amsl').required = !!propagation;
+      for (const [id, key] of hydroInputs) { el(id).value = layer?.[key] ?? ''; el(id).disabled = !session.live || !layer; el(id).required = !!layer; }
+      el('edit-rain-top').min = propagation?.station_heights_amsl_m[name] ?? 0;
+      el('edit-frequency').min = propagation ? 1 : .000001;
+      el('edit-frequency').max = layer ? 200 : propagation ? 1000 : '';
+      el('edit-mask').min = propagation ? 5 : 0;
       el('station-preset').value = ''; editorError(null);
     } catch (error) { editorError(error); }
   }
   function resetEditor() { el('scenario-json').value = JSON.stringify(data.scenario, null, 2); refreshFields(); }
+  const hydroInputs = [['edit-cloud', 'liquid_water_kg_m2'], ['edit-rain', 'rain_rate_mm_h'], ['edit-rain-top', 'rain_top_height_amsl_m'], ['edit-tilt', 'polarization_tilt_deg']];
+  function saveDraft(value) { el('scenario-json').value = JSON.stringify(value, null, 2); refreshFields(); }
+  for (const [id, action] of [['edit-station-name', 'rename'], ['add-station', 'add'], ['remove-station', 'remove']]) el(id).addEventListener(action === 'rename' ? 'change' : 'click', () => {
+    if (!session.live || (action === 'rename' && !el(id).reportValidity())) return;
+    try {
+      const selected = Number(el('editor-station').value), updated = changeStation(draft(), selected, action, el(id).value);
+      // The new option does not exist until the select is rebuilt.
+      if (action === 'add') options('editor-station', updated.stations.map(station => station.name), updated.stations.length - 1);
+      saveDraft(updated);
+    } catch (error) { editorError(error); }
+  });
+  for (const [id, key] of [['edit-gas', 'gas'], ['edit-hydrometeors', 'hydrometeors'], ['edit-amsl', 'amsl'], ['edit-refinement', 'refinement'], ...hydroInputs]) el(id).addEventListener('change', () => {
+    if (!session.live || !el(id).reportValidity()) return;
+    try {
+      const number = key === 'gas' ? el(id).value === 'itu_reference' : key === 'hydrometeors' ? el(id).checked : Number(el(id).value);
+      saveDraft(changeAtmosphere(draft(), Number(el('editor-station').value), key, number));
+    } catch (error) { editorError(error); }
+  });
   el('scenario-open').addEventListener('click', () => { pause(); resetEditor(); el('scenario-dialog').showModal(); });
   el('provenance-open').addEventListener('click', () => { pause(); el('provenance-dialog').showModal(); });
   document.querySelectorAll('.close-dialog').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));
@@ -383,6 +484,80 @@
     } catch (error) { editorError(error); }
     finally { el('run-scenario').disabled = !session.live; text('run-scenario', 'Recompute experiment'); }
   });
+  let capabilities = {link_replay: false, network_replay: false}, comparing = false;
+  function comparisonError(error) { text('comparison-error', error?.message || ''); el('comparison-error').hidden = !error; }
+  function comparisonControls(reset = false) {
+    if (reset) { el('study-start').value = 0; el('study-duration').value = comparisonWindow(data.scenario).duration; }
+    const window = comparisonWindow(data.scenario, Number(el('study-start').value), Number(el('study-duration').value));
+    el('study-start').max = window.maximumOffset; el('study-duration').min = window.minimum; el('study-duration').max = window.maximum;
+    text('comparison-sampling', window.supported ? 'Sampling interval: ' + formatNumber(window.minimum, 6) + ' s. Duration must include at least one declared interval.' : 'Comparison unavailable: reduce the scenario sampling interval to fit a comparison window of at most 3,600 s, then recompute.');
+    el('packet-mode').querySelector('[value=link]').disabled = !capabilities.link_replay;
+    el('packet-mode').querySelector('[value=network]').disabled = !capabilities.network_replay || !data.scenario.network;
+    if (el('packet-mode').selectedOptions[0].disabled) el('packet-mode').value = 'none';
+    const mode = el('packet-mode').value;
+    el('packet-fields').hidden = mode === 'none';
+    for (const id of ['study-load', 'study-size', 'study-queue', 'study-flows', 'study-acquisition']) el(id).disabled = mode === 'none' || !session.live || comparing;
+    if (mode !== 'network') { el('study-flows').value = 1; el('study-acquisition').value = 0; el('study-flows').disabled = true; el('study-acquisition').disabled = true; }
+    text('comparison-scenario', data.scenario.name);
+    text('comparison-selection', mode === 'link' ? 'Replay: ' + data.stations[state.station].name + ' · NORAD ' + data.satellites[state.satellite].norad_id : mode === 'network' ? 'Replay endpoints: ' + data.scenario.network.source_station + ' → ' + data.scenario.network.target_station : 'Cases follow models declared in this scenario; no weather is inferred.');
+    el('comparison-fields').disabled = !session.live || comparing || !window.supported;
+    el('run-comparison').disabled = !session.live || comparing || !window.supported || !window.valid;
+    if (!session.live) text('comparison-backend', 'Offline report: start the local application to compute another comparison. Stored metrics remain available; server report URLs require the live session.');
+  }
+  function summaryTable(headers, rows) {
+    const wrap = document.createElement('div'), table = document.createElement('table'), head = document.createElement('thead'), body = document.createElement('tbody');
+    wrap.className = 'table-scroll'; const title = document.createElement('tr');
+    headers.forEach(value => { const cell = document.createElement('th'); cell.scope = 'col'; cell.textContent = value; title.append(cell); }); head.append(title);
+    rows.forEach(values => { const row = document.createElement('tr'); values.forEach(value => { const cell = document.createElement('td'); cell.textContent = value; row.append(cell); }); body.append(row); });
+    table.append(head, body); wrap.append(table); return wrap;
+  }
+  function renderComparison(summary) {
+    if (!summary?.cases?.length) return;
+    const cases = summary.cases.map(item => {
+      const article = document.createElement('article'), heading = document.createElement('h4'), note = document.createElement('p');
+      heading.textContent = item.label || item.id; note.className = 'muted'; note.textContent = formatNumber(item.duration_s) + ' s · ' + formatNumber(item.sample_count, 0) + ' samples'; article.append(heading, note);
+      if (item.station_metrics?.length) article.append(summaryTable(['Station', 'Visible samples', 'Usable samples', 'Best-link bits', 'Fixed bits', 'Mean rate', 'RF outage / s', 'Handovers'], item.station_metrics.map(station => [station.name, percent(station.visible_sample_fraction), percent(station.usable_sample_fraction), formatSI(station.best_link_integrated_bits, 'bit'), formatSI(station.fixed_baseline_integrated_bits, 'bit'), formatSI(station.mean_best_rate_bps, 'bit/s'), formatNumber(station.rf_outage_duration_s), formatNumber(station.handover_count, 0)])));
+      if (item.route_metrics?.length) article.append(summaryTable(['Route model', 'Connected samples', 'Integrated bits', 'Connected / s', 'Mean rate', 'Changes'], item.route_metrics.map(route => [route.routing_model, percent(route.connected_sample_fraction), formatSI(route.integrated_bottleneck_bits, 'bit'), formatNumber(route.connected_duration_s), formatSI(route.mean_bottleneck_bps, 'bit/s'), formatNumber(route.route_changes, 0)])));
+      for (const packet of item.packets || []) { const details = document.createElement('details'), title = document.createElement('summary'), metrics = document.createElement('pre'); title.textContent = 'Packet metrics · ' + packet.mode + (packet.routing_model ? ' · ' + packet.routing_model : ''); metrics.textContent = JSON.stringify(packet.summary, null, 2); details.append(title, metrics); article.append(details); }
+      return article;
+    });
+    const limitations = (summary.limitations || []).map(value => { const li = document.createElement('li'); li.textContent = value; return li; });
+    text('comparison-result-name', summary.name); text('comparison-result-source', 'Computed from: ' + (summary.scenario?.name || data.scenario.name));
+    el('comparison-case-list').replaceChildren(...cases); el('comparison-limitations').replaceChildren(...limitations);
+    el('comparison-results').hidden = false; el('comparison-links').hidden = !session.live;
+    if (!session.live) text('comparison-retention', 'These stored comparison metrics travel with this offline report. Preserve the full case reports and packet CSVs by downloading the portable ZIP from the live session.');
+  }
+  el('comparison-open').addEventListener('click', () => { pause(); comparisonControls(true); comparisonError(null); el('comparison-dialog').showModal(); });
+  for (const id of ['packet-mode', 'study-start', 'study-duration']) el(id).addEventListener('change', () => comparisonControls());
+  el('comparison-form').addEventListener('submit', async event => {
+    event.preventDefault(); if (!session.live || comparing) return;
+    comparisonError(null);
+    try {
+      if (!comparisonWindow(data.scenario, Number(el('study-start').value), Number(el('study-duration').value)).valid) throw new Error('Choose a comparison window that fits the source and includes at least one declared sampling interval. Reduce the scenario sampling interval and recompute if it exceeds 3,600 s.');
+      const settings = {packet_mode: el('packet-mode').value};
+      for (const [id, key] of [['study-start', 'start_offset_s'], ['study-duration', 'duration_s'], ['study-seed', 'seed'], ['study-load', 'offered_load_bps'], ['study-size', 'packet_size_bytes'], ['study-queue', 'queue_packets'], ['study-flows', 'flows_per_direction'], ['study-acquisition', 'acquisition_delay_s']]) {
+        if (el(id).disabled) continue;
+        if (!el(id).reportValidity()) throw new Error('Check the comparison settings.');
+        settings[key] = Number(el(id).value);
+      }
+      if (settings.packet_mode === 'link') { settings.station_name = data.stations[state.station].name; settings.norad_id = data.satellites[state.satellite].norad_id; }
+      comparing = true; comparisonControls(); text('run-comparison', 'Computing…'); text('comparison-status', 'Computing all declared cases…');
+      el('comparison-form').setAttribute('aria-busy', 'true');
+      const response = await fetch('/api/study', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-OpenLEO-Token': session.token}, body: JSON.stringify({scenario: data.scenario, settings})});
+      const result = await response.json(); if (!response.ok) throw new Error(result.error || 'The local comparison failed.');
+      const links = studyLinks(result);
+      if (result.summary?.kind !== 'openleo.experiment' || !Array.isArray(result.summary.cases) || !result.summary.cases.length) throw new Error('The local process returned an incomplete comparison.');
+      renderComparison(result.summary); el('comparison-report').href = links.report_url; el('comparison-archive').href = links.archive_url;
+      el('comparison-data').textContent = embeddedJSON(result.summary); text('comparison-status', 'Comparison complete.');
+    } catch (error) { comparisonError(error); text('comparison-status', 'Comparison failed; previous results are retained.'); }
+    finally { comparing = false; comparisonControls(); el('comparison-form').setAttribute('aria-busy', 'false'); text('run-comparison', 'Run comparison'); }
+  });
+  if (session.live) fetch('/api/capabilities').then(async response => {
+    if (!response.ok) throw new Error('Unable to check packet backend availability.');
+    const value = await response.json(); capabilities = {link_replay: value.link_replay === true, network_replay: value.network_replay === true}; comparisonControls();
+    text('comparison-backend', capabilities.link_replay || capabilities.network_replay ? 'Packet replay uses the trusted backend configured at local server startup.' : 'Model-only comparisons are available. For packet replay, configure trusted backends at local server startup.');
+  }).catch(error => text('comparison-backend', error.message + ' Model-only comparison remains available.'));
+  comparisonControls(true); renderComparison(read('comparison-data'));
   new ResizeObserver(() => { drawGlobe(); drawCharts(); }).observe(el('main'));
   matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', event => { if (event.matches) pause(); });
   state = {...state, satellite: initialSatellite(data, state.station)}; refreshExperiment(); focusStation(true); pause();

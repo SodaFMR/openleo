@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Bounded, synthetic full-duplex UDP replay for ns-3.48.
 
+#include "replay-common.h"
+
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/network-module.h"
 #include "ns3/point-to-point-module.h"
-#include "ns3/version.h"
 
 #include <algorithm>
 #include <array>
-#include <charconv>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -21,11 +20,9 @@
 #include <unordered_map>
 #include <vector>
 
-#ifndef ENABLE_BUILD_VERSION
-#error "Configure ns-3 with --enable-build-version"
-#endif
-
 using namespace ns3;
+using openleo::OutageErrorModel;
+using openleo::Unsigned;
 
 namespace
 {
@@ -49,23 +46,6 @@ struct Options
     uint32_t queuePackets;       ///< Waiting device queue capacity.
     uint32_t seed;               ///< Valid ns-3 random seed.
 };
-
-/**
- * Parse a complete unsigned decimal field, rejecting signs and whitespace.
- * @param value Decimal field.
- * @return Parsed integer.
- */
-uint64_t
-Unsigned(const std::string& value)
-{
-    uint64_t result = 0;
-    const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), result);
-    if (value.empty() || error != std::errc() || end != value.data() + value.size())
-    {
-        throw std::runtime_error("expected an unsigned decimal integer");
-    }
-    return result;
-}
 
 /**
  * Parse bounded CSV and CLI inputs before creating topology or output files.
@@ -122,18 +102,13 @@ ReadOptions(int argc, char** argv)
                     static_cast<uint32_t>(seed)};
     while (std::getline(input, line))
     {
+        const auto csv = openleo::Split(line, ',');
         std::array<uint64_t, 4> fields{};
-        size_t start = 0;
-        for (size_t i = 0; i < fields.size(); ++i)
+        if (csv.size() != fields.size())
         {
-            const auto comma = line.find(',', start);
-            if ((i < 3) != (comma != std::string::npos))
-            {
-                throw std::runtime_error("trace CSV requires exactly four fields");
-            }
-            fields[i] = Unsigned(line.substr(start, comma - start));
-            start = comma + 1;
+            throw std::runtime_error("trace CSV requires exactly four fields");
         }
+        std::transform(csv.begin(), csv.end(), fields.begin(), Unsigned);
         const auto [time, rate, delay, available] = fields;
         if (time > 3600000000000ULL || delay > 1000000000 || available > 1 ||
             rate > 1000000000000ULL || (available == 0 ? rate != 0 : rate == 0) ||
@@ -166,23 +141,6 @@ struct Record
     int64_t serialization = 0;         ///< Serialization captured at transmission start.
     int64_t delay = 0;                 ///< Delay captured at transmission start.
     std::string status = "unresolved"; ///< Final accounting status.
-};
-
-/** Apply replay outage intervals inside the real ns-3 receive path. */
-class OutageErrorModel : public ErrorModel
-{
-  public:
-    std::function<bool(Ptr<Packet>)> corrupt; ///< Replay's packet-identity lookup.
-
-  private:
-    bool DoCorrupt(Ptr<Packet> packet) override
-    {
-        return corrupt(packet);
-    }
-
-    void DoReset() override
-    {
-    }
 };
 
 /** Two-node experiment; all packet scheduling and queuing belongs to ns-3. */
@@ -468,14 +426,8 @@ main(int argc, char** argv)
 {
     try
     {
-        if (Version::Major() != 3 || Version::Minor() != 48)
+        if (openleo::PrintVersion(argc, argv, "openleo-ns3-replay/1"))
         {
-            throw std::runtime_error("this backend requires the actual ns-3.48 libraries");
-        }
-        if (argc == 2 && std::string(argv[1]) == "--PrintVersion")
-        {
-            std::cout << "openleo-ns3-replay/1 ns-" << Version::Major() << '.' << Version::Minor()
-                      << '\n';
             return 0;
         }
         const auto options = ReadOptions(argc, argv);

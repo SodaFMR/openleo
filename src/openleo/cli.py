@@ -3,14 +3,37 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
+from dataclasses import fields
+from pathlib import Path
 
 from openleo.gases import load_gases_benchmark, run_gases_benchmark, write_gases_result
 from openleo.input import load_scenario
 from openleo.output import write_result
 from openleo.sensitivity import load_sensitivity_study, run_sensitivity, write_sensitivity_result
 from openleo.simulation import simulate_scenario
+
+_TRAFFIC_FIELDS = (
+    ("start_offset_s", float, 0),
+    ("duration_s", float, 60),
+    ("offered_load_bps", float, 100_000),
+    ("packet_size_bytes", int, 512),
+    ("queue_packets", int, 32),
+    ("flows_per_direction", int, 1),
+    ("acquisition_delay_s", float, 0),
+    ("seed", int, 1),
+)
+
+
+def _traffic_arguments(parser, *, use_defaults):
+    for name, value_type, default in _TRAFFIC_FIELDS:
+        parser.add_argument(
+            "--" + name.replace("_", "-"),
+            type=value_type,
+            default=default if use_defaults else None,
+        )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -24,6 +47,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "  openleo propagation-study CONSTELLATION.json --output DIRECTORY\n"
             "  openleo fidelity-study STUDY.json --output DIRECTORY\n"
             "  openleo hydrometeors CONFIG.json --output DIRECTORY\n"
+            "  openleo experiment CONSTELLATION.json --settings SETTINGS.json --output DIRECTORY\n"
+            "  openleo network-replay RUN_DIRECTORY --backend EXECUTABLE --output DIRECTORY\n"
             "  openleo run SCENARIO.json --output DIRECTORY\n"
             "  openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY\n"
             "  openleo gases CONFIG.json --output DIRECTORY\n"
@@ -38,6 +63,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     app_parser = subparsers.add_parser("app", help="open the local scientific workbench")
     app_parser.add_argument("scenario", metavar="CONSTELLATION.json")
     app_parser.add_argument("--port", type=int, default=8765)
+    app_parser.add_argument("--packet-backend", help="trusted local single-link ns-3 executable")
+    app_parser.add_argument("--network-backend", help="trusted local multi-hop ns-3 executable")
     app_parser.add_argument(
         "--no-browser", action="store_true", help="print the local URL without opening it"
     )
@@ -86,6 +113,52 @@ def main(argv: Sequence[str] | None = None) -> int:
     packet_parser.add_argument("--packet-size-bytes", type=int, default=512)
     packet_parser.add_argument("--queue-packets", type=int, default=32)
     packet_parser.add_argument("--seed", type=int, default=1)
+
+    network_parser = subparsers.add_parser(
+        "network-replay", help="replay multi-hop UDP routes with native ns-3"
+    )
+    network_parser.add_argument("bundle", metavar="RUN_DIRECTORY")
+    network_parser.add_argument(
+        "--backend", required=True, help="trusted compiled network-replay executable"
+    )
+    network_parser.add_argument("--output", required=True, metavar="DIRECTORY")
+    network_parser.add_argument(
+        "--routing-model",
+        choices=("minimum_delay", "maximum_rate", "fixed_capacity"),
+        default="minimum_delay",
+    )
+    _traffic_arguments(network_parser, use_defaults=True)
+
+    experiment_parser = subparsers.add_parser(
+        "experiment", help="compare aligned propagation and optional packet experiments"
+    )
+    experiment_parser.add_argument("scenario", metavar="CONSTELLATION.json")
+    experiment_parser.add_argument("--settings", metavar="SETTINGS.json")
+    experiment_parser.add_argument("--output", required=True, metavar="DIRECTORY")
+    experiment_parser.add_argument("--packet-mode", choices=("none", "link", "network"))
+    experiment_parser.add_argument("--station", dest="station_name")
+    experiment_parser.add_argument("--norad", dest="norad_id", type=int)
+    experiment_parser.add_argument("--packet-backend")
+    experiment_parser.add_argument("--network-backend")
+    _traffic_arguments(experiment_parser, use_defaults=False)
+
+    benchmark_parser = subparsers.add_parser(
+        "benchmark", help="run the frozen multi-scenario research matrix"
+    )
+    benchmark_parser.add_argument("configuration", metavar="BENCHMARK.json")
+    benchmark_parser.add_argument("--output", required=True, metavar="DIRECTORY")
+    benchmark_parser.add_argument("--network-backend")
+    verification_parser = subparsers.add_parser(
+        "verify-orbit", help="check a published numerical TEME reference"
+    )
+    verification_parser.add_argument("configuration", metavar="REFERENCE.json")
+    reproduction_parser = subparsers.add_parser(
+        "reproduce", help="reproduce complete numerical and native packet evidence"
+    )
+    reproduction_parser.add_argument("configuration", metavar="BENCHMARK.json")
+    reproduction_parser.add_argument("--reference", required=True, metavar="REFERENCE.json")
+    reproduction_parser.add_argument("--network-backend", required=True)
+    reproduction_parser.add_argument("--output", required=True, metavar="DIRECTORY")
 
     run_parser = subparsers.add_parser("run", help="run a scenario and write its artifacts")
     run_parser.add_argument("scenario", metavar="SCENARIO.json", help="scenario input JSON")
@@ -139,10 +212,83 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    if args.command in ("benchmark", "verify-orbit", "reproduce"):
+        try:
+            if args.command == "verify-orbit":
+                from openleo.orbit_verification import verify_orbit_reference
+
+                result = verify_orbit_reference(args.configuration)
+                print(json.dumps(result, indent=2, allow_nan=False))
+                return 0 if result["passed"] else 1
+            if args.command == "benchmark":
+                from openleo.benchmark import run_benchmark
+
+                result = run_benchmark(
+                    args.configuration, args.output, network_backend=args.network_backend
+                )
+                print(f"packet evidence: {result['packet_evidence']}")
+            else:
+                from openleo.release_evidence import reproduce_release
+
+                result = reproduce_release(
+                    args.configuration,
+                    args.reference,
+                    args.output,
+                    network_backend=args.network_backend,
+                )
+                print(f"native replays: {result['native_packet_replays']}")
+            print(f"report: {Path(args.output) / 'index.html'}")
+            return 0
+        except (ValueError, OSError, UnicodeError, RecursionError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    if args.command == "experiment":
+        try:
+            from openleo.constellation import load_constellation
+            from openleo.experiment import ExperimentConfig, parse_experiment_config, run_experiment
+            from openleo.workbench import _read, _unique_object
+
+            settings = (
+                json.loads(_read(Path(args.settings), 1_000_000), object_pairs_hook=_unique_object)
+                if args.settings
+                else {}
+            )
+            if not isinstance(settings, dict):
+                raise ValueError("experiment settings must be an object")  # noqa: TRY004
+            overrides = {
+                field.name: getattr(args, field.name)
+                for field in fields(ExperimentConfig)
+                if getattr(args, field.name, None) is not None
+            }
+            config = parse_experiment_config({**settings, **overrides})
+            run_experiment(
+                load_constellation(args.scenario),
+                config,
+                args.output,
+                packet_backend=args.packet_backend,
+                network_backend=args.network_backend,
+            )
+            print(f"report: {Path(args.output) / 'index.html'}")
+            return 0
+        except (ValueError, OSError, UnicodeError, RecursionError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    if args.command == "network-replay":
+        try:
+            from openleo.network_replay import NetworkReplayConfig, run_network_replay
+
+            config = NetworkReplayConfig(
+                routing_model=args.routing_model,
+                **{name: getattr(args, name) for name, _, _ in _TRAFFIC_FIELDS},
+            )
+            run_network_replay(args.bundle, config, args.backend, args.output)
+            print(f"network summary: {Path(args.output) / 'network-summary.json'}")
+            return 0
+        except (ValueError, OSError, UnicodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     if args.command == "hydrometeors":
         try:
-            from pathlib import Path
-
             from openleo.hydrometeor_benchmark import run_hydrometeors
 
             result = run_hydrometeors(args.configuration, args.output)
@@ -154,8 +300,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
     if args.command == "packet-replay":
         try:
-            from pathlib import Path
-
             from openleo.packet_replay import ReplayConfig, run_packet_replay
 
             config = ReplayConfig(
@@ -176,8 +320,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
     if args.command == "fidelity-study":
         try:
-            from pathlib import Path
-
             from openleo.fidelity_study import load_fidelity_study, run_fidelity_study
 
             summary = run_fidelity_study(load_fidelity_study(args.study), args.output)
@@ -214,7 +356,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.command == "app":
                 from openleo.app import run_app
 
-                run_app(scenario, port=args.port, open_browser=not args.no_browser)
+                backends = {
+                    name: getattr(args, name)
+                    for name in ("packet_backend", "network_backend")
+                    if getattr(args, name) is not None
+                }
+                run_app(scenario, port=args.port, open_browser=not args.no_browser, **backends)
             else:
                 from openleo.network import add_network
                 from openleo.workbench import write_workbench

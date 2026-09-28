@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "name": "OpenLEO frozen release benchmark",
+  "scenario_path": "../constellations/iridium_global_hydrometeors.json",
+  "frequencies_hz": [12000000000.0, 20000000000.0],
+  "sampling_steps_s": [30, 60],
+  "refinements": [1, 2],
+  "traffic_loads_bps": [10000, 300000],
+  "start_offset_s": 0,
+  "duration_s": 300,
+  "packet_size_bytes": 1200,
+  "queue_packets": 8,
+  "flows_per_direction": 2,
+  "acquisition_delay_s": 0.1,
+  "seed": 1
+}
