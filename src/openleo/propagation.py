@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from openleo.gases import MAX_FREQUENCY_HZ, MIN_FREQUENCY_HZ
+from openleo.hydrometeor_path import HydrometeorConfig, hydrometeor_document, parse_hydrometeors
+from openleo.hydrometeors import CLOUD_SOURCE, RAIN_SOURCE
 from openleo.input import _object, _range, _string
 from openleo.reference_atmosphere import PROFILE_SOURCE
 
@@ -25,6 +27,7 @@ class PropagationConfig:
     model: str
     station_heights_amsl_m: tuple[tuple[str, float], ...]
     refinement: int
+    hydrometeors: HydrometeorConfig | None = None
 
     def __post_init__(self):
         if self.model != "itu_reference":
@@ -49,6 +52,19 @@ class PropagationConfig:
             raise ValueError("propagation.station_heights_amsl_m requires unique station names")
         for name, height in self.station_heights_amsl_m:
             _range(height, f"propagation.station_heights_amsl_m.{name}", 0.0, 10_000.0)
+        if self.hydrometeors is not None:
+            if not isinstance(self.hydrometeors, HydrometeorConfig):
+                raise ValueError("propagation.hydrometeors must be an immutable HydrometeorConfig")
+            if set(names) != {name for name, _ in self.hydrometeors.stations}:
+                raise ValueError("hydrometeors.stations must name every station exactly once")
+            heights = dict(self.station_heights_amsl_m)
+            for name, state in self.hydrometeors.stations:
+                _range(
+                    state.rain_top_height_amsl_m,
+                    f"hydrometeors.{name}.rain_top_height_amsl_m",
+                    heights[name],
+                    20_000,
+                )
 
 
 def parse_propagation(
@@ -58,7 +74,10 @@ def parse_propagation(
     minimum_elevation_deg: float,
 ) -> PropagationConfig:
     """Require independent AMSL heights, not an implicit ellipsoid-height conversion."""
-    data = _object(raw, PROPAGATION_KEYS, "propagation")
+    keys = PROPAGATION_KEYS | (
+        {"hydrometeors"} if isinstance(raw, Mapping) and "hydrometeors" in raw else set()
+    )
+    data = _object(raw, keys, "propagation")
     heights = data["station_heights_amsl_m"]
     if not isinstance(heights, Mapping) or set(heights) != set(station_names):
         raise ValueError("propagation.station_heights_amsl_m must name every station exactly once")
@@ -69,9 +88,14 @@ def parse_propagation(
             for name in station_names
         ),
         refinement=data["refinement"],
+        hydrometeors=parse_hydrometeors(data["hydrometeors"], station_names)
+        if "hydrometeors" in data
+        else None,
     )
     _range(frequency_hz, "propagation carrier_frequency_hz", MIN_FREQUENCY_HZ, MAX_FREQUENCY_HZ)
     _range(minimum_elevation_deg, "propagation minimum_elevation_deg", 5.0, 90.0)
+    if config.hydrometeors is not None:
+        _range(frequency_hz, "hydrometeors carrier_frequency_hz", 1e9, 200e9)
     return config
 
 
@@ -80,6 +104,11 @@ def propagation_document(config: PropagationConfig) -> dict[str, Any]:
         "model": config.model,
         "station_heights_amsl_m": dict(config.station_heights_amsl_m),
         "refinement": config.refinement,
+        **(
+            {"hydrometeors": hydrometeor_document(config.hydrometeors)}
+            if config.hydrometeors is not None
+            else {}
+        ),
     }
 
 
@@ -111,4 +140,35 @@ def propagation_metadata(config: PropagationConfig) -> dict[str, Any]:
         "delay": "Geometric range/c plus bent-path and refractive optical-path excess/c; non-dispersive approximation",
         "visibility_and_doppler": "Geometric elevation mask and geometric range-rate Doppler are unchanged; no refractive Doppler or contact-boundary correction",
         "scope": "Idealized global reference atmosphere, not local weather or observational validation; mean-radius sphere approximates WGS84 local geometry",
+        **(
+            {
+                "hydrometeor_path": {
+                    "cloud": {
+                        **CLOUD_SOURCE,
+                        "method": "Annex 1 equations (11)-(12); KL(f)*L/sin(geometric elevation); column above station",
+                    },
+                    "rain": {
+                        **RAIN_SOURCE,
+                        "method": "Annex 1 equations (1)-(5); specific attenuation k*R^alpha in dB/km times declared uniform-layer path in km",
+                    },
+                    "geometry": "Straight geometric ray through a 6371 km mean-sphere shell from station AMSL height to declared rain-top AMSL height",
+                    "earth_radius_km": 6371.0,
+                    "frequency_domain_ghz": [1.0, 200.0],
+                    "minimum_geometric_elevation_deg": 5.0,
+                    "units": {
+                        "liquid_water_kg_m2": "kg/m^2",
+                        "rain_rate_mm_h": "mm/h",
+                        "rain_top_height_amsl_m": "m AMSL",
+                        "polarization_tilt_deg": "degrees",
+                        "rain_path_length_m": "m",
+                        "rain_specific_attenuation_db_per_km": "dB/km",
+                        "attenuation": "dB",
+                    },
+                    "coupling": "C/N0 = free-space C/N0 - gaseous loss - hydrometeor loss, before SNR and MODCOD selection; fixed receiver noise and gaseous delay",
+                    "scope": "Fixed user-declared states over the run; deterministic sensitivity, no P.618 exceedance statistics, reduction factors or observed weather inference",
+                }
+            }
+            if config.hydrometeors is not None
+            else {}
+        ),
     }

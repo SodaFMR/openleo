@@ -16,6 +16,7 @@ from string import Template
 
 from openleo.adaptation import MODCODS
 from openleo.constellation import parse_constellation
+from openleo.hydrometeor_path import HYDROMETEOR_LINK_FIELDS, rain_layer_path_length_m
 from openleo.input import (
     GROUND_STATION_KEYS,
     _finite_number,
@@ -232,6 +233,27 @@ def _validate_propagation_link(link, scenario) -> None:
         "snr_db": link["cn0_db_hz"] - 10.0 * log10(scenario.radio_link.channel_bandwidth_hz),
         "esn0_db": link["cn0_db_hz"] - 10.0 * log10(scenario.adaptation.symbol_rate_baud),
     }
+    if scenario.propagation.hydrometeors is not None:
+        for field in HYDROMETEOR_LINK_FIELDS:
+            _non_negative_number(link[field], f"link.{field}")
+        name = scenario.stations[link["station_index"]].name
+        height = dict(scenario.propagation.station_heights_amsl_m)[name]
+        station = dict(scenario.propagation.hydrometeors.stations)[name]
+        expected.update(
+            {
+                "rain_path_length_m": rain_layer_path_length_m(
+                    height, station.rain_top_height_amsl_m, link["elevation_deg"]
+                ),
+                "rain_attenuation_db": link["rain_specific_attenuation_db_per_km"]
+                * (link["rain_path_length_m"] / 1000),
+                "hydrometeor_attenuation_db": link["cloud_attenuation_db"]
+                + link["rain_attenuation_db"],
+                "total_atmospheric_attenuation_db": link["gaseous_attenuation_db"]
+                + link["hydrometeor_attenuation_db"],
+                "cn0_db_hz": link["free_space_cn0_db_hz"]
+                - link["total_atmospheric_attenuation_db"],
+            }
+        )
     for field, value in expected.items():
         if not isclose(link[field], value, rel_tol=1e-12, abs_tol=1e-12):
             raise ValueError(
@@ -241,6 +263,8 @@ def _validate_propagation_link(link, scenario) -> None:
 
 def _validate_links(frames, satellite_count, station_count, timestamps, modcod_names, scenario):
     fields = LINK_FIELDS[1:] + (PROPAGATION_LINK_FIELDS if scenario.propagation is not None else ())
+    if scenario.propagation is not None and scenario.propagation.hydrometeors is not None:
+        fields += HYDROMETEOR_LINK_FIELDS
     ground_frames = []
     for index, frame in enumerate(frames):
         ground_frames.append(_ground_edges(frame, satellite_count, station_count))
@@ -391,7 +415,7 @@ def _validate_document(document) -> None:
     try:
         _object(document, DOCUMENT_KEYS, "experiment")
         if (
-            document["schema_version"] not in ("1", "2")
+            document["schema_version"] not in ("1", "2", "3")
             or document["kind"] != "openleo.constellation"
         ):
             raise ValueError("unsupported constellation experiment schema")
@@ -409,8 +433,17 @@ def _validate_document(document) -> None:
         scenario = parse_constellation(
             document["scenario"], Path("experiment.json"), document["provenance"]["scenario_sha256"]
         )
-        if (document["schema_version"] == "2") != (scenario.propagation is not None):
-            raise ValueError("schema_version 2 requires propagation; schema_version 1 excludes it")
+        expected_schema = (
+            "3"
+            if scenario.propagation and scenario.propagation.hydrometeors is not None
+            else "2"
+            if scenario.propagation
+            else "1"
+        )
+        if document["schema_version"] != expected_schema:
+            raise ValueError(
+                "schema_version must match the propagation configuration: 1 free space, 2 gases, 3 declared hydrometeors"
+            )
         modcod_names = _validate_metadata(document, scenario)
         _validate_geometry(satellites, stations, count, scenario)
         ground_frames = _validate_links(
@@ -475,7 +508,9 @@ def _csv(fields: tuple[str, ...], rows) -> str:
 
 def links_csv(document: dict) -> str:
     return _csv(
-        LINK_FIELDS + (PROPAGATION_LINK_FIELDS if document["schema_version"] == "2" else ()),
+        LINK_FIELDS
+        + (PROPAGATION_LINK_FIELDS if document["schema_version"] in ("2", "3") else ())
+        + (HYDROMETEOR_LINK_FIELDS if document["schema_version"] == "3" else ()),
         (
             {"timestamp_utc": timestamp, **link}
             for timestamp, frame in zip(document["timestamps_utc"], document["links"], strict=True)
