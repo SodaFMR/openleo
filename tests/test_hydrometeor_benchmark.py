@@ -62,6 +62,7 @@ def test_invalid_inputs_do_not_create_output(tmp_path, change):
         "[" * 2000 + "]" * 2000,
         "{" * 1_000_001,
     ],
+    ids=["duplicate-keys", "deeply-nested", "oversized"],
 )
 def test_malformed_and_oversized_json_fails_cleanly(tmp_path, raw):
     from openleo.hydrometeor_benchmark import run_hydrometeors

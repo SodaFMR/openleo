@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+import subprocess
 from copy import deepcopy
 from dataclasses import asdict
 from functools import lru_cache
@@ -477,29 +478,40 @@ def test_run_preserves_existing_nonempty_output_before_backend_execution(tmp_pat
     assert sentinel.read_text(encoding="utf-8") == "keep"
 
 
-def test_run_rejects_wrong_backend_handshake_without_creating_output(tmp_path):
+def test_run_rejects_wrong_backend_handshake_without_creating_output(tmp_path, monkeypatch):
     backend = tmp_path / "backend"
-    backend.write_text("#!/bin/sh\necho wrong-version\n", encoding="ascii")
-    backend.chmod(0o700)
+    backend.write_bytes(b"non-executable protocol fixture")
+
+    def wrong_version(command, **kwargs):
+        assert command == [str(backend.resolve()), "--PrintVersion"]
+        return subprocess.CompletedProcess(command, 0, b"wrong-version\n", b"")
+
+    monkeypatch.setattr("openleo.packet_replay.subprocess.run", wrong_version)
     output = tmp_path / "output"
     with pytest.raises(ValueError, match="version handshake"):
         run_packet_replay(_bundle(tmp_path / "bundle"), _run_config(), backend, output)
     assert not output.exists()
 
 
-def test_run_reports_nonzero_backend_failure_without_publishing_output(tmp_path):
+def test_run_reports_nonzero_backend_failure_without_publishing_output(tmp_path, monkeypatch):
     backend = tmp_path / "backend"
-    backend.write_text(
-        "#!/bin/sh\n"
-        'if [ "$1" = --PrintVersion ]; then\n'
-        "  echo 'openleo-ns3-replay/1 ns-3.48'\n"
-        "  exit 0\n"
-        "fi\n"
-        "echo 'backend fixture failed' >&2\n"
-        "exit 7\n",
-        encoding="ascii",
-    )
-    backend.chmod(0o700)
+    backend.write_bytes(b"non-executable protocol fixture")
+
+    def failing_backend(command, **kwargs):
+        assert command[0] == str(backend.resolve())
+        if command[1:] == ["--PrintVersion"]:
+            return subprocess.CompletedProcess(command, 0, b"openleo-ns3-replay/1 ns-3.48\n", b"")
+        assert [argument.split("=", 1)[0] for argument in command[1:]] == [
+            "--trace",
+            "--output",
+            "--intervalNs",
+            "--packetSize",
+            "--queuePackets",
+            "--seed",
+        ]
+        return subprocess.CompletedProcess(command, 7, b"", b"backend fixture failed\n")
+
+    monkeypatch.setattr("openleo.packet_replay.subprocess.run", failing_backend)
     output = tmp_path / "output"
     with pytest.raises(ValueError, match="status 7: backend fixture failed"):
         run_packet_replay(_bundle(tmp_path / "bundle"), _run_config(), backend, output)
