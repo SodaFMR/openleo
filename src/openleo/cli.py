@@ -23,6 +23,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "  openleo constellation CONSTELLATION.json --output DIRECTORY\n"
             "  openleo propagation-study CONSTELLATION.json --output DIRECTORY\n"
             "  openleo fidelity-study STUDY.json --output DIRECTORY\n"
+            "  openleo hydrometeors CONFIG.json --output DIRECTORY\n"
             "  openleo run SCENARIO.json --output DIRECTORY\n"
             "  openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY\n"
             "  openleo gases CONFIG.json --output DIRECTORY\n"
@@ -60,6 +61,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     fidelity_parser.add_argument("study", metavar="STUDY.json")
     fidelity_parser.add_argument("--output", required=True, metavar="DIRECTORY")
+
+    hydro_parser = subparsers.add_parser(
+        "hydrometeors", help="calculate declared rain and cloud attenuation cases"
+    )
+    hydro_parser.add_argument("configuration", metavar="CONFIG.json")
+    hydro_parser.add_argument("--output", required=True, metavar="DIRECTORY")
+
+    packet_parser = subparsers.add_parser(
+        "packet-replay", help="replay one verified ground link through an optional ns-3 backend"
+    )
+    packet_parser.add_argument("bundle", metavar="RUN_DIRECTORY")
+    packet_parser.add_argument("--station", required=True, help="exact station name")
+    packet_parser.add_argument(
+        "--norad", required=True, type=int, help="satellite catalog identifier"
+    )
+    packet_parser.add_argument(
+        "--backend", required=True, help="trusted compiled OpenLEO ns-3 replay executable"
+    )
+    packet_parser.add_argument("--output", required=True, metavar="DIRECTORY")
+    packet_parser.add_argument("--start-offset-s", type=float, default=0)
+    packet_parser.add_argument("--duration-s", type=float, default=60)
+    packet_parser.add_argument("--offered-load-bps", type=float, default=100_000)
+    packet_parser.add_argument("--packet-size-bytes", type=int, default=512)
+    packet_parser.add_argument("--queue-packets", type=int, default=32)
+    packet_parser.add_argument("--seed", type=int, default=1)
 
     run_parser = subparsers.add_parser("run", help="run a scenario and write its artifacts")
     run_parser.add_argument("scenario", metavar="SCENARIO.json", help="scenario input JSON")
@@ -113,6 +139,41 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    if args.command == "hydrometeors":
+        try:
+            from pathlib import Path
+
+            from openleo.hydrometeor_benchmark import run_hydrometeors
+
+            result = run_hydrometeors(args.configuration, args.output)
+            print(f"study: {result['name']}")
+            print(f"report: {Path(args.output) / 'index.html'}")
+            return 0
+        except (ValueError, OSError, UnicodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    if args.command == "packet-replay":
+        try:
+            from pathlib import Path
+
+            from openleo.packet_replay import ReplayConfig, run_packet_replay
+
+            config = ReplayConfig(
+                station_name=args.station,
+                norad_id=args.norad,
+                start_offset_s=args.start_offset_s,
+                duration_s=args.duration_s,
+                offered_load_bps=args.offered_load_bps,
+                packet_size_bytes=args.packet_size_bytes,
+                queue_packets=args.queue_packets,
+                seed=args.seed,
+            )
+            run_packet_replay(args.bundle, config, args.backend, args.output)
+            print(f"packet summary: {Path(args.output) / 'packet-summary.json'}")
+            return 0
+        except (ValueError, OSError, UnicodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     if args.command == "fidelity-study":
         try:
             from pathlib import Path
