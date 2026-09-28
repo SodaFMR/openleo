@@ -1,0 +1,47 @@
+{
+  "schema_version": "1",
+  "name": "itu-p838-3-p840-9-reference-cases",
+  "rain_cases": [
+    {
+      "id": "p838-row-20",
+      "frequency_hz": 14250000000.0,
+      "rain_rate_mm_h": 26.48052,
+      "elevation_deg": 31.076991235657,
+      "polarization_tilt_deg": 0.0
+    },
+    {
+      "id": "p838-row-32",
+      "frequency_hz": 29000000000.0,
+      "rain_rate_mm_h": 26.48052,
+      "elevation_deg": 31.076991235657,
+      "polarization_tilt_deg": 0.0
+    },
+    {
+      "id": "p838-row-60",
+      "frequency_hz": 14250000000.0,
+      "rain_rate_mm_h": 63.62668149,
+      "elevation_deg": 48.2411705405115,
+      "polarization_tilt_deg": 90.0
+    }
+  ],
+  "cloud_cases": [
+    {
+      "id": "p840-row-21",
+      "frequency_hz": 6000000000.0,
+      "liquid_water_kg_m2": 0.8235924623564901,
+      "elevation_deg": 15.0
+    },
+    {
+      "id": "p840-row-22",
+      "frequency_hz": 15000000000.0,
+      "liquid_water_kg_m2": 0.22133683746466337,
+      "elevation_deg": 45.0
+    },
+    {
+      "id": "p840-row-24",
+      "frequency_hz": 45000000000.0,
+      "liquid_water_kg_m2": 0.027846001703619755,
+      "elevation_deg": 90.0
+    }
+  ]
+}

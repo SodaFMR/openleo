@@ -59,6 +59,8 @@ jobs:
 
       - run: uv run python -c "from openleo.fidelity_io import load_fidelity_result; d = load_fidelity_result('runs/fidelity'); assert len(d['runs']) == 18 and len(d['station_metrics']) == 72 and len(d['route_metrics']) == 54"
 
+      - run: uv run openleo hydrometeors examples/atmosphere/hydrometeors_reference.json --output runs/hydrometeors
+
       - name: Prepare a short reference-atmosphere study
         shell: bash
         run: |
@@ -158,12 +160,16 @@ jobs:
               raise SystemExit(f"invalid sdist members: {invalid}")
           if not any(name.endswith("/THIRD_PARTY_NOTICES.md") for name in names):
               raise SystemExit("sdist is missing THIRD_PARTY_NOTICES.md")
+          if any("/adapters/ns3/" in name for name in names):
+              raise SystemExit("GPL adapter must not be bundled in the MIT core sdist")
 
           wheels = list(Path("dist").glob("*.whl"))
           if len(wheels) != 1:
               raise SystemExit(f"expected one wheel, found {len(wheels)}")
           with zipfile.ZipFile(wheels[0]) as wheel:
               wheel_names = wheel.namelist()
+          if any("adapters/ns3/" in name for name in wheel_names):
+              raise SystemExit("GPL adapter must not be bundled in the MIT core wheel")
           required_notices = (
               ".dist-info/licenses/LICENSE",
               ".dist-info/licenses/THIRD_PARTY_NOTICES.md",
@@ -216,6 +222,9 @@ jobs:
           "$core_env/bin/openleo" fidelity-study \
             examples/studies/reference_fidelity.json \
             --output "$core_env/fidelity"
+          "$core_env/bin/openleo" hydrometeors \
+            examples/atmosphere/hydrometeors_reference.json \
+            --output "$core_env/hydrometeors"
 
       - run: uv run openleo run examples/scenarios/iss_cartagena.json --output runs/iss
 
@@ -246,3 +255,36 @@ jobs:
 
       - if: matrix.full-checks
         run: git diff --exit-code -- examples/atmosphere/p676_13_validation.json docs/images/iss-cartagena-pass-overview.svg docs/images/iss-cartagena-sensitivity-overview.svg docs/images/p676-13-specific-attenuation.svg
+
+  packet-replay:
+    name: ns-3.48 / analytical packet replay
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked --group dev
+      - name: Install compiler and build tools
+        run: sudo apt-get update && sudo apt-get install -y g++-14 cmake ninja-build
+      - name: Build the pinned optional backend
+        env:
+          CXX: g++-14
+        run: |
+          git clone --depth 1 --branch ns-3.48 https://gitlab.com/nsnam/ns-3-dev.git "$RUNNER_TEMP/ns-3.48"
+          test "$(git -C "$RUNNER_TEMP/ns-3.48" rev-parse HEAD)" = d2add90b452d600cfb4859baed8e9ea633519447
+          cp adapters/ns3/openleo-replay.cc "$RUNNER_TEMP/ns-3.48/scratch/openleo-replay.cc"
+          cd "$RUNNER_TEMP/ns-3.48"
+          ./ns3 configure --build-profile=release --enable-modules='core;network;internet;point-to-point;applications' --enable-build-version --enable-examples --enable-tests --disable-python-bindings --disable-precompiled-headers --disable-gtk --disable-gsl --disable-werror
+          ./ns3 build openleo-replay -j 2
+          build/scratch/ns3.48-openleo-replay --PrintVersion
+      - name: Verify real packet event semantics
+        run: uv run python tests/ns3_replay_checks.py "$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-replay"
+      - name: Verify Python-to-simulator integration
+        run: OPENLEO_NS3_REPLAY="$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-replay" uv run pytest tests/test_packet_replay.py tests/test_packet_cli.py
+      - name: Replay an archived-orbit model trace
+        run: |
+          uv run openleo constellation examples/constellations/iridium_global_reference.json --output runs/packet-source
+          uv run openleo packet-replay runs/packet-source --station Madrid --norad 42960 --duration-s 300 --backend "$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-replay" --output runs/packets
+          uv run python -c "import json; from pathlib import Path; d=json.loads(Path('runs/packets/packet-summary.json').read_text()); assert len(d['directions']) == 2; assert sum(r['offered_packets'] for r in d['directions']) > 0"

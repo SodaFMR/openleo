@@ -1,5 +1,20 @@
 # Third-Party Notices
 
+## Optional ns-3 adapter
+
+The original integration program `adapters/ns3/openleo-replay.cc` is licensed
+GPL-2.0-only under [its license](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/LICENSE). It links to the separately
+built ns-3.48 simulator, whose upstream license notices must also be preserved
+when distributing compiled software. OpenLEO does not bundle ns-3 source or
+libraries. The Python core remains MIT licensed and communicates with the
+optional executable through files and a subprocess. The adapter source is available
+in the Git repository and excluded from the MIT core wheel and source distribution.
+
+The rain/cloud kernels implement the published ITU-R P.838-3 and P.840-9
+equations in original code. The source PDFs, validation workbook and bulk maps
+are not redistributed; source fingerprints and small numerical reference cases
+are documented in [Hydrometeors](docs/HYDROMETEORS.md).
+
 ## ITU-Rpy
 
 OpenLEO adapts the ITU-R P.676-13 equations and coefficient data from
