@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openleo-link"
-version = "0.5.0"
+version = "0.6.0"
 description = "Reproducible LEO constellation, adaptive-link and routing experiments with a 3D workbench"
 readme = "README.md"
 license = "MIT"
@@ -40,6 +40,7 @@ packages = ["src/openleo"]
 [tool.hatch.build.targets.sdist]
 exclude = [
     "/.*",
+    "/adapters/ns3/",
     "/coverage.xml",
     "/runs/",
     "/dist/",
