@@ -441,7 +441,12 @@ def write_report(path: Path, output_dir: Path, *, figures: bool = False) -> Path
 
 
 def _default_directory_mode() -> int:
-    """0o777 & ~umask: the mode ``mkdir`` gives a new directory (umask is read, then restored)."""
+    """0o777 & ~umask: the mode ``mkdir`` gives a new directory (umask is read, then restored).
+
+    os.umask can only be read by setting it, so for an instant the process umask is 0; a thread
+    that creates a file in that instant gets world-writable permissions. Reports are written from
+    the CLI and from the app's single worker thread, so the window is accepted.
+    """
     umask = os.umask(0)
     os.umask(umask)
     return 0o777 & ~umask

@@ -1,8 +1,10 @@
 """Upgrade of OpenLEO 1.x scenarios to scenario v2 (design spec section 3.4).
 
-The four v1 examples are upgraded, validated by the parser and the JSON Schema, and compared with
-the committed ``examples/v2`` files. The mapping is then checked field by field, independently of
-the implementation, and every error path is held to the pointer-first message style of the parser.
+The four v1 examples (frozen copies of the v1.0.0 files, with their catalogs, under
+``tests/fixtures/v1/examples``) are upgraded, validated by the parser and the JSON Schema, and
+compared with the committed v2 examples in ``examples/constellations`` and ``examples/scenarios``.
+The mapping is then checked field by field, independently of the implementation, and every
+error path is held to the pointer-first message style of the parser.
 """
 
 import copy
@@ -25,23 +27,28 @@ from openleo.scenario.upgrade import upgrade_file, upgrade_v1
 
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES = ROOT / "examples"
-V2_DIR = EXAMPLES / "v2"
+V1_DIR = ROOT / "tests" / "fixtures" / "v1" / "examples"
 V1_EXAMPLES = [
-    *sorted((EXAMPLES / "constellations").glob("*.json")),
-    EXAMPLES / "scenarios" / "iss_cartagena.json",
+    *sorted((V1_DIR / "constellations").glob("*.json")),
+    V1_DIR / "scenarios" / "iss_cartagena.json",
 ]
 SHA = "0" * 64
 VALIDATOR = jsonschema.Draft202012Validator(scenario_json_schema())
-IRIDIUM_V1 = EXAMPLES / "constellations" / "iridium_global_hydrometeors.json"
-ISS_V1 = EXAMPLES / "scenarios" / "iss_cartagena.json"
+IRIDIUM_V1 = V1_DIR / "constellations" / "iridium_global_hydrometeors.json"
+ISS_V1 = V1_DIR / "scenarios" / "iss_cartagena.json"
+
+
+def _home(path: Path) -> Path:
+    """The folder the v1 file sat in at v1.0.0, which now holds its v2 twin."""
+    return EXAMPLES / path.parent.name
 
 
 def _v1(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _upgrade(raw: dict, path: Path = IRIDIUM_V1, output_dir: Path = V2_DIR) -> dict:
-    return upgrade_v1(raw, source_dir=path.parent, output_dir=output_dir)
+def _upgrade(raw: dict, path: Path = IRIDIUM_V1, output_dir: Path | None = None) -> dict:
+    return upgrade_v1(raw, source_dir=path.parent, output_dir=output_dir or path.parent)
 
 
 def _normalised_text(document: dict, output_dir: Path, name: str) -> str:
@@ -95,8 +102,12 @@ def test_upgrade_examples_validate(path: Path) -> None:
 
 @pytest.mark.parametrize("path", V1_EXAMPLES, ids=lambda path: path.stem)
 def test_committed_examples_are_the_normalised_upgrade(path: Path) -> None:
-    committed = V2_DIR / path.name
-    expected = _normalised_text(_upgrade(_v1(path), path), V2_DIR, path.name)
+    # The v1 file is upgraded where it sat in v1.0.0, beside examples/data, and its v2 twin
+    # replaced it there.
+    home = _home(path)
+    committed = home / path.name
+    raw = upgrade_v1(_v1(path), source_dir=home, output_dir=home)
+    expected = _normalised_text(raw, home, path.name)
     assert committed.read_text(encoding="utf-8") == expected
     # They load like any v2 scenario, and their catalogs are the archived files next to them.
     scenario = load_scenario(committed)
@@ -108,27 +119,45 @@ def test_committed_examples_are_the_normalised_upgrade(path: Path) -> None:
 
 
 def test_every_v1_example_has_a_v2_twin_and_only_known_folders_are_added() -> None:
-    assert sorted(path.name for path in V2_DIR.glob("*.json")) == sorted(
-        path.name for path in V1_EXAMPLES
+    assert sorted(path.name for path in V1_EXAMPLES) == sorted(
+        path.name
+        for folder in ("constellations", "scenarios")
+        for path in (EXAMPLES / folder).iterdir()
     )
-    # Besides the twins, the folder holds only the sweep and reproduce example folders (Task 14)
-    # and the performance benchmark scenario (Task 18).
-    assert sorted(path.name for path in V2_DIR.iterdir()) == sorted(
-        [*(path.name for path in V1_EXAMPLES), "performance", "reproduce", "sweeps"]
-    )
-    assert sorted(path.name for path in (V2_DIR / "performance").iterdir()) == [
+    # The v1 study and sensitivity folders are superseded by the sweep and reproduce examples
+    # (Task 14); the performance benchmark scenario arrived with Task 18.
+    assert sorted(path.name for path in EXAMPLES.iterdir()) == [
+        "atmosphere",
+        "constellations",
+        "data",
+        "performance",
+        "reproduce",
+        "scenarios",
+        "sweeps",
+        "validation",
+    ]
+    assert sorted(path.name for path in (EXAMPLES / "performance").iterdir()) == [
         "starlink_1000_24h.json"
     ]
+    # The frozen v1 copies are the v1.0.0 bytes the v1 fixtures were generated from.
+    metadata = json.loads((V1_DIR.parent / "metadata.json").read_text(encoding="utf-8"))
+    recorded = {
+        entry["scenario"]: entry["scenario_sha256"]
+        for entry in metadata["fixture_sources"].values()
+    }
+    for path in V1_EXAMPLES:
+        key = path.relative_to(V1_DIR.parent).as_posix()
+        assert sha256(path.read_bytes()).hexdigest() == recorded[key]
 
 
 @pytest.mark.parametrize("path", V1_EXAMPLES, ids=lambda path: path.stem)
 def test_upgrade_is_deterministic(path: Path, tmp_path: Path) -> None:
     assert upgrade_file(path, None) == upgrade_file(path, None)
     assert upgrade_file(path, tmp_path / "a.json") == upgrade_file(path, tmp_path / "b.json")
-    first = upgrade_v1(_v1(path), source_dir=path.parent, output_dir=V2_DIR)
-    assert first == upgrade_v1(_v1(path), source_dir=path.parent, output_dir=V2_DIR)
+    first = upgrade_v1(_v1(path), source_dir=path.parent, output_dir=path.parent)
+    assert first == upgrade_v1(_v1(path), source_dir=path.parent, output_dir=path.parent)
     assert json.dumps(first) == json.dumps(
-        upgrade_v1(_v1(path), source_dir=path.parent, output_dir=V2_DIR)
+        upgrade_v1(_v1(path), source_dir=path.parent, output_dir=path.parent)
     )
 
 
@@ -201,7 +230,7 @@ def test_a_symlinked_output_gets_paths_relative_to_where_the_text_is_written(
     written = real / "out.json"
     assert written.is_file()
     scenario = load_scenario(written)
-    assert scenario.space_segment.catalogs[0].path == EXAMPLES / "data" / "iss_2026-08-30.csv"
+    assert scenario.space_segment.catalogs[0].path == V1_DIR / "data" / "iss_2026-08-30.csv"
 
 
 def test_a_catalog_on_another_drive_keeps_its_absolute_posix_path(monkeypatch) -> None:
@@ -211,7 +240,7 @@ def test_a_catalog_on_another_drive_keeps_its_absolute_posix_path(monkeypatch) -
     monkeypatch.setattr("openleo.scenario.parse.relpath", across_drives)
     result = _upgrade(_v1(ISS_V1), ISS_V1)
     path = result["space_segment"]["catalogs"][0]["path"]
-    assert path == (EXAMPLES / "data" / "iss_2026-08-30.csv").as_posix()
+    assert path == (V1_DIR / "data" / "iss_2026-08-30.csv").as_posix()
 
 
 # --- every v1 value -------------------------------------------------------------------------------
@@ -436,13 +465,13 @@ def test_every_example_keeps_all_of_its_v1_values(path: Path) -> None:
 
 
 def test_a_constellation_without_propagation_is_free_space_with_no_amsl_heights() -> None:
-    v2 = _upgrade(_v1(EXAMPLES / "constellations" / "iridium_global.json"))
+    v2 = _upgrade(_v1(V1_DIR / "constellations" / "iridium_global.json"))
     assert v2["propagation"] == {"model": "free_space", "refinement": 1, "hydrometeors": None}
     assert [station["height_amsl_m"] for station in v2["ground_segment"]["stations"]] == [None] * 4
 
 
 def test_amsl_heights_follow_the_station_names_not_their_order() -> None:
-    raw = _v1(EXAMPLES / "constellations" / "iridium_global_reference.json")
+    raw = _v1(V1_DIR / "constellations" / "iridium_global_reference.json")
     raw["propagation"]["station_heights_amsl_m"] = dict(
         reversed(raw["propagation"]["station_heights_amsl_m"].items())
     )
@@ -609,7 +638,7 @@ def test_the_example_catalogs_decide_synthetic_rf() -> None:
 
 def _pointer_error(raw, pointer: str, path: Path = IRIDIUM_V1, source_dir: Path | None = None):
     with pytest.raises(ValueError) as caught:
-        upgrade_v1(raw, source_dir=source_dir or path.parent, output_dir=V2_DIR)
+        upgrade_v1(raw, source_dir=source_dir or path.parent, output_dir=path.parent)
     message = str(caught.value)
     assert type(caught.value) is ValueError
     assert message.startswith(pointer), message
@@ -716,13 +745,13 @@ def test_wrong_keys_are_refused_with_their_pointer(edit, pointer: str) -> None:
 def test_malformed_v1_documents_are_refused_with_a_pointer(edit, start: str) -> None:
     raw = edit(_v1(IRIDIUM_V1))
     with pytest.raises(ValueError) as caught:
-        upgrade_v1(raw, source_dir=IRIDIUM_V1.parent, output_dir=V2_DIR)
+        upgrade_v1(raw, source_dir=IRIDIUM_V1.parent, output_dir=IRIDIUM_V1.parent)
     assert type(caught.value) is ValueError
     assert str(caught.value).startswith(start), str(caught.value)
 
 
 def test_a_v2_document_is_not_upgraded() -> None:
-    raw = json.loads((V2_DIR / "iss_cartagena.json").read_text(encoding="utf-8"))
+    raw = json.loads((EXAMPLES / "scenarios" / "iss_cartagena.json").read_text(encoding="utf-8"))
     message = _pointer_error(raw, "/schema")
     assert "openleo.scenario/2" in message
     assert "nothing to upgrade" in message
@@ -732,7 +761,7 @@ def test_a_single_pass_bandwidth_that_cannot_give_a_default_symbol_rate_is_refus
     for bad in (0, -1.0, "wide", None, True, float("inf"), 10**400):
         raw = _put(_v1(ISS_V1), bad, "radio_link", "channel_bandwidth_hz")
         with pytest.raises(ValueError, match="^/radio_link/channel_bandwidth_hz="):
-            upgrade_v1(raw, source_dir=ISS_V1.parent, output_dir=V2_DIR)
+            upgrade_v1(raw, source_dir=ISS_V1.parent, output_dir=ISS_V1.parent)
 
 
 def test_a_missing_catalog_is_named_with_the_reason(tmp_path: Path) -> None:
@@ -893,4 +922,4 @@ def test_upgrade_file_rejects_repeated_keys(tmp_path: Path) -> None:
 
 def test_upgrade_file_refuses_a_v2_scenario() -> None:
     with pytest.raises(ValueError, match="^/schema: .*nothing to upgrade"):
-        upgrade_file(V2_DIR / "iss_cartagena.json", None)
+        upgrade_file(EXAMPLES / "scenarios" / "iss_cartagena.json", None)

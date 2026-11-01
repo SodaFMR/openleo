@@ -3,7 +3,9 @@
 The pinned CelesTrak Starlink catalog (``examples/data/starlink_2026-11-01.csv``), events on,
 ``itu_reference`` propagation, no network, one worker: under five minutes on the development
 machine, within the default memory budget, with the convergence gate passed. Run it with
-``uv run pytest -m slow tests/test_performance.py``.
+``uv run pytest -m benchmark tests/test_performance.py``. CI's slow job deselects it
+(``-m "slow and not benchmark"``): the bound is set for the development machine, not for shared
+CI runners.
 """
 
 import time
@@ -15,11 +17,12 @@ from openleo.engine.run import run
 from openleo.scenario import load_scenario
 
 ROOT = Path(__file__).resolve().parents[1]
-SCENARIO = ROOT / "examples" / "v2" / "performance" / "starlink_1000_24h.json"
+SCENARIO = ROOT / "examples" / "performance" / "starlink_1000_24h.json"
 BOUND_S = 300.0
 
 
 @pytest.mark.slow
+@pytest.mark.benchmark
 def test_starlink_1000_24h_under_five_minutes():
     scenario = load_scenario(SCENARIO)
 

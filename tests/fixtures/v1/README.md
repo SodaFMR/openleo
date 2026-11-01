@@ -18,13 +18,14 @@ every fixture, the SHA-256 of each source scenario, and `calc_outputs` (see belo
 
 ## Regenerating
 
-Run the generator inside an environment that has the **v1.0.0** `openleo` installed. It
-refuses to run otherwise (it asserts the installed `openleo-link` version is `1.0.0`, that
-the checkout is exactly tag `v1.0.0`, and that tracked files are unmodified).
+The generator runs **only inside a v1.0.0 checkout**: it imports the v1 engine, which the 2.0
+code base no longer contains, and reads the v1 example files at their v1.0.0 paths. It refuses
+to run otherwise (it asserts the installed `openleo-link` version is `1.0.0`, that the checkout
+is exactly tag `v1.0.0`, and that tracked files are unmodified).
 
 ```bash
-# from the 2.0 worktree (path below is the one used for the committed files)
-W=/home/soda/space/openleo-private/worktrees/v2-s1-engine
+# W is a 2.0 checkout (the destination of the fixtures)
+W=<path-to-the-2.0-checkout>
 
 git -C <openleo-main-checkout> worktree add --detach /tmp/openleo-v1 v1.0.0   # once; read-only
 cd /tmp/openleo-v1
@@ -118,3 +119,16 @@ openleo hydrometeors examples/atmosphere/hydrometeors_reference.json --output <D
 
 Their output does not depend on the output path (checked by running them from different
 directories).
+
+## Other frozen v1 inputs
+
+* `examples/`: byte copies of the v1.0.0 example inputs that the 2.0 tree replaced:
+  `constellations/*.json` and `scenarios/iss_cartagena.json` (the four source scenarios above;
+  their SHA-256 equal `fixture_sources` in `metadata.json`), `studies/*.json` and
+  `sensitivity/iss_cartagena_oat.json` (the v1 study configurations the sweep examples
+  replace), and `data/*.csv` (the two archived catalogs, so that the v1 files resolve their
+  `../data/...` catalog paths). The upgrade, explain, CLI and sweep tests read them.
+* `isl_edges.json`: v1.0.0 `openleo.network._frame(positions, (), NetworkConfig("A", "B",
+  3e6, 1.0, 1.0), 72, 69, 70)["isl_edges"]` for the seeded positions of
+  `tests/engine/test_routing.py::test_isl_edges_are_v1_edges_at_range_and_tangency_thresholds`,
+  computed in a v1.0.0 checkout.

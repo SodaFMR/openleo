@@ -1,6 +1,6 @@
 """One-command, fail-closed reproduction of numerical and native packet evidence.
 
-The frozen benchmark is a sweep spec (``examples/v2/reproduce/release_benchmark.json``) with a
+The frozen benchmark is a sweep spec (``examples/reproduce/release_benchmark.json``) with a
 ``replay.network`` block. ``run_reproduce`` verifies the published orbit reference, runs the
 sweep with native network replays and publishes the evidence, or fails and publishes nothing:
 

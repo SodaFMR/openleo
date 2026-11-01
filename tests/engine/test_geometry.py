@@ -19,7 +19,6 @@ from openleo.scenario.model import CatalogSource, SpaceSegment, Station
 
 ROOT = Path(__file__).resolve().parents[2]
 V1_FIXTURES = ROOT / "tests" / "fixtures" / "v1"
-V2_EXAMPLES = ROOT / "examples" / "v2"
 ISS_CSV = ROOT / "examples" / "data" / "iss_2026-08-30.csv"
 FIXTURE_NAMES = (
     "iss_cartagena",
@@ -28,6 +27,13 @@ FIXTURE_NAMES = (
     "iridium_global_hydrometeors",
 )
 TIMESCALE = load.timescale(builtin=True)
+
+
+def _example_path(name: str) -> Path:
+    """A shipped example scenario: the ISS single pass or one of the Iridium constellations."""
+    folder = "scenarios" if name == "iss_cartagena" else "constellations"
+    return ROOT / "examples" / folder / f"{name}.json"
+
 
 # v1-equivalence tolerances (plan, Global Constraints).
 ANGLE_DEG = 1e-8
@@ -101,7 +107,7 @@ def test_geometry_matches_v1_fixture(name: str) -> None:
     from openleo.engine.timegrid import build_grid, utc_text
 
     fixture = _v1_fixture(name)
-    scenario = load_scenario(V2_EXAMPLES / f"{name}.json")
+    scenario = load_scenario(_example_path(name))
     orbits = load_catalogs(scenario.space_segment, TIMESCALE)
     grid = build_grid(scenario.time)
     stations = scenario.ground_segment.stations
@@ -151,7 +157,7 @@ def test_topocentric_matches_the_v1_skyfield_chain_off_grid() -> None:
     from openleo.engine.geometry import Geometry
     from openleo.engine.timegrid import skyfield_times
 
-    scenario = load_scenario(V2_EXAMPLES / "iridium_global.json")
+    scenario = load_scenario(ROOT / "examples" / "constellations" / "iridium_global.json")
     orbits = load_catalogs(scenario.space_segment, TIMESCALE)
     start = scenario.time.start_utc
     stations = scenario.ground_segment.stations

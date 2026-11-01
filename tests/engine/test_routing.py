@@ -5,7 +5,6 @@ import gzip
 import json
 import math
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 
@@ -21,12 +20,18 @@ from openleo.scenario.model import ROUTE_MODELS, IslConfig, NetworkConfig, Route
 
 ROOT = Path(__file__).resolve().parents[2]
 V1_FIXTURES = ROOT / "tests" / "fixtures" / "v1"
-V2_EXAMPLES = ROOT / "examples" / "v2"
+V1_ISL_EDGES = V1_FIXTURES / "isl_edges.json"
 CONSTELLATION_FIXTURES = (
     "iridium_global",
     "iridium_global_reference",
     "iridium_global_hydrometeors",
 )
+
+
+def _example_path(name: str) -> Path:
+    """A shipped example scenario: the ISS single pass or one of the Iridium constellations."""
+    folder = "scenarios" if name == "iss_cartagena" else "constellations"
+    return ROOT / "examples" / folder / f"{name}.json"
 
 
 def _graph(size, edges):
@@ -242,8 +247,6 @@ def test_routes_hold_the_result_at_each_breakpoint_and_move_satellites():
 
 
 def test_isl_edges_are_v1_edges_at_range_and_tangency_thresholds():
-    from openleo import network
-
     rng = np.random.default_rng(11)
     directions = rng.normal(size=(60, 3))
     directions /= np.linalg.norm(directions, axis=1)[:, None]
@@ -262,10 +265,12 @@ def test_isl_edges_are_v1_edges_at_range_and_tangency_thresholds():
         ]
     )
     positions = np.concatenate([crafted, shell])
-    settings = network.NetworkConfig("A", "B", 3_000_000.0, 1.0, 1.0)
-    expected = network._frame(tuple(map(tuple, positions.tolist())), (), settings, 72, 69, 70)
+    # Frozen oracle: v1.0.0 ``openleo.network._frame(positions, (), NetworkConfig("A", "B",
+    # 3e6, 1.0, 1.0), 72, 69, 70)["isl_edges"]`` on these positions, run in a v1.0.0 checkout.
+    expected = json.loads(V1_ISL_EDGES.read_text(encoding="utf-8"))
     edges = routing._isl_edges(positions, 3_000_000.0)
-    assert [list(edge) for edge in edges] == expected["isl_edges"]
+    assert len(expected) == 92
+    assert [list(edge) for edge in edges] == expected
     assert (0, 1) in {edge[:2] for edge in edges}
     assert (2, 3) not in {edge[:2] for edge in edges}
     assert (0, 4) not in {edge[:2] for edge in edges}
@@ -296,8 +301,6 @@ def test_route_inputs_are_validated():
 
 
 def test_route_changes_ignore_outages():
-    from openleo import network
-
     a, b = (4, 0, 5), (4, 1, 5)
     routes = [a, b, None, a, a, b]  # one change, then an outage that hides a change
     intervals = [
@@ -316,17 +319,14 @@ def test_route_changes_ignore_outages():
     assert metrics["connected_fraction"] == 50.0 / 60.0
     assert metrics["integrated_bottleneck_bits"] == 2500.0
     assert metrics["mean_delay_connected_s"] == pytest.approx(0.01, rel=1e-15)
-    # v1's rule on consecutive samples gives the same count.
-    start = datetime(2026, 9, 10, 12, tzinfo=UTC)
-    frames = [
-        {
-            model: {"nodes": list(nodes), "bottleneck_bps": 50.0} if nodes else None
-            for model in network.ROUTE_MODELS
-        }
-        for nodes in routes
-    ]
-    v1 = network._summary(frames, tuple(start + timedelta(seconds=10 * k) for k in range(6)))
-    assert v1["minimum_delay"]["route_changes"] == metrics["route_changes"]
+    # v1's rule on consecutive samples (v1.0.0 ``openleo.network._summary``): count node changes
+    # between consecutive samples that are both connected.
+    v1_changes = sum(
+        first != second
+        for first, second in pairwise(routes)
+        if first is not None and second is not None
+    )
+    assert v1_changes == metrics["route_changes"]
 
 
 def test_never_connected_pair():
@@ -479,7 +479,7 @@ def _grid_routes(name: str):
     from openleo.engine.timegrid import build_grid, builtin_timescale
     from openleo.scenario import load_scenario
 
-    scenario = load_scenario(V2_EXAMPLES / f"{name}.json")
+    scenario = load_scenario(_example_path(name))
     scenario = replace(
         scenario, time=replace(scenario.time, events=replace(scenario.time.events, enabled=False))
     )

@@ -9,7 +9,7 @@ import pytest
 from openleo.engine.run import run, save_run
 from openleo.scenario import load_scenario, parse_scenario, scenario_document
 
-EXAMPLES = Path("examples/v2")
+EXAMPLES = Path("examples/constellations")
 HYDROMETEORS = EXAMPLES / "iridium_global_hydrometeors.json"
 GLOBAL = EXAMPLES / "iridium_global.json"
 V1_HYDROMETEORS = Path("tests/fixtures/v1/iridium_global_hydrometeors.json.gz")

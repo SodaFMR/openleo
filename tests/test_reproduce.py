@@ -12,10 +12,9 @@ from openleo.results import verify_manifest
 from openleo.scenario import load_scenario, scenario_document
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLES = ROOT / "examples" / "v2"
 REFERENCE = ROOT / "examples" / "validation" / "vallado_06251.json"
-GLOBAL = EXAMPLES / "iridium_global.json"
-CONFIG = EXAMPLES / "reproduce" / "release_benchmark.json"
+GLOBAL = ROOT / "examples" / "constellations" / "iridium_global.json"
+CONFIG = ROOT / "examples" / "reproduce" / "release_benchmark.json"
 NETWORK = {"loads_bps": [10000, 300000], "packet_size_bytes": 1200, "queue_packets": 8}
 
 
@@ -152,7 +151,7 @@ def test_native_evidence_contract():
 
 def test_example_release_benchmark_is_the_release_matrix():
     spec = sweep.load_sweep(CONFIG)
-    matrix = sweep.load_sweep(EXAMPLES / "sweeps" / "release_matrix.json")
+    matrix = sweep.load_sweep(ROOT / "examples" / "sweeps" / "release_matrix.json")
     assert spec == matrix | {"base_scenario_path": spec["base_scenario_path"]}
     assert spec["mode"] == "grid"
     assert spec["replay"]["network"] is not None

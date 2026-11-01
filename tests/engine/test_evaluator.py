@@ -31,7 +31,6 @@ from openleo.scenario.model import Terminal
 
 ROOT = Path(__file__).resolve().parents[2]
 V1_FIXTURES = ROOT / "tests" / "fixtures" / "v1"
-V2_EXAMPLES = ROOT / "examples" / "v2"
 FIXTURE_NAMES = (
     "iss_cartagena",
     "iridium_global",
@@ -41,6 +40,13 @@ FIXTURE_NAMES = (
 TIMESCALE = load.timescale(builtin=True)
 # Station 1 of the Iridium examples; it sees satellite 0 in the window (Madrid does not).
 TROMSO = 1
+
+
+def _example_path(name: str) -> Path:
+    """A shipped example scenario: the ISS single pass or one of the Iridium constellations."""
+    folder = "scenarios" if name == "iss_cartagena" else "constellations"
+    return ROOT / "examples" / folder / f"{name}.json"
+
 
 # v1-equivalence tolerances (spec section 11.1; excess delay as amended by the Task 2 ruling).
 ANGLE_DEG = 1e-8
@@ -125,7 +131,7 @@ def _engine(name: str):
     from openleo.engine.geometry import Geometry
     from openleo.engine.timegrid import build_grid
 
-    scenario = load_scenario(V2_EXAMPLES / f"{name}.json")
+    scenario = load_scenario(_example_path(name))
     orbits = load_catalogs(scenario.space_segment, TIMESCALE)
     grid = build_grid(scenario.time)
     geometry = Geometry(orbits, scenario.ground_segment.stations, TIMESCALE, grid.start_utc)
@@ -346,7 +352,7 @@ def test_evaluate_off_grid_matches_the_v1_link_budget(refinement: int) -> None:
     from openleo.engine.evaluator import LinkEvaluator
     from openleo.engine.geometry import Geometry
 
-    base = load_scenario(V2_EXAMPLES / "iridium_global_hydrometeors.json")
+    base = load_scenario(ROOT / "examples" / "constellations" / "iridium_global_hydrometeors.json")
     stations = base.ground_segment.stations
     stations = (*stations[:3], replace(stations[3], terminal="dish"))
     scenario = replace(

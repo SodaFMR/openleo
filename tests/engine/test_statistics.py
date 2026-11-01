@@ -16,7 +16,6 @@ from openleo.physics.adaptation import MODCODS
 
 ROOT = Path(__file__).resolve().parents[2]
 V1_FIXTURES = ROOT / "tests" / "fixtures" / "v1"
-V2_EXAMPLES = ROOT / "examples" / "v2"
 CONSTELLATION_FIXTURES = (
     "iridium_global",
     "iridium_global_reference",
@@ -24,6 +23,12 @@ CONSTELLATION_FIXTURES = (
 )
 RATE = {m.name: 1e6 * m.efficiency_bits_per_symbol for m in MODCODS}
 Q14, Q12 = RATE["QPSK 1/4"], RATE["QPSK 1/2"]
+
+
+def _example_path(name: str) -> Path:
+    """A shipped example scenario: the ISS single pass or one of the Iridium constellations."""
+    folder = "scenarios" if name == "iss_cartagena" else "constellations"
+    return ROOT / "examples" / folder / f"{name}.json"
 
 
 def _pass(start, end, *, truncated_start=False, truncated_end=False, peak=45.0):
@@ -260,7 +265,7 @@ def _grid_left_hold(name: str):
     from openleo.engine.timegrid import build_grid, builtin_timescale
     from openleo.scenario import load_scenario
 
-    scenario = load_scenario(V2_EXAMPLES / f"{name}.json")
+    scenario = load_scenario(_example_path(name))
     scenario = replace(
         scenario, time=replace(scenario.time, events=replace(scenario.time.events, enabled=False))
     )

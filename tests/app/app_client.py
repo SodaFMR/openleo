@@ -8,7 +8,7 @@ from pathlib import Path
 from threading import Thread
 
 ROOT = Path(__file__).resolve().parents[2]
-EXAMPLE = ROOT / "examples" / "v2" / "iss_cartagena.json"
+EXAMPLE = ROOT / "examples" / "scenarios" / "iss_cartagena.json"
 CATALOG = ROOT / "examples" / "data" / "iss_2026-08-30.csv"
 EIRP_SPEC = {
     "schema": "openleo.sweep/2",

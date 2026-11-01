@@ -26,7 +26,7 @@ from openleo.app.server import run_app
 from openleo.calc.gases import load_gases_benchmark, run_gases_benchmark, write_gases_result
 from openleo.calc.hydrometeors import run_hydrometeors
 from openleo.engine.catalogs import load_catalogs
-from openleo.engine.run import _check_step, save_run
+from openleo.engine.run import check_step, save_run
 from openleo.engine.run import run as run_scenario
 from openleo.engine.timegrid import builtin_timescale
 from openleo.export import export_results
@@ -215,7 +215,7 @@ def _parser() -> argparse.ArgumentParser:
         "--artifact-limit",
         type=float,
         default=None,
-        metavar="MB",
+        metavar="MiB",
         help=f"disk limit for the app's results, in MiB (default {DEFAULT_ARTIFACT_LIMIT_BYTES // MIB})",
     )
     return parser
@@ -262,7 +262,7 @@ def _scenario_validate(args) -> int:
     ):
         orbits = load_catalogs(scenario.space_segment, builtin_timescale())
         if scenario.time.events.enabled:
-            _check_step(scenario, orbits)
+            check_step(scenario, orbits)
     else:
         note = " (catalog not checked: a catalog file is not readable, so the event step was not)"
     print(f"valid: {scenario.name}{note}")

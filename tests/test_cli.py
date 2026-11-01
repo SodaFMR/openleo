@@ -17,13 +17,13 @@ from openleo.results import load_results
 from openleo.scenario import load_scenario, parse_scenario, scenario_document
 
 ROOT = Path(__file__).resolve().parents[1]
-ISS = ROOT / "examples" / "v2" / "iss_cartagena.json"
-GLOBAL = ROOT / "examples" / "v2" / "iridium_global.json"
-V1_SCENARIO = ROOT / "examples" / "scenarios" / "iss_cartagena.json"
+ISS = ROOT / "examples" / "scenarios" / "iss_cartagena.json"
+GLOBAL = ROOT / "examples" / "constellations" / "iridium_global.json"
+V1_SCENARIO = ROOT / "tests" / "fixtures" / "v1" / "examples" / "scenarios" / "iss_cartagena.json"
 REFERENCE = ROOT / "examples" / "validation" / "vallado_06251.json"
 GASES = ROOT / "examples" / "atmosphere" / "p676_13_validation.json"
 HYDROMETEORS = ROOT / "examples" / "atmosphere" / "hydrometeors_reference.json"
-BENCHMARK = ROOT / "examples" / "v2" / "reproduce" / "release_benchmark.json"
+BENCHMARK = ROOT / "examples" / "reproduce" / "release_benchmark.json"
 
 
 def _small(path: Path, tmp_path: Path, **changes) -> Path:

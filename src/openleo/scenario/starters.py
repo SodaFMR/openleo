@@ -142,7 +142,7 @@ def _constellation() -> dict[str, Any]:
         "stations through the ITU-R reference atmosphere, with routing between them. The radio "
         "block is declared, not Iridium's real RF, so synthetic_rf is true.",
         more="Declare clouds and rain with propagation.hydrometeors, as in "
-        "examples/v2/iridium_global_hydrometeors.json.",
+        "examples/constellations/iridium_global_hydrometeors.json.",
         name="constellation-starter",
         time={
             "start_utc": "2026-09-10T12:00:00Z",

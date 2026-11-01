@@ -31,8 +31,7 @@ from openleo._validation import (
     _unique_object,
     _url,
 )
-from openleo.engine.catalogs import _epoch, load_catalog
-from openleo.model import OrbitSource, Provenance
+from openleo.engine.catalogs import OrbitSource, Provenance, _epoch, load_catalog
 
 _UNITS = {"position": "km", "velocity": "km/s", "elapsed_time": "s"}
 _SOURCE_FIELDS = frozenset(

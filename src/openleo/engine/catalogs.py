@@ -4,10 +4,10 @@
 errors start with the JSON pointer of the catalog (``/space_segment/catalogs/<N>``) or of the
 selected NORAD id.
 
-The v1 loaders ``load_catalog`` and ``load_orbit`` moved here from ``openleo.catalog`` and
-``openleo.orbit``, which re-export them until the v1 modules are removed. They keep the v1
-limits (``V1_MAX_SATELLITES`` records and ``V1_MAX_CATALOG_BYTES`` per file) and v1's order
-(numeric NORAD id); the 2.0 engine keeps catalog then row order.
+``load_catalog`` is OpenLEO v1.0.0's single-file loader, which orbit verification still uses
+(``openleo.verify.orbit``) with an ``OrbitSource``. It keeps the v1 limits
+(``V1_MAX_SATELLITES`` records and ``V1_MAX_CATALOG_BYTES`` per file) and v1's order (numeric
+NORAD id); the 2.0 engine keeps catalog then row order.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from hashlib import sha256
 from io import StringIO
 from itertools import islice
 from math import isfinite, tau
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sgp4.api import SGP4_ERRORS
@@ -28,9 +29,7 @@ from openleo._validation import _finite_number, _positive_number, _range, _strin
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from pathlib import Path
 
-    from openleo.model import OrbitSource
     from openleo.scenario.model import SpaceSegment
 
 REQUIRED_OMM_FIELDS = frozenset(
@@ -57,9 +56,27 @@ REQUIRED_OMM_FIELDS = frozenset(
 # 2.0 limits: per catalog file, and for the satellites a run simulates.
 MAX_SATELLITES = 20_000
 MAX_CATALOG_BYTES = 10_000_000
-# v1 limits, kept by the v1 loaders below.
+# v1 limits, kept by load_catalog below.
 V1_MAX_SATELLITES = 128
 V1_MAX_CATALOG_BYTES = 1_000_000
+
+
+@dataclass(frozen=True, slots=True)
+class Provenance:
+    """Where an archived catalog file came from, and its expected SHA-256 (lowercase hex)."""
+
+    source_url: str
+    retrieved_at_utc: datetime
+    terms_url: str
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class OrbitSource:
+    """One archived GP CSV file and its provenance, as ``load_catalog`` reads it."""
+
+    path: Path
+    provenance: Provenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,48 +162,6 @@ def load_catalog(source: OrbitSource, timescale) -> tuple[LoadedOrbit, ...]:
         duplicate = next(value for index, value in enumerate(ids) if value in ids[:index])
         raise ValueError(f"{source.path}: invalid GP CSV: duplicate NORAD_CAT_ID {duplicate}")
     return tuple(sorted(catalog, key=lambda orbit: orbit.satellite.model.satnum))
-
-
-def load_orbit(source: OrbitSource, timescale) -> LoadedOrbit:
-    """v1: load exactly one GP record, as the single-pass simulation does."""
-    try:
-        with source.path.open("rb") as orbit_file:
-            raw = orbit_file.read(V1_MAX_CATALOG_BYTES + 1)
-    except OSError as exc:
-        raise ValueError(f"{source.path}: could not read GP CSV: {exc}") from exc
-    if len(raw) > V1_MAX_CATALOG_BYTES:
-        raise ValueError(f"{source.path}: GP CSV exceeds {V1_MAX_CATALOG_BYTES} bytes")
-
-    actual_sha256 = sha256(raw).hexdigest()
-    if actual_sha256 != source.provenance.sha256:
-        raise ValueError(
-            f"{source.path}: SHA-256 mismatch: expected {source.provenance.sha256}, "
-            f"got {actual_sha256}"
-        )
-
-    try:
-        text = raw.decode("utf-8")
-        rows = tuple(islice(csv.DictReader(StringIO(text, newline="")), 2))
-        if len(rows) != 1:
-            raise ValueError(f"expected exactly one GP record, got {len(rows)}")
-        row = rows[0]
-        missing = REQUIRED_OMM_FIELDS - set(row)
-        if missing:
-            raise ValueError(f"missing required GP fields: {', '.join(sorted(missing))}")
-        satellite = EarthSatellite.from_omm(timescale, row)
-    except UnicodeDecodeError as exc:
-        raise ValueError(f"{source.path}: GP CSV must be UTF-8") from exc
-    except (KeyError, TypeError, ValueError) as exc:
-        message = str(exc) or exc.__class__.__name__
-        if str(source.path) in message:
-            raise
-        raise ValueError(f"{source.path}: invalid GP CSV: {message}") from exc
-
-    return LoadedOrbit(
-        satellite=satellite,
-        epoch_utc=satellite.epoch.utc_datetime().astimezone(UTC),
-        actual_sha256=actual_sha256,
-    )
 
 
 def _read_catalog(

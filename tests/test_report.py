@@ -15,8 +15,8 @@ from openleo.results import load_results, manifest_digest, read_parquet, verify_
 from openleo.scenario import load_scenario, parse_scenario, scenario_document
 
 ROOT = Path(__file__).resolve().parents[1]
-GLOBAL = ROOT / "examples" / "v2" / "iridium_global.json"
-ISS = ROOT / "examples" / "v2" / "iss_cartagena.json"
+GLOBAL = ROOT / "examples" / "constellations" / "iridium_global.json"
+ISS = ROOT / "examples" / "scenarios" / "iss_cartagena.json"
 
 
 @pytest.fixture(scope="module")

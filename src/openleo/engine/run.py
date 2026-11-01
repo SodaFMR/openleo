@@ -647,7 +647,8 @@ def _gated(ctx: _Context, pair_values, station_values, route_values) -> dict[str
 # --- run -----------------------------------------------------------------------------------------
 
 
-def _check_step(scenario: Scenario, orbits) -> None:
+def check_step(scenario: Scenario, orbits) -> None:
+    """Refuse a step above P_min/8 with events on (spec 6.1); the CLI validate check uses it."""
     period_s = minimum_period_s(orbits)
     limit_s = period_s / 8.0
     step_s = scenario.time.step_s
@@ -706,7 +707,7 @@ def run(
     orbits = load_catalogs(scenario.space_segment, timescale)
     record_counts = _record_counts(scenario.space_segment.catalogs)
     if scenario.time.events.enabled:
-        _check_step(scenario, orbits)
+        check_step(scenario, orbits)
     stations = scenario.ground_segment.stations
     estimate = estimate_memory_bytes(
         len(orbits), len(stations), grid.offsets_s.size, network=scenario.network is not None

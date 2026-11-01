@@ -204,16 +204,3 @@ def test_minimum_period_is_two_pi_over_the_largest_mean_motion() -> None:
     )
     with pytest.raises(ValueError, match="at least one"):
         minimum_period_s(())
-
-
-def test_v1_modules_reexport_the_moved_code() -> None:
-    from openleo import catalog, orbit
-    from openleo.engine import catalogs
-
-    assert catalog.load_catalog is catalogs.load_catalog
-    assert orbit.load_orbit is catalogs.load_orbit
-    assert orbit.LoadedOrbit is catalogs.LoadedOrbit
-    assert orbit.REQUIRED_OMM_FIELDS is catalogs.REQUIRED_OMM_FIELDS
-    # v1 keeps its own limits until the v1 modules are removed.
-    assert catalog.MAX_SATELLITES == 128
-    assert orbit.MAX_ORBIT_BYTES == 1_000_000

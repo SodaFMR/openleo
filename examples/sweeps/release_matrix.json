@@ -1,0 +1,22 @@
+{
+  "schema": "openleo.sweep/2",
+  "name": "OpenLEO frozen release benchmark",
+  "base_scenario": "../constellations/iridium_global_hydrometeors.json",
+  "mode": "grid",
+  "parameters": [
+    {"path": "/radio/carrier_frequency_hz", "values": [12000000000.0, 20000000000.0]},
+    {"path": "/time/step_s", "values": [30, 60]},
+    {"path": "/propagation/refinement", "values": [1, 2]}
+  ],
+  "window": {"start_offset_s": 0, "duration_s": 300},
+  "replay": {
+    "network": {
+      "loads_bps": [10000, 300000],
+      "packet_size_bytes": 1200,
+      "queue_packets": 8,
+      "flows_per_direction": 2,
+      "acquisition_delay_s": 0.1,
+      "seed": 1
+    }
+  }
+}

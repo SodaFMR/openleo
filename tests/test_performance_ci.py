@@ -1,6 +1,6 @@
 """Performance acceptance, CI variant (design spec section 11.6), and the benchmark scenario.
 
-The 1,000-satellite, 24-hour benchmark is ``tests/test_performance.py`` (``pytest -m slow``).
+The 1,000-satellite, 24-hour benchmark is ``tests/test_performance.py`` (``pytest -m benchmark``).
 This variant runs its first 100 satellites for 2 hours with a generous bound on every CI
 machine, so a gross regression of the engine's speed fails the default suite.
 """
@@ -17,7 +17,7 @@ from openleo.engine.run import run
 from openleo.scenario import load_scenario
 
 ROOT = Path(__file__).resolve().parents[1]
-SCENARIO = ROOT / "examples" / "v2" / "performance" / "starlink_1000_24h.json"
+SCENARIO = ROOT / "examples" / "performance" / "starlink_1000_24h.json"
 CATALOG = ROOT / "examples" / "data" / "starlink_2026-11-01.csv"
 CI_BOUND_S = 60.0
 

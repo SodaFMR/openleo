@@ -15,11 +15,12 @@ from openleo.results import load_results, verify_manifest
 from openleo.scenario import load_scenario, scenario_document
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLES = ROOT / "examples" / "v2"
 V1_FIXTURES = ROOT / "tests" / "fixtures" / "v1"
-ISS = EXAMPLES / "iss_cartagena.json"
-GLOBAL = EXAMPLES / "iridium_global.json"
-HYDROMETEORS = EXAMPLES / "iridium_global_hydrometeors.json"
+# Frozen copies of the v1.0.0 study configurations the sweep examples replace.
+V1_STUDIES = V1_FIXTURES / "examples" / "studies"
+ISS = ROOT / "examples" / "scenarios" / "iss_cartagena.json"
+GLOBAL = ROOT / "examples" / "constellations" / "iridium_global.json"
+HYDROMETEORS = ROOT / "examples" / "constellations" / "iridium_global_hydrometeors.json"
 COMPARISON_LABEL = "deterministic comparison; not an uncertainty interval"
 
 
@@ -1206,28 +1207,41 @@ def test_variants_match_v1_aligned_cases(tmp_path):
 # --- shipped examples ----------------------------------------------------------------------------
 
 EXAMPLE_SWEEPS = {
-    "propagation_cases": ("variants", 3),
-    "eirp_oat": ("oat", 3),
-    "sampling_fidelity": ("grid", 6),
-    "release_matrix": ("grid", 8),
+    "sweeps/propagation_cases": ("variants", 3),
+    "sweeps/eirp_oat": ("oat", 3),
+    "sweeps/sampling_fidelity": ("grid", 6),
+    "sweeps/release_matrix": ("grid", 8),
+    "reproduce/release_benchmark": ("grid", 8),
 }
+
+
+def test_every_shipped_sweep_and_reproduce_config_is_listed():
+    shipped = sorted(
+        f"{path.parent.name}/{path.stem}"
+        for folder in ("sweeps", "reproduce")
+        for path in (ROOT / "examples" / folder).glob("*.json")
+    )
+    assert shipped == sorted(EXAMPLE_SWEEPS)
 
 
 @pytest.mark.parametrize("name", sorted(EXAMPLE_SWEEPS))
 def test_example_sweeps_load_and_expand(name):
-    path = EXAMPLES / "sweeps" / f"{name}.json"
-    spec = sweep.load_sweep(path)
+    """Every example's base_scenario resolves from its own folder, and the runs expand."""
+    path = ROOT / "examples" / f"{name}.json"
+    spec, base, runs = sweep.prepare_sweep(path)
     mode, count = EXAMPLE_SWEEPS[name]
     assert spec["mode"] == mode
-    base = load_scenario(Path(spec["base_scenario_path"]))
-    runs = sweep.expand_sweep(spec, scenario_document(base))
+    assert Path(spec["base_scenario_path"]).is_file()
+    assert Path(spec["base_scenario_path"]).parent.parent == ROOT / "examples"
     assert len(runs) == count
     assert len({r.id for r in runs}) == count
     assert sweep.baseline_run_id(spec, runs) in {r.id for r in runs}
+    assert base == load_scenario(Path(spec["base_scenario_path"]))
+    assert len(sweep.expand_sweep(spec, scenario_document(base))) == count
 
 
 def test_example_propagation_cases_cover_the_v1_aligned_cases():
-    spec = sweep.load_sweep(EXAMPLES / "sweeps" / "propagation_cases.json")
+    spec = sweep.load_sweep(ROOT / "examples" / "sweeps" / "propagation_cases.json")
     runs = {r.id: r for r in sweep.expand_sweep(spec, _document(HYDROMETEORS))}
     free = runs["variant%3Afree_space"].document["propagation"]
     reference = runs["variant%3Aitu_reference"].document["propagation"]
@@ -1238,8 +1252,8 @@ def test_example_propagation_cases_cover_the_v1_aligned_cases():
 
 
 def test_example_release_matrix_reproduces_the_v1_frozen_matrix():
-    v1 = json.loads((ROOT / "examples" / "studies" / "release_benchmark.json").read_text())
-    spec = sweep.load_sweep(EXAMPLES / "sweeps" / "release_matrix.json")
+    v1 = json.loads((V1_STUDIES / "release_benchmark.json").read_text())
+    spec = sweep.load_sweep(ROOT / "examples" / "sweeps" / "release_matrix.json")
     by_path = {p["path"]: p["values"] for p in spec["parameters"]}
     assert by_path["/radio/carrier_frequency_hz"] == v1["frequencies_hz"]
     assert by_path["/time/step_s"] == v1["sampling_steps_s"]
@@ -1262,12 +1276,11 @@ def test_example_release_matrix_reproduces_the_v1_frozen_matrix():
 
 
 def test_example_sampling_fidelity_mirrors_v1():
-    v1 = json.loads((ROOT / "examples" / "studies" / "reference_fidelity.json").read_text())
+    v1 = json.loads((V1_STUDIES / "reference_fidelity.json").read_text())
     cases = {
-        case["id"]: json.loads((ROOT / "examples" / "studies" / case["scenario"]).read_text())
-        for case in v1["cases"]
+        case["id"]: json.loads((V1_STUDIES / case["scenario"]).read_text()) for case in v1["cases"]
     }
-    spec = sweep.load_sweep(EXAMPLES / "sweeps" / "sampling_fidelity.json")
+    spec = sweep.load_sweep(ROOT / "examples" / "sweeps" / "sampling_fidelity.json")
     by_path = {p["path"]: p["values"] for p in spec["parameters"]}
     assert by_path["/radio/carrier_frequency_hz"] == [
         cases[c]["radio_link"]["carrier_frequency_hz"] for c in ("12ghz", "20ghz")
@@ -1321,7 +1334,7 @@ def test_propagation_cases_example_runs_and_orders_the_cases(tmp_path):
     """Declared rain and cloud cost more usable time than gases, which cost more than none."""
     workers = min(8, os.cpu_count() or 1)
     summary = sweep.run_sweep(
-        EXAMPLES / "sweeps" / "propagation_cases.json", tmp_path / "out", workers=workers
+        ROOT / "examples" / "sweeps" / "propagation_cases.json", tmp_path / "out", workers=workers
     )
     assert summary["baseline_run_id"] == "variant%3Afree_space"
     rows = {(r["run_id"], r["metric"]): r for r in _csv(tmp_path / "out" / "comparisons.csv")}

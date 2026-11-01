@@ -5,8 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from openleo.constellation import _limitations as v1_limitations
-from openleo.output import LIMITATIONS as V1_OUTPUT_LIMITATIONS
 from openleo.physics.adaptation import ETSI_SOURCE_URL, MODCODS
 from openleo.scenario.explain import (
     FIXED_CAPACITY_THRESHOLD_WAIVER,
@@ -18,13 +16,106 @@ from openleo.scenario.model import ConvergenceSettings, EventSettings
 from openleo.scenario.parse import load_scenario
 
 ROOT = Path(__file__).resolve().parents[2]
-V2_DIR = ROOT / "examples" / "v2"
-EXAMPLES = sorted(V2_DIR.glob("*.json"))
+V2_DIR = ROOT / "examples"
+
+# Frozen expectations: the strings of OpenLEO v1.0.0's ``openleo.constellation._limitations`` and
+# ``openleo.output.LIMITATIONS``, copied verbatim from tag v1.0.0 when the v1 engine was removed.
+_V1_COMMON = (
+    (
+        "Archived GP elements are propagated predictions, not measured satellite positions; age is "
+        "reported without an uncertainty distribution."
+    ),
+    (
+        "Station coordinates and every RF/ISL parameter are declared experiment assumptions, not "
+        "surveyed infrastructure or real constellation specifications."
+    ),
+    (
+        "DVB-S2 reference rates are synthetic link adaptation, not Iridium waveform or receiver "
+        "measurements."
+    ),
+)
+_V1_ATMOSPHERE = {
+    "hydrometeors": "Reference gaseous atmosphere with fixed declared clouds and uniform spherical "
+    "rain layers; no measured local weather, P.618 exceedance statistics, scintillation, terrain, "
+    "antenna patterns, interference, RF acquisition delay or tracking dynamics are modeled.",
+    "reference": "Reference gaseous atmosphere only: no local weather, rain, cloud, fog, "
+    "scintillation, terrain, antenna patterns, interference, RF acquisition delay or tracking "
+    "dynamics are modeled.",
+    "free_space": "No atmosphere, rain, scintillation, terrain, antenna patterns, interference, RF "
+    "acquisition delay or tracking dynamics are modeled.",
+}
+_V1_TAIL = (
+    "Contact boundaries and route choices are sampled; finer events between samples can be missed.",
+    (
+        "UTC datetime integration uses the POSIX convention; inserted leap seconds are not explicit "
+        "grid samples or additional integration seconds."
+    ),
+    (
+        "Snapshot path bottlenecks omit link scheduling, contention, queues, packet loss, TCP and "
+        "protocol overhead; they are not measured throughput."
+    ),
+)
+_V1_REFERENCE_ONLY = (
+    (
+        "AMSL heights are explicit assumptions distinct from WGS84 ellipsoid heights; a 6371 km "
+        "spherical ray approximates local WGS84 geometry."
+    ),
+    (
+        "System noise temperature stays fixed; atmospheric sky emission, refractive Doppler and "
+        "dispersive group delay are not modeled. Visibility retains the geometric elevation mask."
+    ),
+    (
+        "Reference-profile agreement and layer-refinement convergence are numerical checks, not "
+        "measured-weather or calibrated RF validation."
+    ),
+)
+V1_OUTPUT_LIMITATIONS = (
+    (
+        "free-space-only propagation; no atmospheric gases, rain, cloud, fog, scintillation, or "
+        "instantaneous weather"
+    ),
+    "geometric elevation only; no atmospheric refraction",
+    "synthetic RF parameters; not a real commercial constellation performance claim",
+    "Shannon-Hartley capacity is a theoretical upper bound, not throughput or achieved goodput",
+    "sample-grid AOS/LOS estimates; true elevation-mask crossings are not interpolated",
+    (
+        "SGP4 propagation from public mean elements; GP element age is a quality indicator, not a "
+        "covariance or accuracy guarantee"
+    ),
+    (
+        "no calibrated-observation validation; SatNOGS observations are qualitative sanity checks "
+        "unless a complete calibrated acquisition chain is documented"
+    ),
+)
+
+
+def _example(name: str) -> Path:
+    """A shipped example scenario: the ISS single pass or one of the Iridium constellations."""
+    folder = "scenarios" if name == "iss_cartagena" else "constellations"
+    return ROOT / "examples" / folder / f"{name}.json"
+
+
+def v1_limitations(propagation) -> list[str]:
+    """v1.0.0 ``openleo.constellation._limitations``, as frozen strings."""
+    if propagation is None:
+        atmosphere = _V1_ATMOSPHERE["free_space"]
+    elif propagation.hydrometeors is not None:
+        atmosphere = _V1_ATMOSPHERE["hydrometeors"]
+    else:
+        atmosphere = _V1_ATMOSPHERE["reference"]
+    extra = _V1_REFERENCE_ONLY if propagation is not None else ()
+    return [*_V1_COMMON, atmosphere, *_V1_TAIL, *extra]
+
+
+EXAMPLES = [
+    *sorted((V2_DIR / "constellations").glob("*.json")),
+    V2_DIR / "scenarios" / "iss_cartagena.json",
+]
 FIXTURES = Path(__file__).parent / "fixtures" / "valid"
 
 
 def _scenario(name: str):
-    return load_scenario(V2_DIR / f"{name}.json")
+    return load_scenario(_example(name))
 
 
 def _with_time(scenario, **changes):

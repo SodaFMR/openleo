@@ -9,7 +9,6 @@ import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-V2_EXAMPLES = ROOT / "examples" / "v2"
 
 MASK_DEG = 10.0
 PERIOD_S = 5400.0
@@ -479,8 +478,19 @@ def test_passes_on_grid_left_hold() -> None:
         passes_on_grid(np.full(grid.size, np.nan), grid, MASK_DEG)
 
 
+def _remaining_contacts(timestamps, visible):
+    """Frozen oracle: OpenLEO v1.0.0 ``openleo.constellation._remaining_contacts``, verbatim."""
+    boundary = len(timestamps) - 1
+    truncated = True
+    reverse = []
+    for index in range(len(timestamps) - 1, -1, -1):
+        if not visible[index]:
+            boundary, truncated = index, False
+        reverse.append(((timestamps[boundary] - timestamps[index]).total_seconds(), truncated))
+    return tuple(reversed(reverse))
+
+
 def test_passes_on_grid_matches_v1_remaining_contacts() -> None:
-    from openleo.constellation import _remaining_contacts
     from openleo.engine.events import passes_on_grid
 
     rng = np.random.default_rng(8)
@@ -514,7 +524,7 @@ def _iss():
     from openleo.engine.timegrid import build_grid, builtin_timescale
     from openleo.scenario import load_scenario
 
-    scenario = load_scenario(V2_EXAMPLES / "iss_cartagena.json")
+    scenario = load_scenario(ROOT / "examples" / "scenarios" / "iss_cartagena.json")
     timescale = builtin_timescale()
     orbits = load_catalogs(scenario.space_segment, timescale)
     grid = build_grid(scenario.time)

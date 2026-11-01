@@ -235,7 +235,7 @@ def delayed_off(tmp_path_factory):
     from openleo.engine.run import run, save_run
     from openleo.scenario import load_scenario, parse_scenario, scenario_document
 
-    path = Path("examples/v2/iridium_global.json")
+    path = Path("examples/constellations/iridium_global.json")
     document = scenario_document(load_scenario(path))
     document["time"]["stop_utc"] = "2026-09-10T12:30:00Z"
     document["time"]["events"]["enabled"] = False

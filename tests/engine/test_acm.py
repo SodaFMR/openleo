@@ -14,12 +14,18 @@ from openleo.scenario.model import Adaptation
 
 ROOT = Path(__file__).resolve().parents[2]
 V1_FIXTURES = ROOT / "tests" / "fixtures" / "v1"
-V2_EXAMPLES = ROOT / "examples" / "v2"
 CONSTELLATION_FIXTURES = (
     "iridium_global",
     "iridium_global_reference",
     "iridium_global_hydrometeors",
 )
+
+
+def _example_path(name: str) -> Path:
+    """A shipped example scenario: the ISS single pass or one of the Iridium constellations."""
+    folder = "scenarios" if name == "iss_cartagena" else "constellations"
+    return ROOT / "examples" / folder / f"{name}.json"
+
 
 SYMBOL_RATE_BAUD = 1e6
 TOLERANCE_S = 1e-6
@@ -572,7 +578,7 @@ def _v1_fixture(name: str) -> dict:
 def _scenario(name: str):
     from openleo.scenario import load_scenario
 
-    return load_scenario(V2_EXAMPLES / f"{name}.json")
+    return load_scenario(_example_path(name))
 
 
 @functools.cache

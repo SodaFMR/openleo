@@ -149,19 +149,3 @@ def test_itu_workbook_stub_message(tmp_path):
     with pytest.raises(NotImplementedError) as raised:
         verify_itu_workbook(tmp_path / "workbook.xlsx")
     assert str(raised.value) == "openleo verify itu-workbook is not available until S3"
-
-
-@pytest.mark.parametrize(
-    ("old", "new", "name"),
-    [
-        ("openleo.orbit_verification", "openleo.verify.orbit", "verify_orbit_reference"),
-        ("openleo.hydrometeor_benchmark", "openleo.calc.hydrometeors", "run_hydrometeors"),
-        ("openleo.gases_plotting", "openleo.calc.gases_figure", "render_gases_overview"),
-    ],
-)
-def test_v1_import_paths_re_export_the_moved_modules(old, new, name):
-    import importlib
-
-    assert getattr(importlib.import_module(old), name) is getattr(
-        importlib.import_module(new), name
-    )

@@ -22,7 +22,6 @@ from openleo.scenario import load_scenario, scenario_document
 from openleo.scenario.model import IslConfig, NetworkConfig, RoutePair, Station
 
 ROOT = Path(__file__).resolve().parents[2]
-EXAMPLES = ROOT / "examples" / "v2"
 V1_FIXTURES = ROOT / "tests" / "fixtures" / "v1"
 SPEC_TABLES = {
     "satellites",
@@ -54,8 +53,14 @@ RESULTS_KEYS = {
 WORKERS = min(8, os.cpu_count() or 1)
 
 
+def _example_path(name: str) -> Path:
+    """A shipped example scenario: the ISS single pass or one of the Iridium constellations."""
+    folder = "scenarios" if name == "iss_cartagena" else "constellations"
+    return ROOT / "examples" / folder / f"{name}.json"
+
+
 def _example(name: str):
-    return load_scenario(EXAMPLES / f"{name}.json")
+    return load_scenario(_example_path(name))
 
 
 def _time(scenario, **changes):

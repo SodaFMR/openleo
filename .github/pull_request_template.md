@@ -25,5 +25,5 @@ Paste the commands run and the relevant results.
 
 - [ ] English-only repository artifacts.
 - [ ] TDD used for behavior changes.
-- [ ] Coverage remains at or above 80%.
+- [ ] Coverage remains at or above 90%.
 - [ ] Documentation and limitations match the implemented behavior.
