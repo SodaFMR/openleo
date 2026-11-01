@@ -69,7 +69,9 @@ never accepts what the parser would refuse:
   class is escaped; and the end anchor is `$(?!\n)`, because Python's `$` also matches before a
   final newline, which the parser rejects.
 
-`openleo scenario new` prints a commented starter, `validate` checks a file, `explain` lists every
+`openleo scenario new` prints a commented starter, `validate` checks a file and its catalogs
+(a missing catalog or a SHA-256 mismatch exits 1 with the catalog's JSON pointer; `--no-catalog`
+checks the document alone and says so), `explain` lists every
 assumption with its evidence class (archived input, declared assumption or model choice), its
 unit and the active limitations, and `upgrade` converts a 1.x file.
 

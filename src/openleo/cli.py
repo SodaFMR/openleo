@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -122,6 +121,11 @@ def _parser() -> argparse.ArgumentParser:
         "validate", _scenario_validate, "check a scenario and its catalogs", scenario_commands
     )
     validate.add_argument("scenario", metavar="SCENARIO.json")
+    validate.add_argument(
+        "--no-catalog",
+        action="store_true",
+        help="check the document only: skip reading the catalogs, their SHA-256 and the event step",
+    )
     explain_ = command(
         "explain", _scenario_explain, "list every assumption of a scenario", scenario_commands
     )
@@ -258,18 +262,19 @@ def _scenario_new(args) -> int:
 
 
 def _scenario_validate(args) -> int:
+    """Check the document, then (unless ``--no-catalog``) every catalog: readable, its SHA-256
+    and the event step. A missing or changed catalog is an error naming its JSON pointer."""
     scenario = load_scenario(args.scenario)
-    note = ""
-    catalogs = scenario.space_segment.catalogs
-    if all(
-        os.access(catalog.path, os.R_OK) and Path(catalog.path).is_file() for catalog in catalogs
-    ):
-        orbits = load_catalogs(scenario.space_segment, builtin_timescale())
-        if scenario.time.events.enabled:
-            check_step(scenario, orbits)
-    else:
-        note = " (catalog not checked: a catalog file is not readable, so the event step was not)"
-    print(f"valid: {scenario.name}{note}")
+    if args.no_catalog:
+        print(
+            f"valid: {scenario.name} (document only, --no-catalog: the catalogs, their SHA-256 "
+            "and the event step were not checked)"
+        )
+        return 0
+    orbits = load_catalogs(scenario.space_segment, builtin_timescale())
+    if scenario.time.events.enabled:
+        check_step(scenario, orbits)
+    print(f"valid: {scenario.name}")
     return 0
 
 

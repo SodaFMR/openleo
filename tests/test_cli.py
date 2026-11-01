@@ -548,14 +548,36 @@ def test_validate_checks_the_event_step_against_the_catalog(tmp_path, capsys):
     assert main(["scenario", "validate", str(path)]) == 0
 
 
-def test_validate_with_an_unreadable_catalog_says_it_was_not_checked(tmp_path, capsys):
+def test_validate_fails_on_a_missing_catalog_unless_no_catalog(tmp_path, capsys):
     document = scenario_document(load_scenario(ISS))
     document["space_segment"]["catalogs"][0]["path"] = str(tmp_path / "gone.csv")
     path = tmp_path / "scenario.json"
     path.write_text(json.dumps(document), encoding="utf-8")
-    assert main(["scenario", "validate", str(path)]) == 0
+    captured = _fails(["scenario", "validate", str(path)], capsys)
+    assert captured.err.startswith("error: /space_segment/catalogs/0: ")
+    assert "gone.csv" in captured.err and "could not read" in captured.err
+    assert "valid" not in captured.out
+
+    assert main(["scenario", "validate", "--no-catalog", str(path)]) == 0
     out = capsys.readouterr().out
-    assert "valid" in out and "catalog not checked" in out
+    assert out.startswith("valid: ")
+    assert "--no-catalog: the catalogs, their SHA-256 and the event step were not checked" in out
+
+
+def test_validate_fails_on_a_catalog_sha256_mismatch_unless_no_catalog(tmp_path, capsys):
+    document = scenario_document(load_scenario(ISS))
+    catalog = document["space_segment"]["catalogs"][0]
+    source = (ISS.parent / catalog["path"]).resolve()
+    changed = tmp_path / "changed.csv"
+    changed.write_bytes(source.read_bytes() + b"\n")
+    catalog["path"] = str(changed)
+    path = tmp_path / "scenario.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    captured = _fails(["scenario", "validate", str(path)], capsys)
+    assert captured.err.startswith("error: /space_segment/catalogs/0: ")
+    assert f"SHA-256 mismatch: expected {catalog['sha256']}" in captured.err
+    assert main(["scenario", "validate", "--no-catalog", str(path)]) == 0
+    assert "not checked" in capsys.readouterr().out
 
 
 # --------------------------------------------------------------------- launcher / report
