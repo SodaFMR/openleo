@@ -400,7 +400,14 @@ def test_parse_scenario_requires_a_sha256_for_the_source_bytes() -> None:
 def test_a_catalog_path_the_system_cannot_resolve_is_a_pointer_prefixed_value_error(
     index: int, bad: str, tmp_path: Path
 ) -> None:
-    # Path.resolve raises a bare ValueError for a NUL and UnicodeEncodeError for a lone surrogate.
+    # Path.resolve raises a bare ValueError for a NUL and UnicodeEncodeError for a lone surrogate
+    # (a Windows path may hold one, so there it is the NUL cases that run).
+    try:
+        (tmp_path / bad).resolve()
+    except (OSError, RuntimeError, ValueError):
+        pass
+    else:
+        pytest.skip("this platform resolves that path")
     document = json.loads(
         (FIXTURES / "valid" / "two_catalogs_terminals_and_masks.json").read_text()
     )

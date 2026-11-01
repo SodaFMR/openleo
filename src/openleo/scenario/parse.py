@@ -85,24 +85,30 @@ _V1_KEYS = frozenset(("orbit", "ground_station", "stations", "time_window", "rad
 def load_scenario(path: str | Path) -> Scenario:
     """Read a bounded UTF-8 scenario file, rejecting duplicate keys, and parse it."""
     scenario_path = Path(path)
+    raw, digest = _load_document(scenario_path)
+    return parse_scenario(raw, scenario_path, digest)
+
+
+def _load_document(path: Path) -> tuple[Any, str]:
+    """A bounded UTF-8 JSON file without repeated keys: (the document, SHA-256 of its bytes)."""
     try:
-        source = _read_scenario_bytes(scenario_path)
+        source = _read_scenario_bytes(path)
     except OSError as exc:
-        raise ValueError(f"{scenario_path}: could not load scenario: {exc}") from exc
+        raise ValueError(f"{path}: could not load scenario: {exc}") from exc
     try:
         text = source.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise ValueError(f"{scenario_path}: scenario JSON must be UTF-8") from exc
+        raise ValueError(f"{path}: scenario JSON must be UTF-8") from exc
     try:
         raw = json.loads(text, object_pairs_hook=_checked_pairs)
     except JSONDecodeError as exc:
-        raise ValueError(f"{scenario_path}: invalid JSON: {exc.msg}") from exc
+        raise ValueError(f"{path}: invalid JSON: {exc.msg}") from exc
     except RecursionError as exc:
-        raise ValueError(f"{scenario_path}: invalid JSON: nested too deeply") from exc
+        raise ValueError(f"{path}: invalid JSON: nested too deeply") from exc
     except ValueError as exc:  # for example an integer beyond Python's digit limit
-        raise ValueError(f"{scenario_path}: invalid JSON: {exc}") from exc
+        raise ValueError(f"{path}: invalid JSON: {exc}") from exc
     _reject_repeated_keys(raw)
-    return parse_scenario(raw, scenario_path, sha256(source).hexdigest())
+    return raw, sha256(source).hexdigest()
 
 
 def parse_scenario(raw: Any, path: str | Path, source_sha256: str) -> Scenario:

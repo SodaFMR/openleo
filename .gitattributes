@@ -4,6 +4,7 @@ examples/scenarios/** text eol=lf
 examples/sensitivity/** text eol=lf
 examples/atmosphere/** text eol=lf
 examples/constellations/** text eol=lf
+examples/v2/** text eol=lf
 # Preserve the exact archived CelesTrak response, including its original CRLF bytes.
 examples/data/iridium_next_2026-09-10.csv -text
 
