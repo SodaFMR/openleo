@@ -631,7 +631,7 @@ def models(
             "teme_to_itrs": "rot_z(-GMST1982 at UT1) with Skyfield's theta_GMST1982, plus "
             "Skyfield's Earth-rotation rate term for the velocity: Skyfield's TEME-GCRS-ITRS "
             "chain without its nutation, which cancels; equal to it up to rounding (about "
-            "1e-7 m), verified against the v1 fixtures",
+            "5e-8 m and 6e-11 m/s), verified against the v1 fixtures",
             "earth_orientation": "Skyfield builtin time data; polar motion is not supplied",
         },
         "coordinates": {
@@ -702,8 +702,10 @@ def models(
                 "attenuation and refractivity; split-layer refinement",
                 "endpoint_solve": "Apparent elevation by safeguarded Newton iteration on the "
                 "ray's endpoint angle, to steps of at most 1e-11 deg (v1: 40-step bisection, "
-                "within 4e-11 deg); kernel equivalence with v1 tested to 1e-10 dB, 1e-9 deg and "
-                "1e-13 s",
+                "within 4e-11 deg). Equivalence with the v1 kernel is tested at 12, 20 and 30 "
+                "GHz to 1e-10 dB, 1e-9 deg and 1e-13 s. At high loss (above about 50 GHz) the "
+                "gaseous dB of samples differs from v1's by more than 1e-10 dB near 5 deg "
+                "elevation, because v1's bisection is the less precise solve",
                 "refinement": propagation.refinement,
                 "earth_radius_km": 6371.0,
                 "upper_height_km": 100.0,
@@ -729,19 +731,27 @@ def models(
             entries["shannon_integrand_atmosphere"] = {
                 "standard": "OpenLEO numerical method",
                 "version": "S1 per-station gas table",
-                "use": "Shannon-bound quadrature nodes and MODCOD threshold root-finding only; "
-                "every exported sample traces the ray exactly",
+                "use": "Shannon-bound quadrature nodes and MODCOD threshold root-finding: the "
+                "rate segments, and so the modcod and rate_bps of every sample, come from this "
+                "path; every other per-sample value (attenuations, C/N0, Es/N0, SNR, Shannon "
+                "bound, delays) traces the ray exactly",
                 "method": "Per station, the column's total gaseous loss and ray central angle "
                 "as piecewise Chebyshev series in apparent elevation (16 segments of degree 16 "
                 "on [5, 90] deg) from the exact layer sums; the endpoint solve keeps the exact "
                 "vacuum geometry",
                 "max_error_db": max(tabulated) if tabulated else None,
+                "max_error_db_meaning": "The largest station's rigorous bound on |tabulated - "
+                "ray-traced| gaseous loss over the whole domain: twice the series errors found at "
+                "the check points, the elevation shift they cause and both solves' 1e-11 deg "
+                "stopping error, each times the local loss slope",
                 "station_error_bound_db": bounds,
-                "fallback": "Stations whose bound exceeds 1e-10 dB (null above) use the exact "
-                "ray trace",
-                "verification": "Bounded at construction against the exact sums at every "
-                "segment end and between consecutive Chebyshev points; compared with the ray "
-                "trace end to end by tests/physics/test_gas_table.py",
+                "fallback": "Stations whose bound exceeds 2.5e-11 dB (a quarter of the 1e-10 dB "
+                "limit), or whose end-to-end check exceeds the bound, use the exact ray trace "
+                "(null above)",
+                "verification": "Bounded at construction against the exact layer sums at every "
+                "segment end and between consecutive Chebyshev points, and traced end to end "
+                "against the ray trace at fixed geometries from 5 to 90 deg and 110 to 1200 km "
+                "altitude; tests/physics/test_gas_table.py sweeps 1-183 GHz",
             }
     if hydrometeors:
         entries |= {

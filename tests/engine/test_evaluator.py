@@ -566,6 +566,12 @@ def test_unverified_gas_tables_fall_back_to_the_ray_trace() -> None:
     oxygen = replace(scenario, radio=replace(scenario.radio, carrier_frequency_hz=60e9))
     evaluator = LinkEvaluator(oxygen, geometry)
     assert evaluator.gas_tables == (None,) * len(scenario.ground_segment.stations)
+    # With events off nothing reads the tables, so none is built.
+    events_off = replace(
+        scenario, time=replace(scenario.time, events=replace(scenario.time.events, enabled=False))
+    )
+    assert LinkEvaluator(events_off, geometry).gas_tables == (None,) * 4
+    assert all(station.table is None for station in LinkEvaluator(events_off, geometry)._stations)
     station = scenario.ground_segment.stations[0]
     for satellite_index in range(len(geometry.orbits)):
         visible = _visible_offsets(

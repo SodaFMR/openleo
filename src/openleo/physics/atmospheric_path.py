@@ -45,11 +45,31 @@ SPEED_OF_LIGHT_M_S = 299_792_458.0
 NEWTON_TOLERANCE_DEG = 1e-11
 NEWTON_MAX_ITERATIONS = 60
 # GasTable: piecewise Chebyshev series on [GAS_TABLE_LOW_DEG, 90] degrees of apparent
-# elevation, and the largest loss error bound (dB) it accepts at its check points.
+# elevation. GAS_TABLE_MAX_ERROR_DB is the ruling's limit (Task 18); a table is accepted only
+# when its rigorous error bound is within GAS_TABLE_ACCEPT_DB, a quarter of it.
 GAS_TABLE_LOW_DEG = 5.0
 GAS_TABLE_SEGMENTS = 16
 GAS_TABLE_DEGREE = 16
 GAS_TABLE_MAX_ERROR_DB = 1e-10
+GAS_TABLE_ACCEPT_DB = 2.5e-11
+# End-to-end acceptance geometries: geometric elevations (deg) x satellite altitudes (km).
+GAS_TABLE_CHECK_ELEVATIONS_DEG = (
+    5.0,
+    5.0001,
+    5.01,
+    5.1,
+    5.3,
+    5.5,
+    6.0,
+    7.0,
+    10.0,
+    20.0,
+    45.0,
+    70.0,
+    89.0,
+    90.0,
+)
+GAS_TABLE_CHECK_ALTITUDES_KM = (110.0, 340.0, 550.0, 1200.0)
 # Array ray traces run in row chunks so each (rows, layers) float64 temporary stays
 # near 8 MiB whatever the number of elements.
 _CHUNK_ELEMENTS = 1 << 20
@@ -431,14 +451,23 @@ class GasTable:
     Newton iteration (``_newton_rows``) with C and its derivative from the table and the vacuum
     terms exact. Only T then comes from the table.
 
-    ``build_gas_table`` compares the series with the exact sums at every segment end and midway
-    between consecutive Chebyshev points: ``max_loss_error_db`` and
-    ``max_central_angle_error_rad`` are the largest differences found. An error δC in C moves
-    the solved elevation by at most δC / |C'(e)| (the vacuum terms only steepen the residual),
-    so the loss error at e is bounded by |T̃(e) − T(e)| + |T'(e)| δC / |C'(e)|;
-    ``error_bound_db`` is the largest such bound over the check points, and ``verified`` is
-    whether it is within ``GAS_TABLE_MAX_ERROR_DB``. Callers use the exact trace otherwise.
-    The solve itself converges to about 1e-12 degrees in both paths (``_newton_rows``).
+    Error bound. ``build_gas_table`` compares the series with the exact sums at every segment
+    end and midway between consecutive Chebyshev points; ``max_loss_error_db`` (δT) and
+    ``max_central_angle_error_rad`` (δC) are the largest differences found. Between check
+    points either may reach about twice that. Against ``for_geometry_array`` the table's loss
+    differs by the error of T̃ at the solved elevation plus |T'| times the difference of the
+    two solved elevations, which is at most the shift δC / |C'| that an error in C causes (the
+    vacuum terms only steepen the residual) plus each solve's own stopping error, at most
+    ``NEWTON_TOLERANCE_DEG`` (``_newton_rows``). So at every elevation the difference is at most
+
+        2 δT + |T'| (2 δC / |C'| + 2 NEWTON_TOLERANCE_DEG),
+
+    with |T'| the largest and |C'| the smallest of the neighbouring check points'.
+    ``error_bound_db`` is the largest such value. The table is also traced end to end against
+    ``for_geometry_array`` at fixed geometries (``GAS_TABLE_CHECK_ELEVATIONS_DEG`` x
+    ``GAS_TABLE_CHECK_ALTITUDES_KM``), ``max_measured_error_db``. ``verified`` is whether the
+    bound is within ``GAS_TABLE_ACCEPT_DB`` (a quarter of the ruling's 1e-10 dB) and every
+    measured difference within the bound; callers use the exact trace otherwise.
     """
 
     column: ReferenceColumn
@@ -449,6 +478,7 @@ class GasTable:
     max_loss_error_db: float
     max_central_angle_error_rad: float
     error_bound_db: float
+    max_measured_error_db: float
     verified: bool
 
     def total_db_for_geometry(
@@ -544,24 +574,52 @@ def build_gas_table(column: ReferenceColumn) -> GasTable:
         max_loss_error_db=np.inf,
         max_central_angle_error_rad=np.inf,
         error_bound_db=np.inf,
+        max_measured_error_db=np.inf,
         verified=False,
     )
     # Check points: every segment end and every midpoint between consecutive Chebyshev points.
     ordered = np.sort(points, axis=1)
     checks = np.unique(np.concatenate([edges, (0.5 * (ordered[:, :-1] + ordered[:, 1:])).ravel()]))
     exact_total, exact_central = column._column_rows(checks)
-    loss_error = np.abs(table._series(table.total_db, checks) - exact_total)
+    loss_error = float(np.max(np.abs(table._series(table.total_db, checks) - exact_total)))
     angle, angle_slope = table._series(table.central_angle_rad, checks)
     angle_error = float(np.max(np.abs(angle - exact_central)))
-    shift_deg = angle_error / np.abs(angle_slope)
-    bound = float(np.max(loss_error + np.abs(table._series(total_slope, checks)) * shift_deg))
+    loss_slope = _neighbourhood(np.abs(table._series(total_slope, checks)), np.maximum)
+    angle_slope = _neighbourhood(np.abs(angle_slope), np.minimum)
+    with np.errstate(divide="ignore"):
+        shift_deg = 2 * angle_error / angle_slope + 2 * NEWTON_TOLERANCE_DEG
+    bound = float(2 * loss_error + np.max(loss_slope * shift_deg))
+    # End to end against the ray trace, where the loss is steepest (near 5 deg) and elsewhere.
+    elevation, altitude = np.meshgrid(GAS_TABLE_CHECK_ELEVATIONS_DEG, GAS_TABLE_CHECK_ALTITUDES_KM)
+    elevation = elevation.ravel()
+    station_radius = EARTH_RADIUS_KM + column.lower_height_km
+    satellite_radius = EARTH_RADIUS_KM + altitude.ravel()
+    cosine, sine = np.cos(np.radians(elevation)), np.sin(np.radians(elevation))
+    range_m = (
+        np.sqrt(satellite_radius**2 - (station_radius * cosine) ** 2) - station_radius * sine
+    ) * 1_000
+    measured = float(
+        np.max(
+            np.abs(
+                table.total_db_for_geometry(elevation, range_m)
+                - column.for_geometry_array(elevation, range_m).total_db
+            )
+        )
+    )
     return replace(
         table,
-        max_loss_error_db=float(np.max(loss_error)),
+        max_loss_error_db=loss_error,
         max_central_angle_error_rad=angle_error,
         error_bound_db=bound,
-        verified=bound <= GAS_TABLE_MAX_ERROR_DB,
+        max_measured_error_db=measured,
+        verified=bound <= GAS_TABLE_ACCEPT_DB and measured <= bound,
     )
+
+
+def _neighbourhood(values: NDArray[np.float64], pick) -> NDArray[np.float64]:
+    """``pick`` of each value and its neighbours in the sorted check points."""
+    padded = np.concatenate([values[:1], values, values[-1:]])
+    return pick(pick(padded[:-2], padded[1:-1]), padded[2:])
 
 
 def _newton_rows(residual, lower: NDArray[np.float64], first) -> NDArray[np.float64]:

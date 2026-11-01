@@ -18,9 +18,12 @@ budget, operation for operation, except that the gaseous loss under ``itu_refere
 from the station column's ``GasTable`` (``openleo.physics.atmospheric_path``) instead of the
 ray trace. The engine uses them only for the Shannon-bound quadrature and the MODCOD
 root-finding, which evaluate the link at thousands of times per pass; every exported
-per-sample value comes from ``evaluate``. A table is used only when ``build_gas_table``
-verified its loss error bound at or below ``GAS_TABLE_MAX_ERROR_DB`` (1e-10 dB); otherwise
-those methods trace the ray exactly. ``gas_tables`` reports, per station, the bound or None.
+per-sample value comes from ``evaluate`` except each sample's MODCOD and rate, which come
+from the rate segments. Tables are built only with events on, and one is used only when
+``build_gas_table`` verified it (a rigorous loss error bound within ``GAS_TABLE_ACCEPT_DB``,
+2.5e-11 dB, a quarter of the 1e-10 dB limit, and an end-to-end check within the bound);
+otherwise those methods trace the ray exactly. ``gas_tables`` reports, per station, the bound
+or None.
 """
 
 from __future__ import annotations
@@ -155,7 +158,10 @@ class LinkEvaluator:
             if reference
             else None
         )
-        table = build_gas_table(column) if column is not None else None
+        # Only the event integrand reads the table (events off integrates grid samples).
+        table = (
+            build_gas_table(column) if column is not None and scenario.time.events.enabled else None
+        )
         return _StationLink(
             name=station.name,
             mask_deg=mask_deg,

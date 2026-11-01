@@ -16,6 +16,7 @@ import pytest
 
 from openleo.physics.atmospheric_path import (
     EARTH_RADIUS_KM,
+    GAS_TABLE_ACCEPT_DB,
     GAS_TABLE_MAX_ERROR_DB,
     build_gas_table,
     build_reference_column,
@@ -66,9 +67,10 @@ def test_table_matches_the_ray_trace_over_the_whole_domain(
     tabulated = table.total_db_for_geometry(elevation, range_m)
 
     assert table.verified
-    assert table.error_bound_db <= GAS_TABLE_MAX_ERROR_DB == TABLE_ATOL_DB
+    assert table.error_bound_db <= GAS_TABLE_ACCEPT_DB < GAS_TABLE_MAX_ERROR_DB == TABLE_ATOL_DB
+    assert table.max_measured_error_db <= table.error_bound_db
     assert table.max_loss_error_db <= table.error_bound_db
-    np.testing.assert_allclose(tabulated, exact, rtol=0, atol=TABLE_ATOL_DB)
+    np.testing.assert_array_less(np.abs(tabulated - exact), table.error_bound_db)
 
 
 @pytest.mark.parametrize("lower_height_km", LOWER_HEIGHTS_KM)
@@ -106,6 +108,68 @@ def test_unverifiable_tables_are_flagged():
 
     assert not table.verified
     assert table.error_bound_db > GAS_TABLE_MAX_ERROR_DB
+
+
+def _sweep_geometry(lower_height_km):
+    """A dense elevation grid, packed in 5.0-5.5 deg, at satellite altitudes 110-1200 km."""
+    elevation = np.unique(
+        np.concatenate(
+            [
+                5.0 + np.array([0.0, 1e-12, 1e-9, 1e-6, 1e-4, 1e-3]),
+                np.linspace(5.0, 5.5, 251),
+                np.geomspace(5.0, 90.0, 400),
+                [89.999999, 90.0],
+            ]
+        )
+    )
+    altitude_km = np.array([110.0, 200.0, 340.0, 550.0, 800.0, 1200.0])
+    elevation, altitude_km = (a.ravel() for a in np.meshgrid(elevation, altitude_km))
+    station_km = EARTH_RADIUS_KM + lower_height_km
+    satellite_km = EARTH_RADIUS_KM + altitude_km
+    radians = np.radians(elevation)
+    range_m = (
+        np.sqrt(satellite_km**2 - (station_km * np.cos(radians)) ** 2)
+        - station_km * np.sin(radians)
+    ) * 1_000
+    return elevation, range_m
+
+
+def _check_sweep(frequency_hz, lower_height_km, refinement):
+    """An accepted table is within its recorded bound, itself within 1e-10 dB, everywhere."""
+    column = build_reference_column(frequency_hz, lower_height_km, refinement=refinement)
+    table = build_gas_table(column)
+    elevation, range_m = _sweep_geometry(lower_height_km)
+    exact = column.for_geometry_array(elevation, range_m).total_db
+    measured = float(np.max(np.abs(table.total_db_for_geometry(elevation, range_m) - exact)))
+    assert table.max_measured_error_db <= table.error_bound_db or not table.verified
+    if table.verified:
+        assert table.error_bound_db <= GAS_TABLE_ACCEPT_DB
+        assert measured <= table.error_bound_db <= GAS_TABLE_MAX_ERROR_DB, (measured, table)
+    return table.verified
+
+
+# 12 GHz (the examples' band, accepted) and 55 GHz (the oxygen wing, refused: its bound is
+# about 8e-10 dB) at Quito's 2.85 km, where the review found the old bound exceeded.
+@pytest.mark.parametrize(("frequency_hz", "accepted"), [(12e9, True), (55e9, False)])
+def test_accepted_tables_are_within_their_bound_on_a_dense_sweep(frequency_hz, accepted):
+    assert _check_sweep(frequency_hz, 2.85, 1) is accepted
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    ("frequency_hz", "lower_height_km", "refinement"),
+    list(
+        product(
+            (1e9, 12e9, 20e9, 30e9, 40e9, 50e9, 55e9, 60e9, 90e9, 183e9),
+            LOWER_HEIGHTS_KM,
+            (1, 2),
+        )
+    ),
+)
+def test_every_accepted_table_is_within_its_bound_across_the_band(
+    frequency_hz, lower_height_km, refinement
+):
+    _check_sweep(frequency_hz, lower_height_km, refinement)
 
 
 def test_table_is_read_only_and_keeps_the_input_shape():

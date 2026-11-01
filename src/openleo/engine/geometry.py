@@ -10,8 +10,8 @@ evaluated without its intermediate celestial frame:
   precession cancel, up to rounding. So the position is ``rot_z(−θ) r_TEME`` with Skyfield's
   own ``theta_GMST1982``, and the velocity is ``rot_z(−θ) v_TEME`` plus Skyfield's ITRS rate
   term ``ω × r`` (``ANGVEL``, no polar motion): no IAU 2000A nutation series is evaluated. The
-  difference from the full chain is rounding, about 1e-9 m and 1e-12 m/s, far inside the v1
-  equivalence tolerances (1e-4 m, 1e-6 m/s) that ``tests/engine/test_geometry.py`` checks
+  difference from the full chain is rounding: measured at most 5e-8 m and 6e-11 m/s, far
+  inside the v1 equivalence tolerances (1e-4 m, 1e-6 m/s) that ``tests/engine/test_geometry.py`` checks
   against the frozen v1 fixtures and against Skyfield's chain off the grid.
 - The Skyfield times and rotations of the last offsets vector are cached, and so is the last
   satellite state: callers sweep stations and satellites over the same offsets.
