@@ -77,6 +77,13 @@ _NETWORK_SNAPSHOTS = (
     "Snapshot path bottlenecks omit link scheduling, contention, queues, packet loss, TCP and "
     "protocol overhead; they are not measured throughput."
 )
+# S1 additions (design spec 6.5 and the Task 13 rulings).
+FIXED_CAPACITY_THRESHOLD_WAIVER = (
+    "The fixed_capacity baseline assigns fixed_capacity_bps to every geometrically visible ground "
+    "link of the route endpoints regardless of the RF threshold (MODCOD lock): it waives the "
+    "threshold and can route over links whose adaptive rate is zero."
+)
+ROUTE_CONVERGENCE_NOT_GATED = "Route-metric grid convergence is reported but not gated in S1."
 _REFERENCE_ATMOSPHERE = (
     (
         "AMSL heights are explicit assumptions distinct from WGS84 ellipsoid heights; a 6371 km "
@@ -112,7 +119,9 @@ def limitations(scenario: Scenario) -> list[str]:
     - events enabled with a network: routes are held between event-aware breakpoints, and
       inter-satellite range and occlusion changes between them are not resolved (spec 6.5);
     - events enabled without a network: no line;
-    - a network adds the path-bottleneck limit; every scenario carries the Shannon caveat.
+    - a network adds the path-bottleneck limit and says that route-metric grid convergence is
+      reported but not gated; ``fixed_capacity`` among its route models adds the threshold
+      waiver of that baseline (spec 6.5); every scenario carries the Shannon caveat.
     """
     propagation = scenario.propagation
     reference = propagation.model == "itu_reference"
@@ -138,6 +147,12 @@ def limitations(scenario: Scenario) -> list[str]:
         *route_limit,
         _POSIX_LEAP_SECONDS,
         *([_NETWORK_SNAPSHOTS] if scenario.network is not None else []),
+        *(
+            [FIXED_CAPACITY_THRESHOLD_WAIVER]
+            if scenario.network is not None and "fixed_capacity" in scenario.network.route_models
+            else []
+        ),
+        *([ROUTE_CONVERGENCE_NOT_GATED] if scenario.network is not None else []),
         *(_REFERENCE_ATMOSPHERE if reference else ()),
     ]
 

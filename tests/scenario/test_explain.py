@@ -8,7 +8,12 @@ import pytest
 from openleo.constellation import _limitations as v1_limitations
 from openleo.output import LIMITATIONS as V1_OUTPUT_LIMITATIONS
 from openleo.physics.adaptation import ETSI_SOURCE_URL, MODCODS
-from openleo.scenario.explain import explain, limitations
+from openleo.scenario.explain import (
+    FIXED_CAPACITY_THRESHOLD_WAIVER,
+    ROUTE_CONVERGENCE_NOT_GATED,
+    explain,
+    limitations,
+)
 from openleo.scenario.model import ConvergenceSettings, EventSettings
 from openleo.scenario.parse import load_scenario
 
@@ -291,7 +296,8 @@ def test_limitations_are_the_v1_strings_verbatim_apart_from_the_shannon_caveat(n
     assert scenario.network is not None
     propagation = None if scenario.propagation.model == "free_space" else scenario.propagation
     ours = limitations(scenario)
-    assert [item for item in ours if item != SHANNON] == v1_limitations(propagation)
+    s1_additions = (SHANNON, FIXED_CAPACITY_THRESHOLD_WAIVER, ROUTE_CONVERGENCE_NOT_GATED)
+    assert [item for item in ours if item not in s1_additions] == v1_limitations(propagation)
     assert ours.count(SHANNON) == 1
 
 
@@ -348,6 +354,26 @@ def test_the_shannon_caveat_is_the_wording_of_the_v1_summary() -> None:
     assert SHANNON == (
         "Shannon-Hartley capacity is a theoretical upper bound, not throughput or achieved goodput"
     )
+
+
+def test_network_limits_name_the_threshold_waiver_and_the_ungated_route_convergence() -> None:
+    scenario = _scenario("iridium_global")
+    assert "fixed_capacity" in scenario.network.route_models
+    items = limitations(scenario)
+    assert items.count(FIXED_CAPACITY_THRESHOLD_WAIVER) == 1
+    assert items.count(ROUTE_CONVERGENCE_NOT_GATED) == 1
+    assert "regardless of the RF threshold (MODCOD lock)" in FIXED_CAPACITY_THRESHOLD_WAIVER
+    adaptive = dataclasses.replace(
+        scenario,
+        network=dataclasses.replace(
+            scenario.network, route_models=("minimum_delay",), fixed_capacity_bps=None
+        ),
+    )
+    assert FIXED_CAPACITY_THRESHOLD_WAIVER not in limitations(adaptive)
+    assert ROUTE_CONVERGENCE_NOT_GATED in limitations(adaptive)
+    alone = limitations(_no_network(scenario))
+    assert FIXED_CAPACITY_THRESHOLD_WAIVER not in alone
+    assert ROUTE_CONVERGENCE_NOT_GATED not in alone
 
 
 def test_the_path_bottleneck_limit_applies_only_with_a_network() -> None:

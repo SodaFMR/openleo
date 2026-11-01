@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from openleo.engine.catalogs import LoadedOrbit
     from openleo.engine.routing import RouteInterval
     from openleo.engine.timegrid import TimeGrid
-    from openleo.scenario.model import Scenario
+    from openleo.scenario.model import CatalogSource, Scenario
 
 ELEMENT_AGE_WARNING_DAYS = 14.0
 SYNTHETIC_RF_WARNING = (
@@ -522,6 +522,14 @@ def scenario_block(scenario: Scenario) -> dict[str, Any]:
     }
 
 
+def archive_names(catalogs: Sequence[CatalogSource]) -> list[str]:
+    """``<basename>`` per catalog; ``<index>-<basename>`` for basenames shared by several."""
+    names = [catalog.path.name for catalog in catalogs]
+    return [
+        name if names.count(name) == 1 else f"{index}-{name}" for index, name in enumerate(names)
+    ]
+
+
 def leap_second_table_sha256(timescale) -> str:
     """v1's fingerprint of Skyfield's leap-second table (``simulation._leap_second_table_sha256``)."""
     payload = {
@@ -541,13 +549,16 @@ def provenance(
 ) -> dict[str, Any]:
     selected = Counter(orbit.actual_sha256 for orbit in orbits)
     paths = [entry["path"] for entry in scenario_document(scenario)["space_segment"]["catalogs"]]
+    archived = archive_names(scenario.space_segment.catalogs)
     catalogs = []
-    for catalog, path, count in zip(
-        scenario.space_segment.catalogs, paths, record_counts, strict=True
+    for catalog, path, name, count in zip(
+        scenario.space_segment.catalogs, paths, archived, record_counts, strict=True
     ):
         catalogs.append(
             {
                 "path": path,
+                # Where ``save_run`` archives it, relative to the run's ``inputs/`` directory.
+                "archived_path": f"catalogs/{name}",
                 "format": catalog.format,
                 "source_url": catalog.source_url,
                 "retrieved_at_utc": utc_text(catalog.retrieved_at_utc, 0.0),
@@ -717,8 +728,10 @@ def models(scenario: Scenario, timescale, events_on: bool) -> dict[str, Any]:
             "occlusion",
             "relay": "Only source and target ground stations participate; intermediate "
             "stations do not relay",
-            "baseline": "Only ground-link rates become fixed_capacity_bps; ISLs retain "
-            "isl_capacity_bps",
+            "baseline": "fixed_capacity assigns fixed_capacity_bps to every geometrically "
+            "visible ground link of the route endpoints regardless of the RF threshold (MODCOD "
+            "lock), so it routes over links whose adaptive rate is zero; ISLs retain "
+            "isl.capacity_bps",
             "breakpoints": "Grid times plus every pass and rate-segment boundary of the "
             "endpoint stations; routes held between them",
         }

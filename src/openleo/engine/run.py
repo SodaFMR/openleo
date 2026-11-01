@@ -30,8 +30,12 @@ held over that last sliver. With events off it is left-held from each visible sa
 
 Grid samples. The ``samples`` table holds every (station, satellite, grid time) at or above the
 mask. Its MODCOD and rate are those of the rate segment holding the time; at the end of a pass
-that is visible at the window stop (no segment holds that instant) they are the state decided at
-or before it, as v1 selected a MODCOD at its final sample. ``remaining_contact_s`` is the pass
+that is visible at the window stop (no segment holds that instant) they are the state in effect
+there: that of the last decision effective before the pass end. As in ``acm_segments``, a
+decision effective at or after the pass end is dropped (it records a ``modcod_decision`` event
+but no ``modcod_effective`` one), so a lock decided exactly at the window stop is not reported
+at that final sample, where v1 reported it (the shipped examples have no such decision).
+``remaining_contact_s`` is the pass
 end minus the time and ``contact_truncated`` whether the pass is cut by the window stop.
 
 Minimum range. With events on, the smallest range over each pass is found from the range at its
@@ -488,7 +492,7 @@ def _state_at_pass_end(ctx: _Context, p: Pass, events, available_db: float):
     delay = ctx.adaptation.feedback_delay_s
     state = None
     for event in events:
-        if p.start_s <= event.decision_s <= p.end_s and event.decision_s + delay <= p.end_s:
+        if p.start_s <= event.decision_s <= p.end_s and event.decision_s + delay < p.end_s:
             state = event.to_modcod
     if state is None:
         return None, 0.0
@@ -877,7 +881,7 @@ def _event_rows(ctx: _Context, station: int, satellite: int, pair: _PairEvents) 
                 event.decision_s,
             )
         )
-        if delay == 0.0 or event.decision_s + delay < p.end_s:
+        if event.decision_s + delay < p.end_s:  # acm: at or after the pass end is dropped
             rows.append(
                 (
                     station,
@@ -930,12 +934,7 @@ def _pass_rows(station: int, satellite: int, pair: _PairEvents, links: _PairLink
 # --- archival ------------------------------------------------------------------------------------
 
 
-def _archive_names(catalogs: Sequence[CatalogSource]) -> list[str]:
-    """``<basename>`` per catalog; ``<index>-<basename>`` for basenames shared by several."""
-    names = [catalog.path.name for catalog in catalogs]
-    return [
-        name if names.count(name) == 1 else f"{index}-{name}" for index, name in enumerate(names)
-    ]
+_archive_names = assembly.archive_names
 
 
 def save_run(

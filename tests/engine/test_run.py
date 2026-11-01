@@ -96,7 +96,7 @@ def _global_run():
 
 @functools.cache
 def _hydrometeor_run():
-    return run(_gate(_example("iridium_global_hydrometeors"), "warn"), workers=WORKERS)
+    return run(_gate(_example("iridium_global_hydrometeors"), "error"), workers=WORKERS)
 
 
 # --- tables and metadata ---------------------------------------------------------------------
@@ -161,6 +161,15 @@ def test_scenario_and_provenance_blocks():
     assert models["free_space_path_loss"]["standard"] == "ITU-R P.525"
     assert all("standard" in entry and "version" in entry for entry in models.values())
     assert metadata["limitations"][0].startswith("Archived GP elements")
+    waiver = [line for line in metadata["limitations"] if "regardless of the RF threshold" in line]
+    assert len(waiver) == 1 and "fixed_capacity_bps" in waiver[0]
+    assert (
+        "Route-metric grid convergence is reported but not gated in S1."
+        in (metadata["limitations"])
+    )
+    baseline = models["network"]["baseline"]
+    assert "regardless of the RF threshold (MODCOD lock)" in baseline
+    assert "geometrically visible ground link" in baseline
 
 
 def test_reference_models_list_every_itu_kernel():
@@ -275,23 +284,37 @@ def test_events_off_matches_v1_samples(name):
 # --- convergence gate -------------------------------------------------------------------------
 
 
-# Spec section 11.5 acceptance. It fails by one count: the fixed_capacity route changes 53 times
-# on the 60 s grid and 54 times on the 15 s grid, where a 6 s intermediate route (Madrid via
-# NORAD 43569 to Tromso via 43574, 4110-4116 s) appears between two route breakpoints. That is
-# the S1 limitation the gate is meant to measure (spec 6.5: routes are held between breakpoints);
-# see the Task 13 report. Strict, so the marker must go once the effect is resolved or ruled.
-@pytest.mark.xfail(strict=True, reason="route changes between route breakpoints (spec 6.5)")
 def test_convergence_passes_on_hydrometeor_example():
+    """Spec section 11.5 acceptance, in mode error: the run publishes and every gated row passes.
+
+    Route metrics are reported but not gated in S1 (Task 13 ruling). One of them fails: the
+    fixed_capacity route changes 53 times on the 60 s grid and 54 times on the 15 s grid, where a
+    6 s intermediate route (4110-4116 s) appears between two route breakpoints, the spec 6.5
+    limitation. It is flagged in the table, the convergence block and the warnings.
+    """
     results = _hydrometeor_run()
     convergence = results.tables["convergence"]
-    failing = [m for m, ok in zip(convergence["metric"], convergence["passed"]) if not ok]
-    assert failing == []
+    gated = convergence["gated"].astype(bool)
+    passed = convergence["passed"].astype(bool)
+    assert gated.sum() > 3000
+    assert passed[gated].all()
+    assert set(np.array(convergence["class"])[gated]) == {"link", "station"}
+    route_failures = [m for m, ok in zip(convergence["metric"], passed, strict=True) if not ok]
+    assert route_failures == ["route/Madrid->Tromso/fixed_capacity/route_changes"]
+    warned = [w for w in results.metadata["warnings"] if w.startswith("convergence:")]
+    assert len(warned) == 1
+    assert "fixed_capacity/route_changes is 53.0" in warned[0]
+    assert "route metrics are not gated" in warned[0]
+    block = results.metadata["convergence"]
+    assert block["summary"]["fatal"] == 0
+    assert [(f["metric"], f["class"], f["fatal"]) for f in block["failures"]] == [
+        ("route/Madrid->Tromso/fixed_capacity/route_changes", "route", False)
+    ]
 
 
 def test_hydrometeor_convergence_fails_only_on_route_changes_between_breakpoints():
     results = _hydrometeor_run()
     convergence = results.tables["convergence"]
-    assert convergence.rows > 3000
     rows = {
         metric: (primary, refined, bool(ok))
         for metric, primary, refined, ok in zip(
@@ -302,12 +325,11 @@ def test_hydrometeor_convergence_fails_only_on_route_changes_between_breakpoints
             strict=True,
         )
     }
-    failing = {metric for metric, (_, _, ok) in rows.items() if not ok}
-    assert failing == {"route/Madrid->Tromso/fixed_capacity/route_changes"}
-    assert rows["route/Madrid->Tromso/fixed_capacity/route_changes"][:2] == (53.0, 54.0)
+    assert rows["route/Madrid->Tromso/fixed_capacity/route_changes"] == (53.0, 54.0, False)
     block = results.metadata["convergence"]
     assert block["skipped"] is False
     assert block["summary"]["failed"] == 1
+    assert block["summary"]["classes"]["route"] == {"gated": False, "metrics": 12, "failed": 1}
     assert block["summary"]["max_relative_difference"] < 0.02
     # With events on only quadrature nodes and route breakpoints depend on the grid: pair and
     # station metrics agree to 1e-9 relative (the Shannon integrals), or exactly.
@@ -317,9 +339,9 @@ def test_hydrometeor_convergence_fails_only_on_route_changes_between_breakpoints
         if not metric.startswith("route/") and r and math.isfinite(r)
     ]
     assert max(link_metrics) < 1e-9
-    warned = [w for w in results.metadata["warnings"] if w.startswith("convergence:")]
-    assert len(warned) == 1
-    assert "fixed_capacity/route_changes is 53.0" in warned[0]
+    # Mean route delays are held to 1 us absolute, so the 1 % relative tolerance decides them.
+    delay = rows["route/Madrid->Tromso/fixed_capacity/mean_delay_connected_s"]
+    assert delay[2] and abs(delay[1] - delay[0]) > 1e-4
 
 
 def _coarse(mode: str):
@@ -500,6 +522,9 @@ def test_save_run_archives_inputs(tmp_path):
     assert scenario_document(archived)["time"] == scenario_document(scenario)["time"]
     document = json.loads((saved / "inputs" / "scenario.json").read_text(encoding="utf-8"))
     assert document["space_segment"]["catalogs"][0]["path"] == f"catalogs/{catalog.name}"
+    provenance = results.metadata["provenance"]["catalogs"][0]
+    assert provenance["archived_path"] == f"catalogs/{catalog.name}"
+    assert (saved / "inputs" / provenance["archived_path"]).read_bytes() == catalog.read_bytes()
     on_disk = json.loads((saved / "results.json").read_text(encoding="utf-8"))
     assert set(on_disk) == RESULTS_KEYS | {"tables"}
     assert {path.suffix for path in (saved / "tables").iterdir()} == {".csv", ".olc"}
@@ -636,3 +661,28 @@ def test_archive_names_disambiguate_shared_basenames(tmp_path):
     second = replace(source, path=tmp_path / "b" / "gp.csv")
     third = replace(source, path=tmp_path / "c.csv")
     assert run_module._archive_names((first, second, third)) == ["0-gp.csv", "1-gp.csv", "c.csv"]
+
+
+def test_a_decision_effective_at_the_pass_end_is_dropped_everywhere():
+    from openleo.engine.acm import ModcodEvent
+    from openleo.engine.events import Pass
+
+    base = _gate(_example("iss_cartagena"), "off")
+    for delay in (0.0, 2.0):
+        scenario = replace(base, adaptation=replace(base.adaptation, feedback_delay_s=delay))
+        ctx = run_module._Context(scenario)
+        end = Pass(100.0, 600.0, 300.0, 40.0, False, True)
+        kept = ModcodEvent(100.0, 100.0 + delay, None, "QPSK 1/2")
+        dropped = ModcodEvent(600.0 - delay, 600.0, "QPSK 1/2", "8PSK 3/4")
+        # The state in effect at the pass end ignores the decision effective exactly there ...
+        state = run_module._state_at_pass_end(ctx, end, (kept, dropped), 20.0)
+        assert state[0] == "QPSK 1/2"
+        # ... and the events table records that decision without an effect row, as acm does.
+        pair = run_module._PairEvents((end,), (), (kept, dropped), None)
+        rows = run_module._event_rows(ctx, 0, 0, pair)
+        kinds = [(row[3], row[2]) for row in rows if row[3].startswith("modcod")]
+        assert kinds == [
+            ("modcod_decision", 100.0),
+            ("modcod_effective", 100.0 + delay),
+            ("modcod_decision", 600.0 - delay),
+        ]

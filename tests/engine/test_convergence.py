@@ -11,6 +11,8 @@ from openleo.engine.convergence import (
     compare_metrics,
     convergence_table,
     gate,
+    is_gated,
+    metric_class,
 )
 from openleo.scenario.model import ConvergenceSettings
 
@@ -25,7 +27,7 @@ SETTINGS = ConvergenceSettings(
         ("pair/Madrid/41917/integrated_rate_bits", 2.0),
         ("station/Madrid/visible_fraction", 1e-6),
         ("pair/Madrid/41917/visible_duration_s", 1e-3),
-        ("route/Madrid->Tromso/minimum_delay/mean_delay_connected_s", 1e-3),
+        ("route/Madrid->Tromso/minimum_delay/mean_delay_connected_s", 1e-6),
         ("pair/Madrid/41917/pass_count", 0.0),
         ("station/Madrid/best_link_handovers", 0.0),
         ("route/Madrid->Tromso/maximum_rate/route_changes", 0.0),
@@ -136,6 +138,12 @@ def test_passing_gate_and_off_mode():
         "failed": 0,
         "max_relative_difference": 0.0,
         "refined_step_s": 15.0,
+        "fatal": 0,
+        "classes": {
+            "link": {"gated": True, "metrics": 1, "failed": 0},
+            "station": {"gated": True, "metrics": 0, "failed": 0},
+            "route": {"gated": False, "metrics": 0, "failed": 0},
+        },
     }
     off = ConvergenceSettings("off", 4, 0.01, 2.0)
     block, warnings = gate((), off, step_s=60.0)
@@ -150,14 +158,77 @@ def test_convergence_table_has_units_and_flags():
     assert table.name == "convergence"
     assert [c.name for c in table.columns] == [
         "metric",
+        "class",
         "primary",
         "refined",
         "absolute_difference",
         "relative_difference",
         "passed",
+        "gated",
     ]
     assert table["passed"].tolist() == [0, 1]
+    assert table["class"] == ("link", "link")
+    assert table["gated"].tolist() == [1, 1]
     assert table["metric"] == tuple(row.metric for row in rows)
     assert np.array_equal(table["refined"], [2.0e3, 1.0])
     empty = convergence_table(())
     assert empty.rows == 0
+
+
+def test_delay_metrics_get_a_microsecond_not_a_millisecond():
+    # 0.5 ms on a 20 ms mean delay is 2.5 %: inside the 1 ms duration tolerance, outside 1 %.
+    rows = compare_metrics(
+        {"route/A->B/minimum_delay/mean_delay_connected_s": 0.0200},
+        {"route/A->B/minimum_delay/mean_delay_connected_s": 0.0205},
+        SETTINGS,
+    )
+    assert rows[0].passed is False
+    rows = compare_metrics(
+        {"route/A->B/minimum_delay/mean_delay_connected_s": 0.0200},
+        {"route/A->B/minimum_delay/mean_delay_connected_s": 0.0201},  # 0.5 %: relative passes
+        SETTINGS,
+    )
+    assert rows[0].passed is True
+    assert absolute_tolerance("pair/A/1/visible_duration_s", SETTINGS) == 1e-3
+
+
+def test_metric_classes_come_from_the_id_prefix():
+    assert metric_class("pair/A/1/pass_count") == "link"
+    assert metric_class("station/A/visible_fraction") == "station"
+    assert metric_class("route/A->B/maximum_rate/route_changes") == "route"
+    assert is_gated("pair/A/1/pass_count") and is_gated("station/A/visible_fraction")
+    assert not is_gated("route/A->B/maximum_rate/route_changes")
+    with pytest.raises(ValueError, match="must start with"):
+        metric_class("other/x")
+
+
+def _route_failure():
+    return ConvergenceRow("route/A->B/fixed_capacity/route_changes", 53.0, 54.0, 1.0, 1 / 54, False)
+
+
+def test_error_mode_with_only_route_failures_publishes_with_warnings():
+    rows = (_route_failure(), ConvergenceRow("pair/A/1/pass_count", 1.0, 1.0, 0.0, 0.0, True))
+    block, warnings = gate(rows, SETTINGS, step_s=60.0)
+    assert block["summary"]["failed"] == 1
+    assert block["summary"]["fatal"] == 0
+    assert block["summary"]["classes"]["route"] == {"gated": False, "metrics": 1, "failed": 1}
+    assert block["failures"][0]["class"] == "route"
+    assert block["failures"][0]["fatal"] is False
+    assert len(warnings) == 1
+    assert "route/A->B/fixed_capacity/route_changes" in warnings[0]
+    assert "not resolved in S1 (spec 6.5)" in warnings[0]
+    assert "route metrics are not gated" in warnings[0]
+
+
+def test_error_mode_lists_only_fatal_failures():
+    rows = (_route_failure(), *_failing(1))
+    with pytest.raises(ValueError) as caught:
+        gate(rows, SETTINGS, step_s=60.0)
+    message = str(caught.value)
+    assert "1 of 3" in message
+    assert "pair/A/0/integrated_rate_bits" in message
+    assert "route/" not in message
+    settings = ConvergenceSettings("warn", 4, 0.01, 2.0)
+    block, warnings = gate(rows, settings, step_s=60.0)
+    assert [entry["fatal"] for entry in block["failures"]] == [False, True]
+    assert len(warnings) == 2
