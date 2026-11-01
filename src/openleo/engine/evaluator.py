@@ -291,8 +291,9 @@ class LinkEvaluator:
         below = np.flatnonzero(~(elevation_deg >= station.mask_deg))
         if below.size:
             offset = np.atleast_1d(np.asarray(offsets_s, dtype=np.float64))[below[0]]
+            elevation = float(elevation_deg[below[0]])  # a plain float: no np.float64(...) repr
             raise ValueError(
-                f"NORAD {self._norad(satellite_index)} is at {elevation_deg[below[0]]!r} deg, "
+                f"NORAD {self._norad(satellite_index)} is at {elevation!r} deg, "
                 f"below the {station.mask_deg!r} deg elevation mask of station "
                 f"{station.name!r}, at {utc_text(self.geometry.start_utc, offset)}; links are "
                 "evaluated only at or above the mask"

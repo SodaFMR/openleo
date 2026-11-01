@@ -427,6 +427,8 @@ def test_evaluate_rejects_offsets_below_the_station_mask() -> None:
     assert f"NORAD {orbits[0].satellite.model.satnum}" in message
     assert timestamp in message
     assert "10.0 deg" in message
+    assert "np.float64" not in message
+    assert f"is at {float(elevation[below_index])!r} deg" in message
 
 
 def test_evaluate_accepts_scalar_and_empty_offsets() -> None:
