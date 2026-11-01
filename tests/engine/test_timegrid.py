@@ -141,6 +141,15 @@ def test_build_grid_rechecks_what_it_relies_on() -> None:
             build_grid(config)
 
 
+def test_build_grid_step_check_has_no_relative_tolerance() -> None:
+    from openleo.engine.timegrid import build_grid
+
+    # 1000.0000004 s rounds to 1000 s at microsecond resolution. A default relative tolerance
+    # (1e-9 of 1000 s = 1e-6 s) would accept the 4e-7 s difference; the parser and v1 do not.
+    with pytest.raises(ValueError, match="^/time/step_s=1000.0000004 .*whole number"):
+        build_grid(_time(START, START + timedelta(hours=1), 1000.0000004))
+
+
 def test_utc_text_rounds_to_microseconds() -> None:
     from openleo.engine.timegrid import utc_text
 

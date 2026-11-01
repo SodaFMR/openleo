@@ -33,10 +33,17 @@ _UNIX_EPOCH_JD = 2440587.5
 
 @dataclass(frozen=True, slots=True, eq=False)
 class TimeGrid:
+    """Sample offsets of a window, in seconds after ``start_utc``: read-only and increasing.
+
+    A grid from ``build_grid`` is 0, step_s, 2 step_s, ... and the window length, which ends a
+    shorter last interval when the stop time is off the grid. ``refine`` splits every interval,
+    that short last one included, into equal parts and divides ``step_s`` by the factor, so the
+    parts of a short last interval are shorter than ``step_s``. Offsets are whole microseconds.
+    """
+
     start_utc: datetime
     stop_utc: datetime
     step_s: float
-    # Seconds after start_utc, read-only: 0, step, 2 step, ..., and the window length.
     offsets_s: NDArray[np.float64]
 
 
@@ -107,7 +114,9 @@ def _step_microseconds(step_s: float, window_us: int) -> int:
     if step_s * 1e6 > window_us:
         raise ValueError(f"/time/step_s={step_s!r} must be no larger than the window")
     step = timedelta(seconds=step_s)
-    if step <= timedelta(0) or not isclose(step.total_seconds(), step_s, abs_tol=1e-12):
+    if step <= timedelta(0) or not isclose(
+        step.total_seconds(), step_s, rel_tol=0.0, abs_tol=1e-12
+    ):
         raise ValueError(f"/time/step_s={step_s!r} must be a whole number of microseconds")
     step_us = step // _MICROSECOND
     samples = -(-window_us // step_us) + 1
