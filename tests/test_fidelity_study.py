@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from openleo.cli import main
 from openleo.constellation import parse_constellation, simulate_constellation
 from openleo.fidelity_study import (
     attach_deltas,
@@ -101,15 +100,12 @@ def test_load_rejects_duplicate_json_keys_and_case_ids(tmp_path):
         *(f"lpt{i}" for i in range(1, 10)),
     ),
 )
-def test_load_and_cli_reject_windows_reserved_case_ids_before_output(tmp_path, capsys, case_id):
+def test_load_rejects_windows_reserved_case_ids_before_output(tmp_path, case_id):
     path = _study(tmp_path, cases=[{"id": case_id, "scenario": "scenario.json"}])
-    output = tmp_path / "result"
 
     with pytest.raises(ValueError, match="reserved"):
         load_fidelity_study(path)
-    assert main(["fidelity-study", str(path), "--output", str(output)]) == 2
-    assert "reserved" in capsys.readouterr().err
-    assert not output.exists()
+    assert not (tmp_path / "result").exists()
 
 
 def test_loaded_study_is_frozen_and_sorts_steps_without_mutating_json(tmp_path):
@@ -127,7 +123,7 @@ def test_loaded_study_is_frozen_and_sorts_steps_without_mutating_json(tmp_path):
 
 
 @pytest.mark.parametrize("rain_rate", [0.0, 25.0])
-def test_fidelity_study_rejects_hydrometeors_before_any_output(tmp_path, capsys, rain_rate):
+def test_fidelity_study_rejects_hydrometeors_before_any_output(tmp_path, rain_rate):
     path = _study(tmp_path)
     previously_loaded = load_fidelity_study(path)
     scenario_path = tmp_path / "scenario.json"
@@ -150,8 +146,6 @@ def test_fidelity_study_rejects_hydrometeors_before_any_output(tmp_path, capsys,
     output = tmp_path / "new-parent" / "study"
     with pytest.raises(ValueError, match="hydrometeors.*integrated experiment"):
         run_fidelity_study(previously_loaded, output)
-    assert main(["fidelity-study", str(path), "--output", str(output)]) == 2
-    assert "integrated experiment" in capsys.readouterr().err
     assert not output.parent.exists()
 
 

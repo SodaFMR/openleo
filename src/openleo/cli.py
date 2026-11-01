@@ -1,467 +1,448 @@
-"""Command line entry point."""
+"""The OpenLEO 2.0 command line (design spec section 8).
+
+``main(argv)`` parses the command, calls the library and returns the exit code:
+
+- 0: success;
+- 1: a user-input error (a missing or invalid file, an invalid option value, a refused
+  overwrite), printed as ``error: <message>`` on stderr, never as a traceback;
+- 2: a retired v1 command (``openleo <old> was removed in 2.0; use: openleo <new>``),
+  ``verify itu-workbook`` (stage S3), or a command-line usage error found by argparse.
+
+Library errors are ``ValueError`` or ``OSError``; anything else is a bug and is left to raise.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
 import sys
-from collections.abc import Sequence
-from dataclasses import fields
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from openleo.app.api import DEFAULT_ARTIFACT_LIMIT_BYTES
+from openleo.app.server import run_app
 from openleo.calc.gases import load_gases_benchmark, run_gases_benchmark, write_gases_result
-from openleo.input import load_scenario
-from openleo.output import write_result
-from openleo.sensitivity import load_sensitivity_study, run_sensitivity, write_sensitivity_result
-from openleo.simulation import simulate_scenario
+from openleo.calc.hydrometeors import run_hydrometeors
+from openleo.engine.catalogs import load_catalogs
+from openleo.engine.run import _check_step, save_run
+from openleo.engine.run import run as run_scenario
+from openleo.engine.timegrid import builtin_timescale
+from openleo.export import export_results
+from openleo.replay import (
+    NetworkReplayConfig,
+    ReplayConfig,
+    ReplaySource,
+    run_network_replay,
+    run_packet_replay,
+)
+from openleo.replay.source import ROUTE_MODELS
+from openleo.report import write_report
+from openleo.reproduce import run_reproduce
+from openleo.results.io import FORMATS
+from openleo.scenario import explain, load_scenario, starter, upgrade_file
+from openleo.sweep import run_sweep
+from openleo.verify import verify_itu_workbook, verify_orbit_reference
 
-_TRAFFIC_FIELDS = (
+__all__ = ["DEFAULT_ARTIFACT_LIMIT_BYTES", "RETIRED", "main"]
+
+GIB = 2**30
+MIB = 2**20
+
+# Retired v1 commands and their replacements (spec section 8). v1's single-pass ``run`` is the
+# v2 ``run``: it needs no entry, and a v1 scenario file gets the parser's own upgrade guidance.
+RETIRED = {
+    "constellation": "run",
+    "experiment": "sweep with variants, plus replay",
+    "fidelity-study": "sweep",
+    "propagation-study": "sweep",
+    "sensitivity": "sweep",
+    "benchmark": "reproduce / sweep",
+    "gases": "calc gases",
+    "hydrometeors": "calc hydrometeors",
+    "verify-orbit": "verify orbit",
+    "plot": "report --figures",
+    "plot-sensitivity": "report --figures",
+    "plot-gases": "report --figures",
+    "packet-replay": "replay link",
+    "network-replay": "replay network",
+}
+
+_PACKET_OPTIONS = (
     ("start_offset_s", float, 0),
     ("duration_s", float, 60),
     ("offered_load_bps", float, 100_000),
     ("packet_size_bytes", int, 512),
     ("queue_packets", int, 32),
+    ("seed", int, 1),
+)
+_NETWORK_OPTIONS = (
     ("flows_per_direction", int, 1),
     ("acquisition_delay_s", float, 0),
-    ("seed", int, 1),
 )
 
 
-def _traffic_arguments(parser, *, use_defaults):
-    for name, value_type, default in _TRAFFIC_FIELDS:
-        parser.add_argument(
-            "--" + name.replace("_", "-"),
-            type=value_type,
-            default=default if use_defaults else None,
-        )
+def _add_options(parser: argparse.ArgumentParser, options) -> None:
+    for name, kind, default in options:
+        parser.add_argument("--" + name.replace("_", "-"), type=kind, default=default)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openleo",
-        description="Run OpenLEO scientific benchmarks and render completed artifacts.",
+        description="Simulate LEO satellite links, sweeps and packet replays reproducibly.",
         epilog=(
             "Examples:\n"
-            "  openleo app SCENARIO.json\n"
-            "  openleo constellation CONSTELLATION.json --output DIRECTORY\n"
-            "  openleo propagation-study CONSTELLATION.json --output DIRECTORY\n"
-            "  openleo fidelity-study STUDY.json --output DIRECTORY\n"
-            "  openleo hydrometeors CONFIG.json --output DIRECTORY\n"
-            "  openleo experiment CONSTELLATION.json --settings SETTINGS.json --output DIRECTORY\n"
-            "  openleo network-replay RUN_DIRECTORY --backend EXECUTABLE --output DIRECTORY\n"
-            "  openleo run SCENARIO.json --output DIRECTORY\n"
-            "  openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY\n"
-            "  openleo gases CONFIG.json --output DIRECTORY\n"
-            "  openleo plot RUN_DIRECTORY --output FILE.svg\n"
-            "  openleo plot-sensitivity RUN_DIRECTORY --output FILE.svg\n"
-            "  openleo plot-gases RUN_DIRECTORY --output FILE.svg"
+            "  openleo scenario new --preset constellation -o scenario.json\n"
+            "  openleo run scenario.json --output runs/first\n"
+            "  openleo sweep sweep.json --output runs/sweep\n"
+            "  openleo report runs/first --output reports/first --figures\n"
+            "  openleo app scenario.json"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
-    app_parser = subparsers.add_parser(
-        "app", help="serve the local v2 run and sweep API for a v2 scenario"
-    )
-    app_parser.add_argument("scenario", metavar="SCENARIO.json")
-    app_parser.add_argument("--port", type=int, default=8765)
-    app_parser.add_argument("--packet-backend", help="trusted local single-link ns-3 executable")
-    app_parser.add_argument("--network-backend", help="trusted local multi-hop ns-3 executable")
-    app_parser.add_argument(
-        "--no-browser", action="store_true", help="print the local URL without opening it"
-    )
-    constellation_parser = subparsers.add_parser(
-        "constellation", help="run a constellation experiment and export its interactive report"
-    )
-    constellation_parser.add_argument("scenario", metavar="CONSTELLATION.json")
-    constellation_parser.add_argument("--output", required=True, metavar="DIRECTORY")
+    def command(name: str, handler: Callable, help_: str, parent=commands):
+        subparser = parent.add_parser(name, help=help_, description=help_)
+        subparser.set_defaults(handler=handler)
+        return subparser
 
-    propagation_parser = subparsers.add_parser(
-        "propagation-study", help="compare free space, reference atmosphere, and a refined grid"
+    scenario = commands.add_parser("scenario", help="create, check, explain or upgrade scenarios")
+    scenario_commands = scenario.add_subparsers(dest="action", required=True, metavar="ACTION")
+    new = command("new", _scenario_new, "write a starter scenario", scenario_commands)
+    new.add_argument("--preset", choices=("single-pass", "constellation"), default="single-pass")
+    new.add_argument("-o", "--output", metavar="FILE", help="write here instead of stdout")
+    validate = command(
+        "validate", _scenario_validate, "check a scenario and its catalogs", scenario_commands
     )
-    propagation_parser.add_argument("scenario", metavar="CONSTELLATION.json")
-    propagation_parser.add_argument("--output", required=True, metavar="DIRECTORY")
-    propagation_parser.add_argument(
-        "--figure", metavar="FILE.svg|FILE.png", help="optional figure; requires the plot extra"
+    validate.add_argument("scenario", metavar="SCENARIO.json")
+    explain_ = command(
+        "explain", _scenario_explain, "list every assumption of a scenario", scenario_commands
     )
+    explain_.add_argument("scenario", metavar="SCENARIO.json")
+    upgrade = command(
+        "upgrade", _scenario_upgrade, "convert an OpenLEO 1.x scenario", scenario_commands
+    )
+    upgrade.add_argument("scenario", metavar="V1_SCENARIO.json")
+    upgrade.add_argument("-o", "--output", metavar="FILE", help="write here instead of stdout")
 
-    fidelity_parser = subparsers.add_parser(
-        "fidelity-study", help="compare declared constellation scenarios and sampling grids"
+    run = command("run", _run, "simulate a scenario and save its results")
+    run.add_argument("scenario", metavar="SCENARIO.json")
+    run.add_argument("--output", required=True, metavar="DIRECTORY")
+    run.add_argument(
+        "--formats",
+        metavar="csv,olc,parquet",
+        help="table formats, overriding the scenario's outputs.formats (csv is always written)",
     )
-    fidelity_parser.add_argument("study", metavar="STUDY.json")
-    fidelity_parser.add_argument("--output", required=True, metavar="DIRECTORY")
-
-    hydro_parser = subparsers.add_parser(
-        "hydrometeors", help="calculate declared rain and cloud attenuation cases"
-    )
-    hydro_parser.add_argument("configuration", metavar="CONFIG.json")
-    hydro_parser.add_argument("--output", required=True, metavar="DIRECTORY")
-
-    packet_parser = subparsers.add_parser(
-        "packet-replay", help="replay one verified ground link through an optional ns-3 backend"
-    )
-    packet_parser.add_argument("bundle", metavar="RUN_DIRECTORY")
-    packet_parser.add_argument("--station", required=True, help="exact station name")
-    packet_parser.add_argument(
-        "--norad", required=True, type=int, help="satellite catalog identifier"
-    )
-    packet_parser.add_argument(
-        "--backend", required=True, help="trusted compiled OpenLEO ns-3 replay executable"
-    )
-    packet_parser.add_argument("--output", required=True, metavar="DIRECTORY")
-    packet_parser.add_argument("--start-offset-s", type=float, default=0)
-    packet_parser.add_argument("--duration-s", type=float, default=60)
-    packet_parser.add_argument("--offered-load-bps", type=float, default=100_000)
-    packet_parser.add_argument("--packet-size-bytes", type=int, default=512)
-    packet_parser.add_argument("--queue-packets", type=int, default=32)
-    packet_parser.add_argument("--seed", type=int, default=1)
-
-    network_parser = subparsers.add_parser(
-        "network-replay", help="replay multi-hop UDP routes with native ns-3"
-    )
-    network_parser.add_argument("bundle", metavar="RUN_DIRECTORY")
-    network_parser.add_argument(
-        "--backend", required=True, help="trusted compiled network-replay executable"
-    )
-    network_parser.add_argument("--output", required=True, metavar="DIRECTORY")
-    network_parser.add_argument(
-        "--routing-model",
-        choices=("minimum_delay", "maximum_rate", "fixed_capacity"),
-        default="minimum_delay",
-    )
-    _traffic_arguments(network_parser, use_defaults=True)
-
-    experiment_parser = subparsers.add_parser(
-        "experiment", help="compare aligned propagation and optional packet experiments"
-    )
-    experiment_parser.add_argument("scenario", metavar="CONSTELLATION.json")
-    experiment_parser.add_argument("--settings", metavar="SETTINGS.json")
-    experiment_parser.add_argument("--output", required=True, metavar="DIRECTORY")
-    experiment_parser.add_argument("--packet-mode", choices=("none", "link", "network"))
-    experiment_parser.add_argument("--station", dest="station_name")
-    experiment_parser.add_argument("--norad", dest="norad_id", type=int)
-    experiment_parser.add_argument("--packet-backend")
-    experiment_parser.add_argument("--network-backend")
-    _traffic_arguments(experiment_parser, use_defaults=False)
-
-    benchmark_parser = subparsers.add_parser(
-        "benchmark", help="run the frozen multi-scenario research matrix"
-    )
-    benchmark_parser.add_argument("configuration", metavar="BENCHMARK.json")
-    benchmark_parser.add_argument("--output", required=True, metavar="DIRECTORY")
-    benchmark_parser.add_argument("--network-backend")
-    verification_parser = subparsers.add_parser(
-        "verify-orbit", help="check a published numerical TEME reference"
-    )
-    verification_parser.add_argument("configuration", metavar="REFERENCE.json")
-    reproduction_parser = subparsers.add_parser(
-        "reproduce", help="reproduce complete numerical and native packet evidence"
-    )
-    reproduction_parser.add_argument("configuration", metavar="BENCHMARK.json")
-    reproduction_parser.add_argument("--reference", required=True, metavar="REFERENCE.json")
-    reproduction_parser.add_argument("--network-backend", required=True)
-    reproduction_parser.add_argument("--output", required=True, metavar="DIRECTORY")
-
-    run_parser = subparsers.add_parser("run", help="run a scenario and write its artifacts")
-    run_parser.add_argument("scenario", metavar="SCENARIO.json", help="scenario input JSON")
-    run_parser.add_argument("--output", required=True, metavar="DIRECTORY", help="output directory")
-
-    sensitivity_parser = subparsers.add_parser(
-        "sensitivity", help="run a deterministic sensitivity study"
-    )
-    sensitivity_parser.add_argument("scenario", metavar="SCENARIO.json", help="scenario input JSON")
-    sensitivity_parser.add_argument(
-        "sensitivity", metavar="SENSITIVITY.json", help="sensitivity study JSON"
-    )
-    sensitivity_parser.add_argument(
-        "--output", required=True, metavar="DIRECTORY", help="output directory"
+    run.add_argument("--workers", type=int, default=1, metavar="N")
+    run.add_argument(
+        "--memory-budget", type=float, default=None, metavar="GiB", help="estimate limit in GiB"
     )
 
-    gases_parser = subparsers.add_parser(
-        "gases", help="run a gaseous specific-attenuation benchmark"
+    sweep = command("sweep", _sweep, "run a sweep spec")
+    sweep.add_argument("sweep", metavar="SWEEP.json")
+    sweep.add_argument("--output", required=True, metavar="DIRECTORY")
+    sweep.add_argument("--workers", type=int, default=1, metavar="N")
+    sweep.add_argument("--packet-backend", metavar="EXE", help="trusted ns-3 link replay binary")
+    sweep.add_argument("--network-backend", metavar="EXE", help="trusted ns-3 network binary")
+
+    replay = commands.add_parser("replay", help="replay a saved run through ns-3")
+    replay_commands = replay.add_subparsers(dest="kind", required=True, metavar="KIND")
+    link = command("link", _replay_link, "replay one ground link of a run", replay_commands)
+    link.add_argument("results", metavar="RESULTS")
+    link.add_argument("--station", required=True, help="exact station name")
+    link.add_argument("--satellite", required=True, type=int, help="NORAD catalog id")
+    link.add_argument("--backend", required=True, metavar="EXE", help="trusted ns-3 binary")
+    link.add_argument("--output", required=True, metavar="DIRECTORY")
+    _add_options(link, _PACKET_OPTIONS)
+    network = command(
+        "network", _replay_network, "replay one routed station pair of a run", replay_commands
     )
-    gases_parser.add_argument("benchmark", metavar="CONFIG.json", help="benchmark input JSON")
-    gases_parser.add_argument(
-        "--output", required=True, metavar="DIRECTORY", help="output directory"
+    network.add_argument("results", metavar="RESULTS")
+    network.add_argument("--pair", required=True, metavar="SRC:DST", help="a network.pairs entry")
+    network.add_argument("--model", required=True, choices=ROUTE_MODELS, help="routing model")
+    network.add_argument("--backend", required=True, metavar="EXE", help="trusted ns-3 binary")
+    network.add_argument("--output", required=True, metavar="DIRECTORY")
+    _add_options(network, _PACKET_OPTIONS + _NETWORK_OPTIONS)
+
+    reproduce = command("reproduce", _reproduce, "reproduce the frozen release evidence")
+    reproduce.add_argument("config", metavar="CONFIG.json")
+    reproduce.add_argument("--reference", required=True, metavar="ORBIT_REF.json")
+    reproduce.add_argument("--network-backend", required=True, metavar="EXE")
+    reproduce.add_argument("--output", required=True, metavar="DIRECTORY")
+
+    verify = commands.add_parser("verify", help="check against published references")
+    verify_commands = verify.add_subparsers(dest="target", required=True, metavar="TARGET")
+    orbit = command(
+        "orbit", _verify_orbit, "check a published TEME state reference", verify_commands
     )
-
-    plot_parser = subparsers.add_parser("plot", help="render a completed pass overview")
-    plot_parser.add_argument(
-        "run_directory", metavar="RUN_DIRECTORY", help="completed run directory"
+    orbit.add_argument("reference", metavar="REFERENCE.json")
+    workbook = command(
+        "itu-workbook", _verify_workbook, "ITU-R workbook check (stage S3)", verify_commands
     )
-    plot_parser.add_argument(
-        "--output", required=True, metavar="FILE.svg|FILE.png", help="plot output file"
+    workbook.add_argument("path", metavar="PATH")
+
+    calc = commands.add_parser("calc", help="standalone attenuation calculators")
+    calc_commands = calc.add_subparsers(dest="calculator", required=True, metavar="CALCULATOR")
+    gases = command("gases", _calc_gases, "P.676-13 specific attenuation", calc_commands)
+    gases.add_argument("config", metavar="CONFIG.json")
+    gases.add_argument("--output", required=True, metavar="DIRECTORY")
+    hydrometeors = command(
+        "hydrometeors", _calc_hydrometeors, "P.838 rain and P.840 cloud attenuation", calc_commands
     )
+    hydrometeors.add_argument("config", metavar="CONFIG.json")
+    hydrometeors.add_argument("--output", required=True, metavar="DIRECTORY")
 
-    sensitivity_plot_parser = subparsers.add_parser(
-        "plot-sensitivity", help="render a completed sensitivity overview"
+    report = command("report", _report, "write a Markdown and CSV report")
+    report.add_argument("path", metavar="RESULTS_OR_SWEEP")
+    report.add_argument("--output", required=True, metavar="DIRECTORY")
+    report.add_argument("--figures", action="store_true", help="also draw matplotlib figures")
+
+    export = command("export", _export, "re-export a results directory")
+    export.add_argument("results", metavar="RESULTS")
+    export.add_argument("--to", required=True, choices=("csv", "parquet"))
+    export.add_argument("--output", required=True, metavar="DIRECTORY")
+
+    app = command("app", _app, "serve the local run and sweep API")
+    app.add_argument("scenario", metavar="SCENARIO.json")
+    app.add_argument("--port", type=int, default=8765)
+    app.add_argument("--no-browser", action="store_true", help="print the URL without opening it")
+    app.add_argument("--packet-backend", metavar="EXE", help="trusted ns-3 link replay binary")
+    app.add_argument("--network-backend", metavar="EXE", help="trusted ns-3 network binary")
+    app.add_argument(
+        "--artifact-limit",
+        type=float,
+        default=None,
+        metavar="MB",
+        help=f"disk limit for the app's results, in MiB (default {DEFAULT_ARTIFACT_LIMIT_BYTES // MIB})",
     )
-    sensitivity_plot_parser.add_argument(
-        "run_directory", metavar="RUN_DIRECTORY", help="completed sensitivity run directory"
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] in RETIRED:
+        old = arguments[0]
+        print(f"openleo {old} was removed in 2.0; use: openleo {RETIRED[old]}", file=sys.stderr)
+        return 2
+    args = _parser().parse_args(arguments)
+    try:
+        return args.handler(args)
+    except NotImplementedError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
+# ------------------------------------------------------------------------------ scenario
+
+
+def _emit(text: str, output: str | None) -> None:
+    if output is None:
+        sys.stdout.write(text)
+    else:
+        Path(output).write_text(text, encoding="utf-8", newline="\n")
+
+
+def _scenario_new(args) -> int:
+    _emit(starter(args.preset), args.output)
+    return 0
+
+
+def _scenario_validate(args) -> int:
+    scenario = load_scenario(args.scenario)
+    note = ""
+    catalogs = scenario.space_segment.catalogs
+    if all(
+        os.access(catalog.path, os.R_OK) and Path(catalog.path).is_file() for catalog in catalogs
+    ):
+        orbits = load_catalogs(scenario.space_segment, builtin_timescale())
+        if scenario.time.events.enabled:
+            _check_step(scenario, orbits)
+    else:
+        note = " (catalog not checked: a catalog file is not readable, so the event step was not)"
+    print(f"valid: {scenario.name}{note}")
+    return 0
+
+
+def _scenario_explain(args) -> int:
+    sys.stdout.write(explain(load_scenario(args.scenario)) + "\n")
+    return 0
+
+
+def _scenario_upgrade(args) -> int:
+    text = upgrade_file(Path(args.scenario), None if args.output is None else Path(args.output))
+    if args.output is None:
+        sys.stdout.write(text)
+    return 0
+
+
+# ----------------------------------------------------------------------------- run / sweep
+
+
+def _run(args) -> int:
+    scenario = load_scenario(args.scenario)
+    formats = None if args.formats is None else _formats(args.formats)
+    options: dict = {"workers": args.workers}
+    if args.memory_budget is not None:
+        budget = args.memory_budget
+        if not math.isfinite(budget) or budget <= 0:
+            raise ValueError(f"--memory-budget={budget!r} must be a positive number of GiB")
+        options["memory_budget_bytes"] = int(budget * GIB)
+    results = run_scenario(scenario, **options)
+    directory = save_run(scenario, results, Path(args.output), formats)
+    print(f"results: {directory}")
+    print(_convergence_line(results.metadata["convergence"]))
+    return 0
+
+
+def _formats(text: str) -> tuple[str, ...]:
+    formats = tuple(part.strip() for part in text.split(",") if part.strip())
+    unknown = [name for name in formats if name not in FORMATS]
+    if not formats or unknown:
+        raise ValueError(
+            f"--formats={text!r} must list formats from {', '.join(FORMATS)}"
+            + (f"; unknown: {', '.join(unknown)}" if unknown else "")
+        )
+    return formats
+
+
+def _convergence_line(block: dict) -> str:
+    mode = block["settings"]["mode"]
+    summary = block.get("summary")
+    if summary is None:
+        return f"convergence: 0 metrics, 0 failures (mode={mode})"
+    line = f"convergence: {summary['metrics']} metrics, {summary['failed']} failures (mode={mode})"
+    route = summary["classes"]["route"]
+    if route["metrics"]:
+        line += (
+            f"; route: {route['metrics']} metrics, {route['failed']} failures (reported, not gated)"
+        )
+    return line
+
+
+def _sweep(args) -> int:
+    document = run_sweep(
+        Path(args.sweep),
+        Path(args.output),
+        workers=args.workers,
+        packet_backend=_path(args.packet_backend),
+        network_backend=_path(args.network_backend),
     )
-    sensitivity_plot_parser.add_argument(
-        "--output", required=True, metavar="FILE.svg|FILE.png", help="plot output file"
+    print(f"sweep: {args.output}")
+    print(f"runs: {len(document['runs'])}")
+    return 0
+
+
+def _path(text: str | None) -> Path | None:
+    return None if text is None else Path(text)
+
+
+# ------------------------------------------------------------------------------- replays
+
+
+def _replay_link(args) -> int:
+    config = ReplayConfig(
+        station_name=args.station,
+        norad_id=args.satellite,
+        **{name: getattr(args, name) for name, _, _ in _PACKET_OPTIONS},
     )
+    run_packet_replay(args.results, config, Path(args.backend), Path(args.output))
+    print(f"packet summary: {Path(args.output) / 'packet-summary.json'}")
+    return 0
 
-    gases_plot_parser = subparsers.add_parser(
-        "plot-gases", help="render a completed gaseous attenuation overview"
+
+def _replay_network(args) -> int:
+    source = ReplaySource.from_results(Path(args.results))
+    names = [
+        f"{source.station_names[first]}:{source.station_names[second]}"
+        for first, second in source.route_pairs
+    ]
+    if args.pair not in names:
+        raise ValueError(
+            f"--pair {args.pair!r} must name one of the results' network pairs as SRC:DST: "
+            + (", ".join(names) if names else "these results have no network")
+        )
+    config = NetworkReplayConfig(
+        routing_model=args.model,
+        pair_index=names.index(args.pair),
+        **{name: getattr(args, name) for name, _, _ in _PACKET_OPTIONS + _NETWORK_OPTIONS},
     )
-    gases_plot_parser.add_argument(
-        "run_directory", metavar="RUN_DIRECTORY", help="completed gaseous benchmark directory"
+    run_network_replay(args.results, config, Path(args.backend), Path(args.output))
+    print(f"network summary: {Path(args.output) / 'network-summary.json'}")
+    return 0
+
+
+def _reproduce(args) -> int:
+    evidence = run_reproduce(
+        Path(args.config), Path(args.reference), Path(args.network_backend), Path(args.output)
     )
-    gases_plot_parser.add_argument(
-        "--output", required=True, metavar="FILE.svg|FILE.png", help="plot output file"
+    print(f"native replays: {evidence['native_packet_replays']}")
+    print(f"evidence: {Path(args.output) / 'release-evidence.json'}")
+    return 0
+
+
+# ------------------------------------------------------------------- verify / calc / report
+
+
+def _verify_orbit(args) -> int:
+    result = verify_orbit_reference(args.reference)
+    print(json.dumps(result, indent=2, allow_nan=False))
+    return 0 if result["passed"] else 1
+
+
+def _verify_workbook(args) -> int:
+    verify_itu_workbook(args.path)  # raises NotImplementedError until S3
+    return 0  # pragma: no cover
+
+
+def _calc_gases(args) -> int:
+    result = run_gases_benchmark(load_gases_benchmark(args.config))
+    csv_path, summary_path = write_gases_result(result, args.output)
+    print(f"benchmark: {result.benchmark.name}")
+    print(f"recommendation: {result.benchmark.recommendation}")
+    print(f"method: {result.benchmark.method}")
+    print(f"cases: {len(result.cases)}")
+    print(f"csv: {csv_path}")
+    print(f"summary: {summary_path}")
+    return 0
+
+
+def _calc_hydrometeors(args) -> int:
+    result = run_hydrometeors(args.config, args.output)
+    print(f"study: {result['name']}")
+    print(f"report: {Path(args.output) / 'index.html'}")
+    return 0
+
+
+def _report(args) -> int:
+    directory = write_report(Path(args.path), Path(args.output), figures=args.figures)
+    print(f"report: {directory}")
+    return 0
+
+
+def _export(args) -> int:
+    directory = export_results(Path(args.results), args.to, Path(args.output))
+    print(f"results: {directory}")
+    return 0
+
+
+def _app(args) -> int:
+    limit = DEFAULT_ARTIFACT_LIMIT_BYTES
+    if args.artifact_limit is not None:
+        if not math.isfinite(args.artifact_limit) or args.artifact_limit <= 0:
+            raise ValueError(f"--artifact-limit={args.artifact_limit!r} must be a positive size")
+        limit = int(args.artifact_limit * MIB)
+    run_app(
+        Path(args.scenario),
+        port=args.port,
+        open_browser=not args.no_browser,
+        packet_backend=_path(args.packet_backend),
+        network_backend=_path(args.network_backend),
+        artifact_limit_bytes=limit,
     )
-
-    args = parser.parse_args(argv)
-    if args.command in ("benchmark", "verify-orbit", "reproduce"):
-        try:
-            if args.command == "verify-orbit":
-                from openleo.verify.orbit import verify_orbit_reference
-
-                result = verify_orbit_reference(args.configuration)
-                print(json.dumps(result, indent=2, allow_nan=False))
-                return 0 if result["passed"] else 1
-            if args.command == "benchmark":
-                from openleo.benchmark import run_benchmark
-
-                result = run_benchmark(
-                    args.configuration, args.output, network_backend=args.network_backend
-                )
-                print(f"packet evidence: {result['packet_evidence']}")
-            else:
-                from openleo.release_evidence import reproduce_release
-
-                result = reproduce_release(
-                    args.configuration,
-                    args.reference,
-                    args.output,
-                    network_backend=args.network_backend,
-                )
-                print(f"native replays: {result['native_packet_replays']}")
-            print(f"report: {Path(args.output) / 'index.html'}")
-            return 0
-        except (ValueError, OSError, UnicodeError, RecursionError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "experiment":
-        try:
-            from openleo.constellation import load_constellation
-            from openleo.experiment import ExperimentConfig, parse_experiment_config, run_experiment
-            from openleo.workbench import _read, _unique_object
-
-            settings = (
-                json.loads(_read(Path(args.settings), 1_000_000), object_pairs_hook=_unique_object)
-                if args.settings
-                else {}
-            )
-            if not isinstance(settings, dict):
-                raise ValueError("experiment settings must be an object")  # noqa: TRY004
-            overrides = {
-                field.name: getattr(args, field.name)
-                for field in fields(ExperimentConfig)
-                if getattr(args, field.name, None) is not None
-            }
-            config = parse_experiment_config({**settings, **overrides})
-            run_experiment(
-                load_constellation(args.scenario),
-                config,
-                args.output,
-                packet_backend=args.packet_backend,
-                network_backend=args.network_backend,
-            )
-            print(f"report: {Path(args.output) / 'index.html'}")
-            return 0
-        except (ValueError, OSError, UnicodeError, RecursionError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "network-replay":
-        try:
-            from openleo.network_replay import NetworkReplayConfig, run_network_replay
-
-            config = NetworkReplayConfig(
-                routing_model=args.routing_model,
-                **{name: getattr(args, name) for name, _, _ in _TRAFFIC_FIELDS},
-            )
-            run_network_replay(args.bundle, config, args.backend, args.output)
-            print(f"network summary: {Path(args.output) / 'network-summary.json'}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "hydrometeors":
-        try:
-            from openleo.calc.hydrometeors import run_hydrometeors
-
-            result = run_hydrometeors(args.configuration, args.output)
-            print(f"study: {result['name']}")
-            print(f"report: {Path(args.output) / 'index.html'}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "packet-replay":
-        try:
-            from openleo.packet_replay import ReplayConfig, run_packet_replay
-
-            config = ReplayConfig(
-                station_name=args.station,
-                norad_id=args.norad,
-                start_offset_s=args.start_offset_s,
-                duration_s=args.duration_s,
-                offered_load_bps=args.offered_load_bps,
-                packet_size_bytes=args.packet_size_bytes,
-                queue_packets=args.queue_packets,
-                seed=args.seed,
-            )
-            run_packet_replay(args.bundle, config, args.backend, args.output)
-            print(f"packet summary: {Path(args.output) / 'packet-summary.json'}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "fidelity-study":
-        try:
-            from openleo.fidelity_study import load_fidelity_study, run_fidelity_study
-
-            summary = run_fidelity_study(load_fidelity_study(args.study), args.output)
-            print(f"study: {summary['name']}")
-            print(f"runs: {len(summary['runs'])}")
-            print(f"report: {Path(args.output) / 'index.html'}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "propagation-study":
-        try:
-            from openleo.constellation import load_constellation
-            from openleo.propagation_study import (
-                render_propagation_study,
-                run_propagation_study,
-                write_propagation_study,
-            )
-
-            result = run_propagation_study(load_constellation(args.scenario))
-            path = write_propagation_study(result, args.output)
-            print(f"study: {path}")
-            if args.figure:
-                print(f"figure: {render_propagation_study(result, args.figure)}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "app":
-        try:
-            from openleo.app import run_app
-
-            run_app(
-                Path(args.scenario),
-                port=args.port,
-                open_browser=not args.no_browser,
-                packet_backend=None if args.packet_backend is None else Path(args.packet_backend),
-                network_backend=None
-                if args.network_backend is None
-                else Path(args.network_backend),
-            )
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "constellation":
-        try:
-            from openleo.constellation import load_constellation, simulate_constellation
-            from openleo.network import add_network
-            from openleo.workbench import write_workbench
-
-            scenario = load_constellation(args.scenario)
-            document = add_network(simulate_constellation(scenario))
-            paths = write_workbench(document, args.output)
-            print(f"experiment: {scenario.name}")
-            print(f"satellites: {len(document['satellites'])}")
-            print(f"stations: {len(document['stations'])}")
-            print(f"samples: {len(document['timestamps_utc'])}")
-            for path in paths:
-                print(f"{path.name}: {path}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "run":
-        try:
-            result = simulate_scenario(load_scenario(args.scenario))
-            trace_path, summary_path = write_result(result, args.output)
-            print(f"scenario: {result.scenario.name}")
-            print(f"rows: {len(result.rows)}")
-            print(
-                f"sampled AOS: {result.summary.sampled_aos_utc.isoformat().replace('+00:00', 'Z')}"
-            )
-            print(
-                f"sampled LOS: {result.summary.sampled_los_utc.isoformat().replace('+00:00', 'Z')}"
-            )
-            print(f"trace: {trace_path}")
-            print(f"summary: {summary_path}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "sensitivity":
-        try:
-            scenario = load_scenario(args.scenario)
-            study = load_sensitivity_study(args.sensitivity, scenario)
-            result = run_sensitivity(scenario, study)
-            csv_path, summary_path = write_sensitivity_result(result, args.output)
-            print(f"study: {study.name}")
-            print(f"method: {study.method}")
-            print(f"sweeps: {len(study.sweeps)}")
-            print(f"cases: {len(result.cases)}")
-            print(f"sensitivity: {csv_path}")
-            print(f"summary: {summary_path}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "gases":
-        try:
-            result = run_gases_benchmark(load_gases_benchmark(args.benchmark))
-            csv_path, summary_path = write_gases_result(result, args.output)
-            print(f"benchmark: {result.benchmark.name}")
-            print(f"recommendation: {result.benchmark.recommendation}")
-            print(f"method: {result.benchmark.method}")
-            print(f"cases: {len(result.cases)}")
-            print(f"csv: {csv_path}")
-            print(f"summary: {summary_path}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "plot":
-        try:
-            from openleo.plotting import render_pass_overview
-
-            output_path = render_pass_overview(args.run_directory, args.output)
-            print(f"plot: {output_path}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "plot-sensitivity":
-        try:
-            from openleo.sensitivity_plotting import render_sensitivity_overview
-
-            output_path = render_sensitivity_overview(args.run_directory, args.output)
-            print(f"plot: {output_path}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    if args.command == "plot-gases":
-        try:
-            from openleo.calc.gases_figure import render_gases_overview
-
-            output_path = render_gases_overview(args.run_directory, args.output)
-            print(f"plot: {output_path}")
-            return 0
-        except (ValueError, OSError, UnicodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
-    return 2
+    return 0

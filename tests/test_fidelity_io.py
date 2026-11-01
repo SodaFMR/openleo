@@ -255,29 +255,3 @@ def test_run_loader_rejects_rehashed_interior_time_on_short_final_grid(tmp_path)
 
     with pytest.raises(ValueError, match="time grid"):
         _load_run(output, run, summary["sampling_steps_s"])
-
-
-def test_fidelity_cli_rejects_missing_input_without_traceback(tmp_path, capsys):
-    from openleo.cli import main
-
-    assert (
-        main(["fidelity-study", str(tmp_path / "missing.json"), "--output", str(tmp_path / "run")])
-        == 2
-    )
-    error = capsys.readouterr().err
-    assert "error:" in error
-    assert "Traceback" not in error
-    assert not (tmp_path / "run").exists()
-
-
-def test_fidelity_cli_writes_a_verified_visual_study(completed_study, tmp_path, capsys):
-    from openleo.cli import main
-    from openleo.fidelity_io import load_fidelity_result
-
-    source = completed_study[0].parent / "study.json"
-    output = tmp_path / "cli"
-    assert main(["fidelity-study", str(source), "--output", str(output)]) == 0
-    summary = load_fidelity_result(output)
-    assert len(summary["runs"]) == 6
-    assert (output / "index.html").is_file()
-    assert "report:" in capsys.readouterr().out

@@ -4,8 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from openleo.cli import main
-
 REFERENCE = Path("examples/atmosphere/hydrometeors_reference.json")
 
 
@@ -101,16 +99,3 @@ def test_report_escapes_labels_and_separates_the_two_physical_quantities(tmp_pat
     assert "Cloud slant attenuation (dB)" in html
     assert "No rain cases" in html
     assert "script-src 'none'" in html
-
-
-def test_hydrometeors_cli_runs_the_real_reference_cases(tmp_path, capsys):
-    assert main(["hydrometeors", str(REFERENCE), "--output", str(tmp_path / "results")]) == 0
-    assert "report:" in capsys.readouterr().out
-    assert (tmp_path / "results/hydrometeors.json").exists()
-
-
-def test_hydrometeors_cli_reports_missing_input_without_traceback(tmp_path, capsys):
-    assert main(["hydrometeors", str(tmp_path / "missing"), "--output", str(tmp_path / "out")]) == 2
-    message = capsys.readouterr().err
-    assert "error:" in message and "Traceback" not in message
-    assert not (tmp_path / "out").exists()

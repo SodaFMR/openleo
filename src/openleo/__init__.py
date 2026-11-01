@@ -1,45 +1,68 @@
-"""OpenLEO link budget tools."""
+"""OpenLEO link budget tools.
+
+The package exports resolve lazily (PEP 562), so ``import openleo`` does not import numpy or
+skyfield: the console script sets its BLAS thread limits before they load
+(``openleo._launcher``).
+"""
+
+from __future__ import annotations
+
+from importlib import import_module
+from typing import Any
 
 __version__ = "2.0.0.dev0"
 
-from openleo.calc.gases import (
-    GasesBenchmark,
-    GasesCase,
-    GasesResult,
-    load_gases_benchmark,
-    run_gases_benchmark,
-    write_gases_result,
-)
-from openleo.cli import main
-from openleo.constellation import (
-    ConstellationScenario,
-    load_constellation,
-    parse_constellation,
-    scenario_document,
-    simulate_constellation,
-)
-from openleo.engine.run import run, save_run
-from openleo.model import GroundStation, OrbitSource, Provenance, RadioLink, Scenario, TimeWindow
-from openleo.network import NetworkConfig, add_network
-from openleo.orbit import LoadedOrbit, load_orbit
-from openleo.output import write_result
-from openleo.physics.adaptation import AdaptationConfig, Modcod, select_modcod
-from openleo.physics.gases import SpecificGaseousAttenuation, specific_gaseous_attenuation
-from openleo.results import Results, load_results
-from openleo.scenario import load_scenario
-from openleo.sensitivity import (
-    SensitivityBaselineContext,
-    SensitivityCase,
-    SensitivityMetrics,
-    SensitivityResult,
-    SensitivityStudy,
-    SensitivitySweep,
-    load_sensitivity_study,
-    run_sensitivity,
-    write_sensitivity_result,
-)
-from openleo.simulation import SimulationResult, SimulationSummary, TraceRow, simulate_scenario
-from openleo.workbench import load_experiment, render_workbench, write_workbench
+_EXPORTS = {
+    "AdaptationConfig": "openleo.physics.adaptation",
+    "ConstellationScenario": "openleo.constellation",
+    "GasesBenchmark": "openleo.calc.gases",
+    "GasesCase": "openleo.calc.gases",
+    "GasesResult": "openleo.calc.gases",
+    "GroundStation": "openleo.model",
+    "LoadedOrbit": "openleo.orbit",
+    "Modcod": "openleo.physics.adaptation",
+    "NetworkConfig": "openleo.network",
+    "OrbitSource": "openleo.model",
+    "Provenance": "openleo.model",
+    "RadioLink": "openleo.model",
+    "Results": "openleo.results",
+    "Scenario": "openleo.model",
+    "SensitivityBaselineContext": "openleo.sensitivity",
+    "SensitivityCase": "openleo.sensitivity",
+    "SensitivityMetrics": "openleo.sensitivity",
+    "SensitivityResult": "openleo.sensitivity",
+    "SensitivityStudy": "openleo.sensitivity",
+    "SensitivitySweep": "openleo.sensitivity",
+    "SimulationResult": "openleo.simulation",
+    "SimulationSummary": "openleo.simulation",
+    "SpecificGaseousAttenuation": "openleo.physics.gases",
+    "TimeWindow": "openleo.model",
+    "TraceRow": "openleo.simulation",
+    "add_network": "openleo.network",
+    "load_constellation": "openleo.constellation",
+    "load_experiment": "openleo.workbench",
+    "load_gases_benchmark": "openleo.calc.gases",
+    "load_orbit": "openleo.orbit",
+    "load_results": "openleo.results",
+    "load_scenario": "openleo.scenario",
+    "load_sensitivity_study": "openleo.sensitivity",
+    "main": "openleo.cli",
+    "parse_constellation": "openleo.constellation",
+    "render_workbench": "openleo.workbench",
+    "run": "openleo.engine.run",
+    "run_gases_benchmark": "openleo.calc.gases",
+    "run_sensitivity": "openleo.sensitivity",
+    "save_run": "openleo.engine.run",
+    "scenario_document": "openleo.constellation",
+    "select_modcod": "openleo.physics.adaptation",
+    "simulate_constellation": "openleo.constellation",
+    "simulate_scenario": "openleo.simulation",
+    "specific_gaseous_attenuation": "openleo.physics.gases",
+    "write_gases_result": "openleo.calc.gases",
+    "write_result": "openleo.output",
+    "write_sensitivity_result": "openleo.sensitivity",
+    "write_workbench": "openleo.workbench",
+}
 
 __all__ = [
     "AdaptationConfig",
@@ -93,3 +116,16 @@ __all__ = [
     "write_sensitivity_result",
     "write_workbench",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    module = _EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(module), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_EXPORTS))

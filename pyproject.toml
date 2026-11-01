@@ -20,7 +20,7 @@ plot = ["matplotlib>=3.11"]
 parquet = ["pyarrow>=21"]
 
 [project.scripts]
-openleo = "openleo.cli:main"
+openleo = "openleo._launcher:main"
 
 [dependency-groups]
 dev = [

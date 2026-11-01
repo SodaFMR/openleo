@@ -411,7 +411,7 @@ def test_cli_app_serves_a_v2_scenario_with_trusted_backends(
     assert "workbench: http://127.0.0.1:" in capsys.readouterr().out
     legacy = tmp_path / "legacy.json"
     legacy.write_text('{"orbit": {}}', encoding="utf-8")
-    assert main(["app", str(legacy), "--no-browser"]) == 2
+    assert main(["app", str(legacy), "--no-browser"]) == 1
     assert "scenario upgrade" in capsys.readouterr().err
 
 

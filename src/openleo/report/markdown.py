@@ -423,6 +423,7 @@ def write_report(path: Path, output_dir: Path, *, figures: bool = False) -> Path
         (stage / "report.md").write_bytes(text.encode("utf-8"))
         (stage / "summary.csv").write_bytes(summary)
         _check_output(output_dir)
+        stage.chmod(_default_directory_mode())  # mkdtemp made it 0700; publish it as mkdir would
         try:
             # Replaces an empty directory atomically on POSIX.
             os.replace(stage, output_dir)
@@ -437,6 +438,13 @@ def write_report(path: Path, output_dir: Path, *, figures: bool = False) -> Path
         if stage.exists():
             shutil.rmtree(stage, ignore_errors=True)
     return output_dir
+
+
+def _default_directory_mode() -> int:
+    """0o777 & ~umask: the mode ``mkdir`` gives a new directory (umask is read, then restored)."""
+    umask = os.umask(0)
+    os.umask(umask)
+    return 0o777 & ~umask
 
 
 def _check_output(output_dir: Path) -> None:

@@ -31,43 +31,6 @@ def test_reference_failure_prevents_benchmark_and_publication(tmp_path):
     assert not (tmp_path / "output").exists()
 
 
-def test_release_cli_missing_reference_has_clean_error(tmp_path, capsys):
-    from openleo.cli import main
-
-    assert (
-        main(
-            [
-                "reproduce",
-                "missing",
-                "--reference",
-                "missing",
-                "--network-backend",
-                "missing",
-                "--output",
-                str(tmp_path / "output"),
-            ]
-        )
-        == 2
-    )
-    assert "error:" in capsys.readouterr().err
-
-
-def test_orbit_cli_reports_published_reference(capsys):
-    from openleo.cli import main
-
-    assert main(["verify-orbit", str(REFERENCE)]) == 0
-    output = json.loads(capsys.readouterr().out)
-    assert output["passed"] is True and len(output["epochs"]) == 5
-
-
-def test_benchmark_cli_model_only_is_explicit(scenario, tmp_path, capsys):
-    from openleo.cli import main
-
-    config = _config(scenario, tmp_path, sampling_steps_s=[10], refinements=[1])
-    assert main(["benchmark", str(config), "--output", str(tmp_path / "output")]) == 0
-    assert "packet evidence: missing" in capsys.readouterr().out
-
-
 def test_complete_release_evidence_uses_native_results_and_binds_sources(scenario, tmp_path):
     from openleo.release_evidence import reproduce_release
 
