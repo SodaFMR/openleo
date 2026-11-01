@@ -1,0 +1,203 @@
+{
+  "files": {
+    "all_dtypes.olc": {
+      "columns": [
+        {
+          "description": "float64 column",
+          "dtype": "f64",
+          "name": "f64",
+          "unit": "m"
+        },
+        {
+          "description": "float32 column",
+          "dtype": "f32",
+          "name": "f32",
+          "unit": "dB"
+        },
+        {
+          "description": "int64 column beyond 2**53",
+          "dtype": "i64",
+          "name": "i64",
+          "unit": "1"
+        },
+        {
+          "description": "int32 column",
+          "dtype": "i32",
+          "name": "i32",
+          "unit": "1"
+        },
+        {
+          "description": "uint8 flag column",
+          "dtype": "u8",
+          "name": "u8",
+          "unit": "bool"
+        },
+        {
+          "description": "text column with control characters",
+          "dtype": "str",
+          "name": "str",
+          "unit": ""
+        }
+      ],
+      "rows": 3,
+      "sha256": "1e1210be2880ac99802bff017595c29b2335852878c75cc7127478b008cb3fa3",
+      "table": "all_dtypes",
+      "values": {
+        "f32": [
+          0.10000000149011612,
+          -2.5,
+          3.0000000054977558e+38
+        ],
+        "f64": [
+          0.1,
+          -2.5,
+          1e+300
+        ],
+        "i32": [
+          -2147483648,
+          0,
+          2147483647
+        ],
+        "i64": [
+          "-9223372036854775808",
+          "9007199254740993",
+          "9223372036854775807"
+        ],
+        "str": [
+          "",
+          "ascii",
+          "tab\tnew\nline"
+        ],
+        "u8": [
+          0,
+          1,
+          255
+        ]
+      }
+    },
+    "empty.olc": {
+      "columns": [
+        {
+          "description": "empty float64",
+          "dtype": "f64",
+          "name": "a",
+          "unit": "s"
+        },
+        {
+          "description": "empty float32",
+          "dtype": "f32",
+          "name": "b",
+          "unit": "s"
+        },
+        {
+          "description": "empty int64",
+          "dtype": "i64",
+          "name": "c",
+          "unit": "1"
+        },
+        {
+          "description": "empty int32",
+          "dtype": "i32",
+          "name": "d",
+          "unit": "1"
+        },
+        {
+          "description": "empty uint8",
+          "dtype": "u8",
+          "name": "e",
+          "unit": "1"
+        },
+        {
+          "description": "empty text",
+          "dtype": "str",
+          "name": "f",
+          "unit": ""
+        }
+      ],
+      "rows": 0,
+      "sha256": "848f7548bd13f440e1c6da36a01c0a841af8dd0530ac40e88ec6db90603db12d",
+      "table": "empty",
+      "values": {
+        "a": [],
+        "b": [],
+        "c": [],
+        "d": [],
+        "e": [],
+        "f": []
+      }
+    },
+    "special_floats.olc": {
+      "columns": [
+        {
+          "description": "NaN, +/-inf, -0, subnormal, max",
+          "dtype": "f64",
+          "name": "f64",
+          "unit": "x"
+        },
+        {
+          "description": "NaN, +/-inf, -0, subnormal, max",
+          "dtype": "f32",
+          "name": "f32",
+          "unit": "x"
+        }
+      ],
+      "rows": 6,
+      "sha256": "a53dddc7d64e444fcd1775364bc6a65078068908072cd60d90182da43fd2e1c0",
+      "table": "special_floats",
+      "values": {
+        "f32": [
+          "NaN",
+          "Infinity",
+          "-Infinity",
+          -0.0,
+          1.401298464324817e-45,
+          3.4028234663852886e+38
+        ],
+        "f64": [
+          "NaN",
+          "Infinity",
+          "-Infinity",
+          -0.0,
+          5e-324,
+          1.7976931348623157e+308
+        ]
+      }
+    },
+    "unicode.olc": {
+      "columns": [
+        {
+          "description": "row number",
+          "dtype": "i32",
+          "name": "index",
+          "unit": "1"
+        },
+        {
+          "description": "UTF-8 text: BMP, CJK, astral, NUL, empty",
+          "dtype": "str",
+          "name": "text",
+          "unit": ""
+        }
+      ],
+      "rows": 5,
+      "sha256": "9a3c6750495e938f4c50e38ca35ff9e611e5a7f9d9e6bd1c51c70f20ea0df69d",
+      "table": "unicode",
+      "values": {
+        "index": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "text": [
+          "café",
+          "日本語",
+          "🛰️ orbit",
+          "a\u0000b",
+          ""
+        ]
+      }
+    }
+  },
+  "format": "OLC1"
+}
