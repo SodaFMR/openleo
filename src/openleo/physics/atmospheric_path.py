@@ -46,7 +46,9 @@ NEWTON_TOLERANCE_DEG = 1e-11
 NEWTON_MAX_ITERATIONS = 60
 # GasTable: piecewise Chebyshev series on [GAS_TABLE_LOW_DEG, 90] degrees of apparent
 # elevation. GAS_TABLE_MAX_ERROR_DB is the ruling's limit (Task 18); a table is accepted only
-# when its rigorous error bound is within GAS_TABLE_ACCEPT_DB, a quarter of it.
+# when its heuristic Chebyshev-level error bound (see docs/METHODS.md) is within
+# GAS_TABLE_ACCEPT_DB, a quarter of it, and an end-to-end check against the exact ray trace
+# stays within that bound.
 GAS_TABLE_LOW_DEG = 5.0
 GAS_TABLE_SEGMENTS = 16
 GAS_TABLE_DEGREE = 16
@@ -454,7 +456,9 @@ class GasTable:
     Error bound. ``build_gas_table`` compares the series with the exact sums at every segment
     end and midway between consecutive Chebyshev points; ``max_loss_error_db`` (δT) and
     ``max_central_angle_error_rad`` (δC) are the largest differences found. Between check
-    points either may reach about twice that. Against ``for_geometry_array`` the table's loss
+    points either is assumed to reach at most twice that; this is typical of converged
+    Chebyshev series but not proved, so the bound is heuristic at the Chebyshev level and is
+    backed by the end-to-end check below. Against ``for_geometry_array`` the table's loss
     differs by the error of T̃ at the solved elevation plus |T'| times the difference of the
     two solved elevations, which is at most the shift δC / |C'| that an error in C causes (the
     vacuum terms only steepen the residual) plus each solve's own stopping error, at most

@@ -20,8 +20,9 @@ ray trace. The engine uses them only for the Shannon-bound quadrature and the MO
 root-finding, which evaluate the link at thousands of times per pass; every exported
 per-sample value comes from ``evaluate`` except each sample's MODCOD and rate, which come
 from the rate segments. Tables are built only with events on, and one is used only when
-``build_gas_table`` verified it (a rigorous loss error bound within ``GAS_TABLE_ACCEPT_DB``,
-2.5e-11 dB, a quarter of the 1e-10 dB limit, and an end-to-end check within the bound);
+``build_gas_table`` verified it (a heuristic Chebyshev-level loss error bound, see
+docs/METHODS.md, within ``GAS_TABLE_ACCEPT_DB``, 2.5e-11 dB, a quarter of the 1e-10 dB limit,
+and an end-to-end check against the exact ray trace within the bound);
 otherwise those methods trace the ray exactly. ``gas_tables`` reports, per station, the bound
 or None.
 """

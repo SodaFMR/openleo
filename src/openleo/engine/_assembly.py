@@ -740,10 +740,13 @@ def models(
                 "on [5, 90] deg) from the exact layer sums; the endpoint solve keeps the exact "
                 "vacuum geometry",
                 "max_error_db": max(tabulated) if tabulated else None,
-                "max_error_db_meaning": "The largest station's rigorous bound on |tabulated - "
-                "ray-traced| gaseous loss over the whole domain: twice the series errors found at "
-                "the check points, the elevation shift they cause and both solves' 1e-11 deg "
-                "stopping error, each times the local loss slope",
+                "max_error_db_meaning": "The largest station's heuristic Chebyshev-level bound "
+                "on |tabulated - ray-traced| gaseous loss (see docs/METHODS.md): twice the series "
+                "errors found at the check points, the elevation shift they cause and both "
+                "solves' 1e-11 deg stopping error, each times the local loss slope; it assumes "
+                "the series error between check points is at most twice the error at them, which "
+                "is not proved, and is checked end to end against the exact ray trace at "
+                "construction",
                 "station_error_bound_db": bounds,
                 "fallback": "Stations whose bound exceeds 2.5e-11 dB (a quarter of the 1e-10 dB "
                 "limit), or whose end-to-end check exceeds the bound, use the exact ray trace "
