@@ -23,6 +23,9 @@ from openleo.physics.reference_atmosphere import reference_atmosphere
 
 EARTH_RADIUS_KM = 6_371.0
 SPEED_OF_LIGHT_M_S = 299_792_458.0
+# Array ray traces run in row chunks so each (rows, layers) float64 temporary stays
+# near 8 MiB whatever the number of elements.
+_CHUNK_ELEMENTS = 1 << 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +46,17 @@ class GroundPathResult:
     total_db: float
     apparent_elevation_deg: float
     excess_delay_s: float
+
+
+@dataclass(frozen=True, slots=True)
+class GroundPathArrays:
+    """``GroundPathResult`` fields evaluated element-wise, as read-only float64 arrays."""
+
+    dry_air_db: NDArray[np.float64]
+    water_vapour_db: NDArray[np.float64]
+    total_db: NDArray[np.float64]
+    apparent_elevation_deg: NDArray[np.float64]
+    excess_delay_s: NDArray[np.float64]
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +197,148 @@ class ReferenceColumn:
             else:
                 upper = midpoint
         return (lower + upper) / 2
+
+    def for_geometry_array(
+        self, geometric_elevation_deg: NDArray[np.float64], range_m: NDArray[np.float64]
+    ) -> GroundPathArrays:
+        """Evaluate ``for_geometry`` element-wise; the inputs broadcast together.
+
+        Every element gets the scalar method's validation, its 40-step bisection on
+        apparent elevation and its ray trace, in the same operation order: the
+        bisection runs on (rows,) arrays and the layer sums on (rows, layers) arrays.
+        Any invalid element raises the scalar method's ``ValueError``.
+        """
+        elevation = _finite_array(geometric_elevation_deg, "geometric_elevation_deg")
+        distance = _finite_array(range_m, "range_m")
+        elevation, distance = np.broadcast_arrays(elevation, distance)
+        shape = elevation.shape
+        elevation, distance = elevation.ravel(), distance.ravel()
+        if not np.all((5.0 <= elevation) & (elevation <= 90.0)):
+            raise ValueError("geometric_elevation_deg must be between 5 and 90 inclusive")
+        if np.any(distance <= 0.0):
+            raise ValueError("range_m must be positive")
+        if self.upper_height_km != 100.0:
+            raise ValueError("ground-to-space geometry requires a column ending at 100 km")
+        radius = EARTH_RADIUS_KM + self.lower_height_km
+        elevation_rad = np.radians(elevation)
+        radial = radius + distance / 1_000 * np.sin(elevation_rad)
+        transverse = distance / 1_000 * np.cos(elevation_rad)
+        target_radius = np.hypot(radial, transverse)
+        top_radius = EARTH_RADIUS_KM + self.upper_height_km
+        if np.any(target_radius <= top_radius):
+            raise ValueError("geometric endpoint must be above the 100 km atmospheric column")
+        target_angle = np.arctan2(transverse, radial)
+        results = np.empty((5, elevation.size))
+        rows = max(1, _CHUNK_ELEMENTS // self.radii_km.size)
+        for start in range(0, elevation.size, rows):
+            chunk = slice(start, start + rows)
+            results[:, chunk] = self._ground_path_rows(
+                elevation[chunk], distance[chunk], target_radius[chunk], target_angle[chunk]
+            )
+        return GroundPathArrays(*(_readonly(values).reshape(shape) for values in results))
+
+    def _ground_path_rows(
+        self,
+        geometric_elevation_deg: NDArray[np.float64],
+        range_m: NDArray[np.float64],
+        target_radius: NDArray[np.float64],
+        target_angle: NDArray[np.float64],
+    ) -> tuple[NDArray[np.float64], ...]:
+        apparent = self._solve_elevation_rows(geometric_elevation_deg, target_radius, target_angle)
+        # The trace and the excess path repeat at_apparent_elevation and for_geometry.
+        impact = self._impact_km_rows(apparent)
+        entry_sines, exit_sines = self._incidence_sines_rows(impact)
+        top_radii = self.radii_km + self.thicknesses_km
+        entry_distances = self.radii_km * np.sqrt((1 - entry_sines) * (1 + entry_sines))
+        exit_distances = top_radii * np.sqrt((1 - exit_sines) * (1 + exit_sines))
+        lengths = (
+            self.thicknesses_km
+            * (2 * self.radii_km + self.thicknesses_km)
+            / (entry_distances + exit_distances)
+        )
+        dry = lengths @ self.dry_air_db_per_km
+        water = lengths @ self.water_vapour_db_per_km
+        refractive_excess_path_m = (lengths @ (self.refractive_indices - 1)) * 1_000
+        geometric_path_m = np.sum(lengths, axis=1) * 1_000
+        top_radius = EARTH_RADIUS_KM + self.upper_height_km
+        vacuum_km = (target_radius - top_radius) * (
+            (target_radius + top_radius)
+            / (
+                target_radius * np.sqrt(1 - (impact / target_radius) ** 2)
+                + top_radius * np.sqrt(1 - (impact / top_radius) ** 2)
+            )
+        )
+        excess_m = geometric_path_m + vacuum_km * 1_000 - range_m + refractive_excess_path_m
+        roundoff_m = 64 * np.finfo(float).eps * range_m
+        if np.any(excess_m < -roundoff_m):
+            raise ValueError("endpoint solve produced a negative excess optical path")
+        excess_delay_s = np.maximum(0.0, excess_m) / SPEED_OF_LIGHT_M_S
+        return dry, water, dry + water, apparent, excess_delay_s
+
+    def _solve_elevation_rows(
+        self,
+        lower: NDArray[np.float64],
+        target_radius: NDArray[np.float64],
+        target_angle: NDArray[np.float64],
+    ) -> NDArray[np.float64]:
+        apparent = lower.copy()
+        pending = np.flatnonzero(lower != 90.0)
+        residual = (
+            self._endpoint_angle_rows(lower[pending], target_radius[pending])
+            - target_angle[pending]
+        )
+        roundoff_rad = 64 * np.finfo(float).eps
+        if np.any(residual < -roundoff_rad):
+            raise ValueError("geometric endpoint is not bracketed by the ascending refracted ray")
+        pending = pending[np.abs(residual) > roundoff_rad]
+        low = lower[pending]
+        high = np.full_like(low, 90.0)
+        radius, angle = target_radius[pending], target_angle[pending]
+        for _ in range(40):
+            midpoint = (low + high) / 2
+            above = self._endpoint_angle_rows(midpoint, radius) > angle
+            low = np.where(above, midpoint, low)
+            high = np.where(above, high, midpoint)
+        apparent[pending] = (low + high) / 2
+        return apparent
+
+    def _endpoint_angle_rows(
+        self, elevation_deg: NDArray[np.float64], target_radius: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        impact = self._impact_km_rows(elevation_deg)
+        top_radius = EARTH_RADIUS_KM + self.upper_height_km
+        if np.any(impact > top_radius):
+            raise ValueError("refracted ray cannot continue into vacuum above 100 km")
+        entry_angles, exit_angles = self._incidence_sines_rows(impact)
+        np.arcsin(entry_angles, out=entry_angles)
+        np.arcsin(exit_angles, out=exit_angles)
+        entry_angles -= exit_angles
+        central_angle = np.sum(entry_angles, axis=1)
+        return central_angle + np.arcsin(impact / top_radius) - np.arcsin(impact / target_radius)
+
+    def _impact_km_rows(self, elevation_deg: NDArray[np.float64]) -> NDArray[np.float64]:
+        impact = float(self.refractive_indices[0] * self.radii_km[0]) * np.cos(
+            np.radians(elevation_deg)
+        )
+        return np.where(elevation_deg == 90.0, 0.0, impact)
+
+    def _incidence_sines_rows(
+        self, impact_km: NDArray[np.float64]
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        top_radii = self.radii_km + self.thicknesses_km
+        entry_sines = impact_km[:, None] / (self.refractive_indices * self.radii_km)
+        exit_sines = impact_km[:, None] / (self.refractive_indices * top_radii)
+        if np.any(entry_sines > 1.0) or np.any(exit_sines > 1.0):
+            raise ValueError("refracted path is trapped or outside the ascending-ray domain")
+        return entry_sines, exit_sines
+
+
+def _finite_array(values: NDArray[np.float64], name: str) -> NDArray[np.float64]:
+    """Element-wise ``_validate_finite``: real numbers only, never bools."""
+    array = np.asarray(values)
+    if array.dtype.kind not in "iuf" or not np.all(np.isfinite(array)):
+        raise ValueError(f"{name} must be finite and not a bool")
+    return array.astype(np.float64, copy=False)
 
 
 def _readonly(values) -> NDArray[np.float64]:

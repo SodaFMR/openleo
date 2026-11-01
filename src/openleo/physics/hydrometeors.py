@@ -9,6 +9,9 @@ from math import cos, exp, isfinite, log10, radians, sin
 from numbers import Real
 from types import MappingProxyType
 
+import numpy as np
+from numpy.typing import NDArray
+
 RAIN_SOURCE = MappingProxyType(
     {
         "recommendation": "ITU-R P.838-3",
@@ -194,3 +197,53 @@ def cloud_slant_attenuation(
     if not all(isfinite(value) and value >= 0.0 for value in (mass_absorption, attenuation)):
         raise ValueError("P.840-9 calculation produced invalid attenuation")
     return CloudAttenuation(mass_absorption, attenuation)
+
+
+def _rain_specific_attenuation_array(
+    frequency_hz: float,
+    rain_rate_mm_h: float,
+    elevation_deg: NDArray[np.float64],
+    polarization_tilt_deg: float,
+) -> NDArray[np.float64]:
+    """``rain_specific_attenuation`` dB/km element-wise over elevation.
+
+    The caller validates every argument against the scalar kernel's domains first.
+    """
+    log_frequency_ghz = log10(frequency_hz / 1e9)
+    k_h = _p838_fit(log_frequency_ghz, _K_HORIZONTAL, True)
+    k_v = _p838_fit(log_frequency_ghz, _K_VERTICAL, True)
+    alpha_h = _p838_fit(log_frequency_ghz, _ALPHA_HORIZONTAL, False)
+    alpha_v = _p838_fit(log_frequency_ghz, _ALPHA_VERTICAL, False)
+    geometry = np.cos(np.radians(elevation_deg)) ** 2 * cos(radians(2.0 * polarization_tilt_deg))
+    k = (k_h + k_v + (k_h - k_v) * geometry) / 2.0
+    alpha = (k_h * alpha_h + k_v * alpha_v + (k_h * alpha_h - k_v * alpha_v) * geometry) / (2.0 * k)
+    with np.errstate(over="ignore"):
+        specific_attenuation = (
+            np.zeros_like(k) if rain_rate_mm_h == 0.0 else k * rain_rate_mm_h**alpha
+        )
+    if not all(
+        np.all(np.isfinite(values) & (values >= 0.0)) for values in (k, alpha, specific_attenuation)
+    ):
+        raise ValueError("P.838-3 calculation produced invalid attenuation")
+    return specific_attenuation
+
+
+def _cloud_slant_attenuation_array(
+    frequency_hz: float,
+    liquid_water_kg_m2: float,
+    elevation_deg: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """``cloud_slant_attenuation`` dB element-wise over elevation.
+
+    The caller validates every argument against the scalar kernel's domains first.
+    Mass absorption depends on frequency alone, so it comes from the scalar kernel
+    at the zenith, where sin(90 deg) is exactly 1.
+    """
+    mass_absorption = cloud_slant_attenuation(
+        frequency_hz, liquid_water_kg_m2, 90.0
+    ).mass_absorption_db_per_kg_m2
+    with np.errstate(over="ignore"):
+        attenuation = mass_absorption * liquid_water_kg_m2 / np.sin(np.radians(elevation_deg))
+    if not np.all(np.isfinite(attenuation) & (attenuation >= 0.0)):
+        raise ValueError("P.840-9 calculation produced invalid attenuation")
+    return attenuation
