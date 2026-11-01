@@ -762,10 +762,30 @@ def expand_sweep(spec: dict, base_document: dict) -> tuple[SweepRun, ...]:
         runs = _expand_grid(spec, base_document, clipped, base_path, maximum, extent)
     else:
         runs = _expand_variants(spec, clipped, base_path, maximum, extent)
+    _check_portable_ids(runs, "/variants" if mode == "variants" else "/parameters")
     if replay is not None:
         for run in runs:
             _check_replay(replay, run)
     return tuple(runs)
+
+
+def _check_portable_ids(runs: Sequence[SweepRun], pointer: str) -> None:
+    """Refuse run ids whose directories would collide or be renamed on macOS or Windows."""
+    seen: dict[str, str] = {}
+    for run in runs:
+        if run.id.endswith("."):
+            raise ValueError(
+                f"{pointer}: run id {_safe_repr(run.id, 60)} ends with '.', which Windows strips "
+                "from directory names; change the value or variant id"
+            )
+        key = run.id.casefold()
+        if key in seen:
+            raise ValueError(
+                f"{pointer}: run ids {_safe_repr(seen[key], 60)} and {_safe_repr(run.id, 60)} "
+                "differ only by case, so their directories collide on case-insensitive file "
+                "systems; rename one"
+            )
+        seen[key] = run.id
 
 
 def _too_many(pointer: str, what: str, count: int, maximum: int) -> ValueError:

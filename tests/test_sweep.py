@@ -1477,3 +1477,30 @@ def test_spec_touches_reports_paths_at_under_or_above_a_pointer():
     assert sweep.spec_touches(variants, "/space_segment")
     assert not sweep.spec_touches(variants, "/space_segment_extra")
     assert not sweep.spec_touches(spec(), "/space_segment")
+
+
+def test_run_ids_must_be_portable_file_names(tmp_path):
+    """Directories of runs whose ids differ only by case collide on macOS and Windows, and
+    Windows strips a trailing dot, so such ids are refused."""
+    patch = [{"op": "replace", "path": "/radio/eirp_dbw", "value": 12.0}]
+    spec = {
+        "mode": "variants",
+        "variants": [{"id": "Hot", "patch": patch}, {"id": "hot", "patch": []}],
+    }
+    with pytest.raises(ValueError, match=r"^/variants: run ids .*differ only by case"):
+        _expand(tmp_path, spec)
+    spec = {"mode": "variants", "variants": [{"id": "hot.", "patch": patch}]}
+    with pytest.raises(ValueError, match=r"^/variants: run id .*ends with '\.'"):
+        _expand(tmp_path, spec)
+    spec = {
+        "mode": "oat",
+        "parameters": [
+            {
+                "path": "/name",
+                "values": ["pass", "PASS"],
+                "nominal": "iss-cartagena-s-band-free-space",
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match=r"^/parameters: run ids .*differ only by case"):
+        _expand(tmp_path, spec)
