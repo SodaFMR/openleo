@@ -28,7 +28,8 @@ MODEL = "model choice"
 
 # Scope limitations. Verbatim the strings of openleo.constellation._limitations (the v1 engine) and
 # openleo.output.LIMITATIONS (the Shannon caveat), which a test holds them to, kept here so that
-# v2 does not need the v1 engine to say them. The route-breakpoint line is the v2 statement of
+# v2 does not need the v1 engine to say them, except SYNTHETIC_ADAPTATION: v1 named Iridium for
+# every scenario, so v2 names no operator. The route-breakpoint line is the v2 statement of
 # design spec 6.5.
 _ARCHIVED_GP = (
     "Archived GP elements are propagated predictions, not measured satellite positions; age is "
@@ -38,8 +39,8 @@ _DECLARED_RF = (
     "Station coordinates and every RF/ISL parameter are declared experiment assumptions, not "
     "surveyed infrastructure or real constellation specifications."
 )
-_SYNTHETIC_ADAPTATION = (
-    "DVB-S2 reference rates are synthetic link adaptation, not Iridium waveform or receiver "
+SYNTHETIC_ADAPTATION = (
+    "DVB-S2 reference rates are synthetic link adaptation, not the operator's waveform or receiver "
     "measurements."
 )
 _ATMOSPHERE = {
@@ -147,7 +148,7 @@ def limitations(scenario: Scenario) -> list[str]:
     return [
         _ARCHIVED_GP,
         _DECLARED_RF,
-        _SYNTHETIC_ADAPTATION,
+        SYNTHETIC_ADAPTATION,
         _SHANNON_UPPER_BOUND,
         _ATMOSPHERE[atmosphere],
         *route_limit,

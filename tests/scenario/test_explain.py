@@ -10,6 +10,7 @@ from openleo.scenario.explain import (
     EVENT_TIME_ACCURACY,
     FIXED_CAPACITY_THRESHOLD_WAIVER,
     ROUTE_CONVERGENCE_NOT_GATED,
+    SYNTHETIC_ADAPTATION,
     explain,
     limitations,
 )
@@ -21,6 +22,11 @@ V2_DIR = ROOT / "examples"
 
 # Frozen expectations: the strings of OpenLEO v1.0.0's ``openleo.constellation._limitations`` and
 # ``openleo.output.LIMITATIONS``, copied verbatim from tag v1.0.0 when the v1 engine was removed.
+# v1 named Iridium in the adaptation line for every scenario; v2 states it without an operator.
+_V1_SYNTHETIC_ADAPTATION = (
+    "DVB-S2 reference rates are synthetic link adaptation, not Iridium waveform or receiver "
+    "measurements."
+)
 _V1_COMMON = (
     (
         "Archived GP elements are propagated predictions, not measured satellite positions; age is "
@@ -30,10 +36,7 @@ _V1_COMMON = (
         "Station coordinates and every RF/ISL parameter are declared experiment assumptions, not "
         "surveyed infrastructure or real constellation specifications."
     ),
-    (
-        "DVB-S2 reference rates are synthetic link adaptation, not Iridium waveform or receiver "
-        "measurements."
-    ),
+    _V1_SYNTHETIC_ADAPTATION,
 )
 _V1_ATMOSPHERE = {
     "hydrometeors": "Reference gaseous atmosphere with fixed declared clouds and uniform spherical "
@@ -384,13 +387,29 @@ def test_limitations_follow_the_propagation_model(name: str, model_phrase: str) 
     "name", ["iridium_global", "iridium_global_reference", "iridium_global_hydrometeors"]
 )
 def test_limitations_are_the_v1_strings_verbatim_apart_from_the_shannon_caveat(name: str) -> None:
+    """Apart from the S1 additions and the adaptation line, which no longer names Iridium."""
     scenario = _with_time(_scenario(name), events=EventSettings(enabled=False))
     assert scenario.network is not None
     propagation = None if scenario.propagation.model == "free_space" else scenario.propagation
     ours = limitations(scenario)
     s1_additions = (SHANNON, FIXED_CAPACITY_THRESHOLD_WAIVER, ROUTE_CONVERGENCE_NOT_GATED)
-    assert [item for item in ours if item not in s1_additions] == v1_limitations(propagation)
+    expected = [
+        SYNTHETIC_ADAPTATION if item == _V1_SYNTHETIC_ADAPTATION else item
+        for item in v1_limitations(propagation)
+    ]
+    assert [item for item in ours if item not in s1_additions] == expected
     assert ours.count(SHANNON) == 1
+
+
+@pytest.mark.parametrize("path", EXAMPLES, ids=lambda path: path.stem)
+def test_the_adaptation_line_names_no_operator(path: Path) -> None:
+    items = limitations(load_scenario(path))
+    assert items.count(SYNTHETIC_ADAPTATION) == 1
+    assert SYNTHETIC_ADAPTATION == (
+        "DVB-S2 reference rates are synthetic link adaptation, not the operator's waveform or "
+        "receiver measurements."
+    )
+    assert not any("Iridium" in item for item in items)
 
 
 def _no_network(scenario):
