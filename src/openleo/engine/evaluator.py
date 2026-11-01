@@ -12,6 +12,15 @@ geometric delay plus the atmospheric excess delay. The atmosphere is traced from
 elevation and range, and the hydrometeor path uses the geometric elevation and the station's
 height above mean sea level, both as in v1. The evaluator selects no MODCOD; that is the
 adaptation state machine's job, which reads ``available_db``.
+
+Tabulated integrand. ``tabulated_available_db`` and ``tabulated_shannon_bps`` are the same link
+budget, operation for operation, except that the gaseous loss under ``itu_reference`` comes
+from the station column's ``GasTable`` (``openleo.physics.atmospheric_path``) instead of the
+ray trace. The engine uses them only for the Shannon-bound quadrature and the MODCOD
+root-finding, which evaluate the link at thousands of times per pass; every exported
+per-sample value comes from ``evaluate``. A table is used only when ``build_gas_table``
+verified its loss error bound at or below ``GAS_TABLE_MAX_ERROR_DB`` (1e-10 dB); otherwise
+those methods trace the ray exactly. ``gas_tables`` reports, per station, the bound or None.
 """
 
 from __future__ import annotations
@@ -22,7 +31,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from openleo.engine.timegrid import utc_text
-from openleo.physics.atmospheric_path import build_reference_column
+from openleo.physics.atmospheric_path import build_gas_table, build_reference_column
 from openleo.physics.hydrometeor_path import (
     HydrometeorPathResult,
     evaluate_hydrometeor_path_array,
@@ -42,7 +51,7 @@ if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
 
     from openleo.engine.geometry import Geometry
-    from openleo.physics.atmospheric_path import ReferenceColumn
+    from openleo.physics.atmospheric_path import GasTable, ReferenceColumn
     from openleo.physics.hydrometeor_path import HydrometeorStation
     from openleo.scenario.model import Scenario
 
@@ -81,6 +90,7 @@ class _StationLink:
     miscellaneous_loss_db: float
     noise_density_dbw_per_hz: float
     column: ReferenceColumn | None
+    table: GasTable | None
     height_amsl_m: float | None
     hydrometeors: HydrometeorStation | None
 
@@ -136,6 +146,16 @@ class LinkEvaluator:
             if station.minimum_elevation_deg is not None
             else scenario.ground_segment.default_minimum_elevation_deg
         )
+        column = (
+            build_reference_column(
+                scenario.radio.carrier_frequency_hz,
+                station.height_amsl_m / 1000,
+                refinement=scenario.propagation.refinement,
+            )
+            if reference
+            else None
+        )
+        table = build_gas_table(column) if column is not None else None
         return _StationLink(
             name=station.name,
             mask_deg=mask_deg,
@@ -143,13 +163,8 @@ class LinkEvaluator:
             miscellaneous_loss_db=terminal.miscellaneous_loss_db,
             # v1 evaluated this scalar kernel at every sample; it is the same number each time.
             noise_density_dbw_per_hz=noise_density_dbw_per_hz(terminal.system_noise_temperature_k),
-            column=build_reference_column(
-                scenario.radio.carrier_frequency_hz,
-                station.height_amsl_m / 1000,
-                refinement=scenario.propagation.refinement,
-            )
-            if reference
-            else None,
+            column=column,
+            table=table if table is not None and table.verified else None,
             height_amsl_m=station.height_amsl_m,
             hydrometeors=hydrometeors[station.name] if hydrometeors is not None else None,
         )
@@ -163,22 +178,9 @@ class LinkEvaluator:
         Every offset must be at or above the station's elevation mask: the atmospheric kernels
         are undefined below 5 degrees, and v1 evaluated only visible samples.
         """
-        station_index = _index(station_index, len(self._stations), "station_index")
-        satellite_index = _index(satellite_index, len(self.geometry.orbits), "satellite_index")
-        station = self._stations[station_index]
-        topocentric = self.geometry.topocentric(station_index, satellite_index, offsets_s)
+        station, topocentric = self._visible(station_index, satellite_index, offsets_s)
         elevation_deg, range_m = topocentric.elevation_deg, topocentric.range_m
-        below = np.flatnonzero(~(elevation_deg >= station.mask_deg))
-        if below.size:
-            offset = np.atleast_1d(np.asarray(offsets_s, dtype=np.float64))[below[0]]
-            raise ValueError(
-                f"NORAD {self._norad(satellite_index)} is at {elevation_deg[below[0]]!r} deg, "
-                f"below the {station.mask_deg!r} deg elevation mask of station "
-                f"{station.name!r}, at {utc_text(self.geometry.start_utc, offset)}; links are "
-                "evaluated only at or above the mask"
-            )
-        radio = self.scenario.radio
-        frequency_hz = radio.carrier_frequency_hz
+        frequency_hz = self.scenario.radio.carrier_frequency_hz
         path = (
             station.column.for_geometry_array(elevation_deg, range_m)
             if station.column is not None
@@ -191,30 +193,14 @@ class LinkEvaluator:
             if station.hydrometeors is not None
             else None
         )
-
-        # v1 _radio_metrics operation for operation; Doppler and Es/N0 as v1 _links had them.
-        path_loss_db = free_space_path_loss_db(range_m, frequency_hz)
-        carrier_power_dbw = received_carrier_power_dbw(
-            radio.eirp_dbw,
-            station.receive_gain_dbi,
-            path_loss_db,
-            station.miscellaneous_loss_db,
+        budget = self._budget(
+            station,
+            satellite_index,
+            range_m,
+            path.total_db if path is not None else None,
+            hydrometeor_path.hydrometeor_attenuation_db if hydrometeor_path is not None else None,
         )
-        free_space_cn0_db_hz = carrier_to_noise_density_db_hz(
-            carrier_power_dbw, station.noise_density_dbw_per_hz
-        )
-        total_atmospheric_db = (path.total_db if path is not None else 0.0) + (
-            hydrometeor_path.hydrometeor_attenuation_db if hydrometeor_path is not None else 0.0
-        )
-        self._require_finite(
-            total_atmospheric_db, "total_atmospheric_attenuation_db", station, satellite_index
-        )
-        cn0_db_hz = free_space_cn0_db_hz - total_atmospheric_db
-        geometric_delay_s = propagation_delay_s(range_m)
-        snr_db = signal_to_noise_ratio_db(cn0_db_hz, radio.channel_bandwidth_hz)
-        with np.errstate(over="ignore"):  # an overflow is refused just below, as in v1
-            shannon_bps = shannon_capacity_upper_bound_bps(snr_db, radio.channel_bandwidth_hz)
-        self._require_finite(shannon_bps, "shannon_upper_bound_bps", station, satellite_index)
+        geometric_delay_s = budget["geometric_delay_s"]
         values = {
             "elevation_deg": elevation_deg,
             "azimuth_deg": topocentric.azimuth_deg,
@@ -224,6 +210,116 @@ class LinkEvaluator:
             "delay_s": geometric_delay_s + path.excess_delay_s
             if path is not None
             else geometric_delay_s,
+            "cn0_db_hz": budget["cn0_db_hz"],
+            "esn0_db": budget["esn0_db"],
+            "snr_db": budget["snr_db"],
+            "shannon_upper_bound_bps": budget["shannon_upper_bound_bps"],
+        }
+        if path is not None:
+            values |= {
+                "gaseous_dry_attenuation_db": path.dry_air_db,
+                "gaseous_water_attenuation_db": path.water_vapour_db,
+                "gaseous_attenuation_db": path.total_db,
+                "free_space_cn0_db_hz": budget["free_space_cn0_db_hz"],
+                "geometric_delay_s": geometric_delay_s,
+                "atmospheric_excess_delay_s": path.excess_delay_s,
+                "apparent_elevation_deg": path.apparent_elevation_deg,
+            }
+        if hydrometeor_path is not None:
+            values |= {name: getattr(hydrometeor_path, name) for name in _HYDROMETEOR_PATH_FIELDS}
+            values["total_atmospheric_attenuation_db"] = budget["total_atmospheric_db"]
+        return {name: _readonly(values[name]) for name in self.columns}
+
+    def tabulated_available_db(
+        self, station_index: int, satellite_index: int, offsets_s: ArrayLike
+    ) -> NDArray[np.float64]:
+        """``available_db`` with the tabulated gaseous loss (module docstring)."""
+        esn0_db = self._tabulated(station_index, satellite_index, offsets_s)["esn0_db"]
+        return esn0_db - self.scenario.adaptation.implementation_margin_db
+
+    def tabulated_shannon_bps(
+        self, station_index: int, satellite_index: int, offsets_s: ArrayLike
+    ) -> NDArray[np.float64]:
+        """``evaluate``'s ``shannon_upper_bound_bps`` with the tabulated gaseous loss."""
+        budget = self._tabulated(station_index, satellite_index, offsets_s)
+        return budget["shannon_upper_bound_bps"]
+
+    @property
+    def gas_tables(self) -> tuple[float | None, ...]:
+        """Per station: the verified loss error bound (dB) of its gas table, or None when the
+        tabulated methods trace the ray exactly (no reference model, or not verified)."""
+        return tuple(
+            station.table.error_bound_db if station.table is not None else None
+            for station in self._stations
+        )
+
+    def _tabulated(self, station_index, satellite_index, offsets_s):
+        station, topocentric = self._visible(station_index, satellite_index, offsets_s)
+        elevation_deg, range_m = topocentric.elevation_deg, topocentric.range_m
+        if station.table is not None:
+            gaseous_db = station.table.total_db_for_geometry(elevation_deg, range_m)
+        elif station.column is not None:
+            gaseous_db = station.column.for_geometry_array(elevation_deg, range_m).total_db
+        else:
+            gaseous_db = None
+        hydrometeor_db = (
+            evaluate_hydrometeor_path_array(
+                self.scenario.radio.carrier_frequency_hz,
+                elevation_deg,
+                station.height_amsl_m,
+                station.hydrometeors,
+            ).hydrometeor_attenuation_db
+            if station.hydrometeors is not None
+            else None
+        )
+        return self._budget(station, satellite_index, range_m, gaseous_db, hydrometeor_db)
+
+    def _visible(self, station_index, satellite_index, offsets_s):
+        """The station and the geometry at the offsets, which must be at or above its mask."""
+        station_index = _index(station_index, len(self._stations), "station_index")
+        satellite_index = _index(satellite_index, len(self.geometry.orbits), "satellite_index")
+        station = self._stations[station_index]
+        topocentric = self.geometry.topocentric(station_index, satellite_index, offsets_s)
+        elevation_deg = topocentric.elevation_deg
+        below = np.flatnonzero(~(elevation_deg >= station.mask_deg))
+        if below.size:
+            offset = np.atleast_1d(np.asarray(offsets_s, dtype=np.float64))[below[0]]
+            raise ValueError(
+                f"NORAD {self._norad(satellite_index)} is at {elevation_deg[below[0]]!r} deg, "
+                f"below the {station.mask_deg!r} deg elevation mask of station "
+                f"{station.name!r}, at {utc_text(self.geometry.start_utc, offset)}; links are "
+                "evaluated only at or above the mask"
+            )
+        return station, topocentric
+
+    def _budget(self, station, satellite_index, range_m, gaseous_db, hydrometeor_db):
+        """v1 _radio_metrics operation for operation; Es/N0 as v1 _links had it."""
+        radio = self.scenario.radio
+        path_loss_db = free_space_path_loss_db(range_m, radio.carrier_frequency_hz)
+        carrier_power_dbw = received_carrier_power_dbw(
+            radio.eirp_dbw,
+            station.receive_gain_dbi,
+            path_loss_db,
+            station.miscellaneous_loss_db,
+        )
+        free_space_cn0_db_hz = carrier_to_noise_density_db_hz(
+            carrier_power_dbw, station.noise_density_dbw_per_hz
+        )
+        total_atmospheric_db = (gaseous_db if gaseous_db is not None else 0.0) + (
+            hydrometeor_db if hydrometeor_db is not None else 0.0
+        )
+        self._require_finite(
+            total_atmospheric_db, "total_atmospheric_attenuation_db", station, satellite_index
+        )
+        cn0_db_hz = free_space_cn0_db_hz - total_atmospheric_db
+        snr_db = signal_to_noise_ratio_db(cn0_db_hz, radio.channel_bandwidth_hz)
+        with np.errstate(over="ignore"):  # an overflow is refused just below, as in v1
+            shannon_bps = shannon_capacity_upper_bound_bps(snr_db, radio.channel_bandwidth_hz)
+        self._require_finite(shannon_bps, "shannon_upper_bound_bps", station, satellite_index)
+        return {
+            "free_space_cn0_db_hz": free_space_cn0_db_hz,
+            "total_atmospheric_db": total_atmospheric_db,
+            "geometric_delay_s": propagation_delay_s(range_m),
             "cn0_db_hz": cn0_db_hz,
             "esn0_db": signal_to_noise_ratio_db(
                 cn0_db_hz, self.scenario.adaptation.symbol_rate_baud
@@ -231,20 +327,6 @@ class LinkEvaluator:
             "snr_db": snr_db,
             "shannon_upper_bound_bps": shannon_bps,
         }
-        if path is not None:
-            values |= {
-                "gaseous_dry_attenuation_db": path.dry_air_db,
-                "gaseous_water_attenuation_db": path.water_vapour_db,
-                "gaseous_attenuation_db": path.total_db,
-                "free_space_cn0_db_hz": free_space_cn0_db_hz,
-                "geometric_delay_s": geometric_delay_s,
-                "atmospheric_excess_delay_s": path.excess_delay_s,
-                "apparent_elevation_deg": path.apparent_elevation_deg,
-            }
-        if hydrometeor_path is not None:
-            values |= {name: getattr(hydrometeor_path, name) for name in _HYDROMETEOR_PATH_FIELDS}
-            values["total_atmospheric_attenuation_db"] = total_atmospheric_db
-        return {name: _readonly(values[name]) for name in self.columns}
 
     def available_db(
         self, station_index: int, satellite_index: int, offsets_s: ArrayLike

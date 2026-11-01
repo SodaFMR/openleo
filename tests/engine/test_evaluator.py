@@ -517,3 +517,63 @@ def test_non_finite_link_values_rejected(monkeypatch) -> None:
     monkeypatch.setattr(evaluator_module, "evaluate_hydrometeor_path_array", infinite)
     with pytest.raises(ValueError, match="total_atmospheric_attenuation_db.*finite"):
         LinkEvaluator(scenario, geometry).evaluate(TROMSO, 0, visible)
+
+
+@pytest.mark.parametrize("name", ["iridium_global", "iridium_global_hydrometeors"])
+def test_tabulated_integrand_matches_the_exact_link_budget(name: str) -> None:
+    """The Shannon integrand and MODCOD inputs read the gas table: within 1e-10 dB of the ray
+    trace, and the same arithmetic otherwise (free space is identical)."""
+    from openleo.engine.evaluator import LinkEvaluator
+
+    scenario, _, grid, geometry = _engine(name)
+    evaluator = LinkEvaluator(scenario, geometry)
+    reference = scenario.propagation.model == "itu_reference"
+    bounds = evaluator.gas_tables
+    assert len(bounds) == len(scenario.ground_segment.stations)
+    if reference:
+        assert all(bound is not None and bound <= 1e-10 for bound in bounds)
+    else:
+        assert bounds == (None,) * len(bounds)
+    margin_db = scenario.adaptation.implementation_margin_db
+    offsets = np.concatenate([grid.offsets_s, grid.offsets_s[:-1] + 17.25])
+    checked = 0
+    for station_index, station in enumerate(scenario.ground_segment.stations):
+        for satellite_index in range(6):
+            visible = _visible_offsets(
+                geometry, station_index, satellite_index, offsets, station.minimum_elevation_deg
+            )
+            exact = evaluator.evaluate(station_index, satellite_index, visible)
+            available = evaluator.tabulated_available_db(station_index, satellite_index, visible)
+            shannon = evaluator.tabulated_shannon_bps(station_index, satellite_index, visible)
+            if reference:
+                np.testing.assert_allclose(
+                    available, exact["esn0_db"] - margin_db, rtol=0, atol=1e-10
+                )
+                np.testing.assert_allclose(
+                    shannon, exact["shannon_upper_bound_bps"], rtol=1e-10, atol=0
+                )
+            else:
+                np.testing.assert_array_equal(available, exact["esn0_db"] - margin_db)
+                np.testing.assert_array_equal(shannon, exact["shannon_upper_bound_bps"])
+            checked += visible.size
+    assert checked > 10
+
+
+def test_unverified_gas_tables_fall_back_to_the_ray_trace() -> None:
+    from openleo.engine.evaluator import LinkEvaluator
+
+    scenario, _, grid, geometry = _engine("iridium_global_reference")
+    oxygen = replace(scenario, radio=replace(scenario.radio, carrier_frequency_hz=60e9))
+    evaluator = LinkEvaluator(oxygen, geometry)
+    assert evaluator.gas_tables == (None,) * len(scenario.ground_segment.stations)
+    station = scenario.ground_segment.stations[0]
+    for satellite_index in range(len(geometry.orbits)):
+        visible = _visible_offsets(
+            geometry, 0, satellite_index, grid.offsets_s, station.minimum_elevation_deg
+        )
+        if visible.size:
+            break
+    np.testing.assert_array_equal(
+        evaluator.tabulated_shannon_bps(0, satellite_index, visible),
+        evaluator.evaluate(0, satellite_index, visible)["shannon_upper_bound_bps"],
+    )

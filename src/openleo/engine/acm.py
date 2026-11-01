@@ -144,7 +144,8 @@ def acm_segments(
     """Exact rate segments and MODCOD events of one pair (module docstring).
 
     ``available_db`` maps offsets in seconds to A = Es/N0 - implementation margin in dB (the
-    link evaluator's ``available_db``) and is called only at times inside the passes.
+    run uses the link evaluator's ``tabulated_available_db``) and is called only at times
+    inside the passes.
     ``passes`` are the pair's passes in time order; ``breakpoints_s`` its breakpoints (grid
     times and culminations); those outside a pass are ignored.
     """

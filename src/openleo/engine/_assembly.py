@@ -600,8 +600,18 @@ def warnings(scenario: Scenario, orbits: Sequence[LoadedOrbit], grid: TimeGrid) 
     return result
 
 
-def models(scenario: Scenario, timescale, events_on: bool) -> dict[str, Any]:
-    """One entry per kernel with its standard and version; v1's model text where it applies."""
+def models(
+    scenario: Scenario,
+    timescale,
+    events_on: bool,
+    gas_table_bounds_db: Sequence[float | None] | None = None,
+) -> dict[str, Any]:
+    """One entry per kernel with its standard and version; v1's model text where it applies.
+
+    ``gas_table_bounds_db`` is ``LinkEvaluator.gas_tables``: per station, the verified loss error
+    bound of the gas table the Shannon integrand and MODCOD root-finding read, or None where they
+    trace the ray exactly.
+    """
     propagation = scenario.propagation
     reference = propagation.model == "itu_reference"
     hydrometeors = propagation.hydrometeors is not None
@@ -618,6 +628,10 @@ def models(scenario: Scenario, timescale, events_on: bool) -> dict[str, Any]:
             "standard": "SGP4",
             "version": f"sgp4 {_package_version('sgp4')}, WGS72 gravity",
             "method": "SGP4 with WGS72 gravity, TEME GP elements transformed by Skyfield",
+            "teme_to_itrs": "rot_z(-GMST1982 at UT1) with Skyfield's theta_GMST1982, plus "
+            "Skyfield's Earth-rotation rate term for the velocity: Skyfield's TEME-GCRS-ITRS "
+            "chain without its nutation, which cancels; equal to it up to rounding (about "
+            "1e-7 m), verified against the v1 fixtures",
             "earth_orientation": "Skyfield builtin time data; polar motion is not supplied",
         },
         "coordinates": {
@@ -686,6 +700,10 @@ def models(scenario: Scenario, timescale, events_on: bool) -> dict[str, Any]:
                 **P676_SOURCE,
                 "method": "Annex 1 equations (16)-(19), normalized exponential layers; midpoint "
                 "attenuation and refractivity; split-layer refinement",
+                "endpoint_solve": "Apparent elevation by safeguarded Newton iteration on the "
+                "ray's endpoint angle, to steps of at most 1e-11 deg (v1: 40-step bisection, "
+                "within 4e-11 deg); kernel equivalence with v1 tested to 1e-10 dB, 1e-9 deg and "
+                "1e-13 s",
                 "refinement": propagation.refinement,
                 "earth_radius_km": 6371.0,
                 "upper_height_km": 100.0,
@@ -704,6 +722,27 @@ def models(scenario: Scenario, timescale, events_on: bool) -> dict[str, Any]:
                 "method": "Annex 1 dry and wet radio refractivity; non-dispersive refractive index",
             },
         }
+        if events_on and gas_table_bounds_db is not None:
+            names = [station.name for station in scenario.ground_segment.stations]
+            bounds = {name: bound for name, bound in zip(names, gas_table_bounds_db, strict=True)}
+            tabulated = [bound for bound in bounds.values() if bound is not None]
+            entries["shannon_integrand_atmosphere"] = {
+                "standard": "OpenLEO numerical method",
+                "version": "S1 per-station gas table",
+                "use": "Shannon-bound quadrature nodes and MODCOD threshold root-finding only; "
+                "every exported sample traces the ray exactly",
+                "method": "Per station, the column's total gaseous loss and ray central angle "
+                "as piecewise Chebyshev series in apparent elevation (16 segments of degree 16 "
+                "on [5, 90] deg) from the exact layer sums; the endpoint solve keeps the exact "
+                "vacuum geometry",
+                "max_error_db": max(tabulated) if tabulated else None,
+                "station_error_bound_db": bounds,
+                "fallback": "Stations whose bound exceeds 1e-10 dB (null above) use the exact "
+                "ray trace",
+                "verification": "Bounded at construction against the exact sums at every "
+                "segment end and between consecutive Chebyshev points; compared with the ray "
+                "trace end to end by tests/physics/test_gas_table.py",
+            }
     if hydrometeors:
         entries |= {
             "rain_attenuation": {

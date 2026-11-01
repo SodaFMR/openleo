@@ -266,18 +266,18 @@ def test_sgp4_error_names_norad_and_time(tmp_path: Path) -> None:
 
 
 def test_non_finite_state_rejected(tmp_path: Path, monkeypatch) -> None:
+    from openleo.engine import geometry as geometry_module
     from openleo.engine.geometry import Geometry
 
     orbits = _iss_orbits(tmp_path)
-    satellite = orbits[0].satellite
-    propagate = satellite.at
+    propagate = geometry_module._teme_states
 
-    def corrupted(t):
-        state = propagate(t)
-        state.position.au[1, -1] = np.nan
-        return state
+    def corrupted(model, frame):
+        errors, position, velocity = propagate(model, frame)
+        position[1, -1] = np.nan
+        return errors, position, velocity
 
-    monkeypatch.setattr(satellite, "at", corrupted)
+    monkeypatch.setattr(geometry_module, "_teme_states", corrupted)
     geometry = Geometry(
         orbits,
         (_station("Madrid", 40.4168, -3.7038, 650.0),),

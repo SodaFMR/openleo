@@ -27,6 +27,9 @@ if TYPE_CHECKING:
     from openleo.scenario.model import TimeConfig
 
 _MICROSECOND = timedelta(microseconds=1)
+_DAY_US = 86_400_000_000
+# Offsets x with x * 1e6 this close to a half-integer are rounded by timedelta (exact).
+_TIE_SLACK_US = 1e-3
 _UNIX_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _UNIX_EPOCH_JD = 2440587.5
 
@@ -92,14 +95,34 @@ def skyfield_times(timescale, start_utc: datetime, offsets_s: ArrayLike):
     """Skyfield times at ``start_utc`` + offsets, built exactly as v1 built its grid times.
 
     v1 called ``timescale.from_datetimes`` on Python datetimes, so each offset is rounded to
-    the microsecond by datetime arithmetic (round half to even) before the conversion.
+    the microsecond by datetime arithmetic (round half to even) before the conversion. This
+    builds the same UTC calendar tuples (year, month, day, hour, minute, second +
+    microsecond / 1e6) with integer arithmetic on whole microseconds, without a datetime per
+    offset, and passes them to the same ``Timescale._utc`` that ``from_datetimes`` calls, so the
+    times are bit-identical. Offsets within ``_TIE_SLACK_US`` of a half microsecond are rounded
+    by ``timedelta`` itself.
     """
     offsets = np.asarray(offsets_s, dtype=np.float64)
     if offsets.ndim != 1 or offsets.size == 0:
         raise ValueError("offsets must be a non-empty one-dimensional array")
-    return timescale.from_datetimes(
-        [start_utc + timedelta(seconds=offset) for offset in offsets.tolist()]
-    )
+    start = start_utc.astimezone(UTC)
+    scaled = offsets * 1e6
+    offsets_us = np.rint(scaled).astype(np.int64)
+    ties = np.flatnonzero(np.abs(np.abs(scaled - np.floor(scaled)) - 0.5) < _TIE_SLACK_US)
+    for index in ties.tolist():
+        offsets_us[index] = timedelta(seconds=float(offsets[index])) // _MICROSECOND
+    midnight = datetime(start.year, start.month, start.day, tzinfo=UTC)
+    since_midnight_us = offsets_us + (start - midnight) // _MICROSECOND
+    days, of_day_us = np.divmod(since_midnight_us, _DAY_US)
+    unique_days, day_index = np.unique(days, return_inverse=True)
+    dates = [midnight + timedelta(days=int(day)) for day in unique_days.tolist()]
+    year = np.array([d.year for d in dates], dtype=np.int64)[day_index]
+    month = np.array([d.month for d in dates], dtype=np.int64)[day_index]
+    day = np.array([d.day for d in dates], dtype=np.int64)[day_index]
+    of_day_s, microsecond = np.divmod(of_day_us, 1_000_000)
+    hour, of_hour_s = np.divmod(of_day_s, 3600)
+    minute, second = np.divmod(of_hour_s, 60)
+    return timescale._utc((year, month, day, hour, minute, second + microsecond / 1e6))
 
 
 def _utc(value: datetime, pointer: str) -> datetime:

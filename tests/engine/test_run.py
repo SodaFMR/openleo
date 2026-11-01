@@ -418,12 +418,12 @@ def test_nothing_visible_publishes_zeros(tmp_path):
 
 
 def test_memory_budget_refusal_before_propagation(monkeypatch):
-    from skyfield.sgp4lib import EarthSatellite
+    from openleo.engine import geometry
 
     def forbidden(*args, **kwargs):
         raise AssertionError("propagation started")
 
-    monkeypatch.setattr(EarthSatellite, "at", forbidden)
+    monkeypatch.setattr(geometry, "_teme_states", forbidden)
     with pytest.raises(ValueError, match=r"memory estimate .* exceeds the budget of 1 bytes"):
         run(_example("iridium_global"), memory_budget_bytes=1)
 
@@ -686,3 +686,83 @@ def test_a_decision_effective_at_the_pass_end_is_dropped_everywhere():
             ("modcod_effective", 100.0 + delay),
             ("modcod_decision", 600.0 - delay),
         ]
+
+
+def test_events_off_route_delays_are_held_in_pass_tails_below_the_mask(monkeypatch):
+    """Task 15 review: with events off, a route breakpoint between grid samples (a rate-segment
+    boundary at a sample plus the feedback delay, of any pair of the endpoint stations) can lie
+    in a pass tail that v1's left hold keeps visible below the mask. Its delay is read at the
+    grid sample before it (as openleo.replay.source does) instead of raising."""
+    base = _example("iridium_global")
+    scenario = replace(
+        _gate(_events(base, False), "warn"),
+        adaptation=replace(base.adaptation, feedback_delay_s=10.0),
+    )
+    held = []
+    hold = run_module._held_queries
+
+    def recorded(ctx, station, satellite, times, offsets):
+        queries = hold(ctx, station, satellite, times, offsets)
+        changed = times != queries
+        if changed.any():
+            elevation = ctx.geometry.elevation_deg(station, satellite, times[changed])
+            held.append((ctx.masks[station], elevation, times[changed], queries[changed], offsets))
+        return queries
+
+    monkeypatch.setattr(run_module, "_held_queries", recorded)
+    results = run(scenario)  # raised "below the 10.0 deg elevation mask" before the fix
+
+    assert results.tables["routes"].rows > 0
+    assert held
+    for mask, elevation, times, queries, offsets in held:
+        assert (elevation < mask).all()
+        np.testing.assert_array_equal(queries, offsets[np.searchsorted(offsets, times) - 1])
+
+
+def test_worker_initialisation_failures_are_value_errors(tmp_path, monkeypatch):
+    scenario = _window(_small(_example("iridium_global"), 2), START, 10)
+    catalog = scenario.space_segment.catalogs[0]
+    original = catalog.path.read_bytes()
+    copy = tmp_path / catalog.path.name
+    copy.write_bytes(original)
+    scenario = replace(
+        scenario,
+        space_segment=replace(scenario.space_segment, catalogs=(replace(catalog, path=copy),)),
+    )
+
+    # In this process: the failure is kept and every chunk raises it, naming the cause.
+    copy.write_bytes(original + b"\n")
+    run_module._init_worker(scenario)
+    with pytest.raises(ValueError, match=r"worker process initialisation failed: .*SHA-256"):
+        run_module._run_chunk("geometry", [(0,)])
+    copy.write_bytes(original)
+    run_module._init_worker(scenario)
+    assert run_module._run_chunk("geometry", [(0,)])[0][1].shape[0] == 4
+
+    # Through a process pool: the catalog changes after the parent loaded it.
+    enter = run_module._Executor.__enter__
+
+    def changed_catalog(self):
+        copy.write_bytes(original + b"\n")
+        return enter(self)
+
+    monkeypatch.setattr(run_module._Executor, "__enter__", changed_catalog)
+    with pytest.raises(ValueError, match=r"worker process initialisation failed: .*SHA-256"):
+        run(scenario, workers=2)
+
+
+def test_a_dead_worker_is_a_value_error(monkeypatch):
+    from concurrent.futures.process import BrokenProcessPool
+
+    class DeadPool:
+        def map(self, *args):
+            raise BrokenProcessPool("A process in the process pool was terminated abruptly")
+
+        def shutdown(self, **kwargs):
+            pass
+
+    ctx = run_module._Context(_window(_small(_example("iridium_global"), 2), START, 10))
+    executor = run_module._Executor(ctx, 2)
+    executor.pool = DeadPool()
+    with pytest.raises(ValueError, match=r"worker process died during the geometry phase"):
+        executor.map("geometry", [(0,), (1,)])

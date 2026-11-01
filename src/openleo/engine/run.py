@@ -28,6 +28,13 @@ root-found LOS: that LOS lies within the tolerance on the invisible side, where 
 is undefined. As ``acm_segments`` holds the MODCOD state, the bound at ``end_s - tolerance_s`` is
 held over that last sliver. With events off it is left-held from each visible sample (v1).
 
+Integrand. The quadrature nodes and the MODCOD root-finding (``acm_segments``) read the link
+evaluator's ``tabulated_shannon_bps`` and ``tabulated_available_db``: the v1 link budget with
+the gaseous loss from each station's verified gas table (within 1e-10 dB of the ray trace,
+``openleo.physics.atmospheric_path.GasTable``), recorded in ``models`` as
+``shannon_integrand_atmosphere``. The ``samples`` table, minimum ranges and route delays use the
+exact ``evaluate``.
+
 Grid samples. The ``samples`` table holds every (station, satellite, grid time) at or above the
 mask. Its MODCOD and rate are those of the rate segment holding the time; at the end of a pass
 that is visible at the window stop (no segment holds that instant) they are the state in effect
@@ -44,7 +51,8 @@ ends, grid times and culmination, and at every root of the range rate between th
 
 Routes. Delays are evaluated once per endpoint pair, in one batch over the route breakpoints that
 fall in its passes; a breakpoint within ``tolerance_s`` before a root-found LOS reads the delay at
-``end_s - tolerance_s`` (as above). Satellite positions at the breakpoints are computed in chunks
+``end_s - tolerance_s`` (as above). With events off, a breakpoint between grid samples where the
+satellite is below the mask (a held pass tail) reads it at the grid sample before it. Satellite positions at the breakpoints are computed in chunks
 of at most ``ROUTE_CHUNK_BYTES`` and the routes merged across chunks.
 
 Workers. ``workers > 1`` runs the per-satellite phases in a ``ProcessPoolExecutor`` over
@@ -61,6 +69,7 @@ import math
 import tempfile
 from bisect import bisect_left, bisect_right
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from pathlib import Path
@@ -222,7 +231,7 @@ def _pair_events(ctx: _Context, station: int, satellite: int, elevation, offsets
             )
             breakpoints = np.union1d(offsets, [p.culmination_s for p in passes])
             segments, events = acm_segments(
-                lambda t: ctx.evaluator.available_db(station, satellite, t),
+                lambda t: ctx.evaluator.tabulated_available_db(station, satellite, t),
                 passes,
                 breakpoints,
                 ctx.adaptation,
@@ -309,14 +318,23 @@ _STAGES = {
     "refined": _refined_stage,
 }
 _WORKER: _Context | None = None
+_WORKER_ERROR: str | None = None
 
 
-def _init_worker(scenario: Scenario) -> None:  # pragma: no cover - runs in worker processes
-    global _WORKER
-    _WORKER = _Context(scenario)
+def _init_worker(scenario: Scenario) -> None:
+    """Build the worker's context. A failure is kept and raised by every chunk as ValueError:
+    an exception escaping an initializer only breaks the pool (``BrokenProcessPool``) and
+    loses its cause."""
+    global _WORKER, _WORKER_ERROR
+    try:
+        _WORKER, _WORKER_ERROR = _Context(scenario), None
+    except Exception as exc:  # noqa: BLE001 - reported by _run_chunk with its type
+        _WORKER, _WORKER_ERROR = None, f"{type(exc).__name__}: {exc}"
 
 
-def _run_chunk(stage: str, items: list[tuple]) -> list:  # pragma: no cover - worker processes
+def _run_chunk(stage: str, items: list[tuple]) -> list:
+    if _WORKER is None:
+        raise ValueError(f"worker process initialisation failed: {_WORKER_ERROR}")
     return [_STAGES[stage](_WORKER, *item) for item in items]
 
 
@@ -347,8 +365,14 @@ class _Executor:
         size = max(1, math.ceil(len(items) / (4 * self.workers)))
         chunks = [items[k : k + size] for k in range(0, len(items), size)]
         merged: list = []
-        for part in self.pool.map(_run_chunk, [stage] * len(chunks), chunks):
-            merged.extend(part)
+        try:
+            for part in self.pool.map(_run_chunk, [stage] * len(chunks), chunks):
+                merged.extend(part)
+        except BrokenProcessPool as exc:
+            raise ValueError(
+                f"a worker process died during the {stage} phase ({exc}); it may have run out "
+                "of memory: retry with fewer workers"
+            ) from exc
         return merged
 
 
@@ -386,7 +410,7 @@ def _shannon_on_events(
     )
 
     def shannon(t):
-        return ctx.evaluator.evaluate(station, satellite, t)["shannon_upper_bound_bps"]
+        return ctx.evaluator.tabulated_shannon_bps(station, satellite, t)
 
     bits = []
     for p in pair.passes:
@@ -521,7 +545,9 @@ def _route_intervals(ctx: _Context, pairs: dict, offsets) -> tuple[RouteInterval
             inside = evaluated[(evaluated >= p.start_s) & (evaluated < p.end_s)]
             times.append(inside)
             queries.append(
-                np.minimum(inside, _evaluable_end(p, ctx.tolerance)) if ctx.events_on else inside
+                np.minimum(inside, _evaluable_end(p, ctx.tolerance))
+                if ctx.events_on
+                else _held_queries(ctx, pair.station_index, pair.satellite_index, inside, offsets)
             )
         table: dict[float, float] = {}
         if times and sum(t.size for t in times):
@@ -557,6 +583,26 @@ def _route_intervals(ctx: _Context, pairs: dict, offsets) -> tuple[RouteInterval
         for key in sorted(groups, key=lambda key: (key[0], order[key[1]]))
         for interval in groups[key]
     )
+
+
+def _held_queries(ctx: _Context, station: int, satellite: int, times, offsets):
+    """Events off: where to read the delay at each route breakpoint inside a pass.
+
+    Visibility is held from grid sample to grid sample (v1), so a breakpoint between samples
+    (a rate-segment end at a sample plus the feedback delay) can lie in a pass tail where the
+    satellite is already below the mask and the link budget is undefined. The delay is read at
+    the breakpoint itself where the satellite is at or above the mask, and at the grid sample at
+    or before it otherwise (``openleo.replay.source`` applies the same rule).
+    """
+    sample = offsets[np.searchsorted(offsets, times, side="right") - 1]
+    off_grid = np.flatnonzero(times != sample)
+    if off_grid.size == 0:
+        return times
+    elevation = ctx.geometry.elevation_deg(station, satellite, times[off_grid])
+    below = off_grid[~(elevation >= ctx.masks[station])]
+    queries = times.copy()
+    queries[below] = sample[below]
+    return queries
 
 
 def _same_route(a: RouteInterval, b: RouteInterval) -> bool:
@@ -737,7 +783,7 @@ def run(
         "software": assembly.software(),
         "scenario": assembly.scenario_block(scenario),
         "provenance": assembly.provenance(scenario, orbits, record_counts, grid, timescale),
-        "models": assembly.models(scenario, timescale, ctx.events_on),
+        "models": assembly.models(scenario, timescale, ctx.events_on, ctx.evaluator.gas_tables),
         "events": {
             "enabled": ctx.events_on,
             "integration": "event_segments" if ctx.events_on else "grid_left_hold",

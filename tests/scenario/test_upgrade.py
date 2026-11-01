@@ -107,14 +107,18 @@ def test_committed_examples_are_the_normalised_upgrade(path: Path) -> None:
     assert document["space_segment"]["catalogs"][0]["path"].startswith("../data/")
 
 
-def test_every_v1_example_has_a_v2_twin_and_only_sweeps_and_reproduce_are_added() -> None:
+def test_every_v1_example_has_a_v2_twin_and_only_known_folders_are_added() -> None:
     assert sorted(path.name for path in V2_DIR.glob("*.json")) == sorted(
         path.name for path in V1_EXAMPLES
     )
-    # Besides the twins, the folder holds only the sweep and reproduce example folders (Task 14).
+    # Besides the twins, the folder holds only the sweep and reproduce example folders (Task 14)
+    # and the performance benchmark scenario (Task 18).
     assert sorted(path.name for path in V2_DIR.iterdir()) == sorted(
-        [*(path.name for path in V1_EXAMPLES), "reproduce", "sweeps"]
+        [*(path.name for path in V1_EXAMPLES), "performance", "reproduce", "sweeps"]
     )
+    assert sorted(path.name for path in (V2_DIR / "performance").iterdir()) == [
+        "starlink_1000_24h.json"
+    ]
 
 
 @pytest.mark.parametrize("path", V1_EXAMPLES, ids=lambda path: path.stem)

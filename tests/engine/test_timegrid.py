@@ -196,3 +196,32 @@ def test_skyfield_times_round_offsets_to_microseconds() -> None:
 
     np.testing.assert_array_equal(actual.whole, expected.whole)
     np.testing.assert_array_equal(actual.tai_fraction, expected.tai_fraction)
+
+
+@pytest.mark.parametrize(
+    "start",
+    [START, datetime(2026, 12, 31, 13, 7, 3, 123457, tzinfo=UTC)],
+    ids=["grid_start", "year_end_with_microseconds"],
+)
+def test_skyfield_times_equal_from_datetimes_bit_for_bit(start) -> None:
+    """The vectorised conversion builds v1's datetimes' calendar tuples: identical times,
+    across midnight and the year end, with half-microsecond ties rounded as timedelta does."""
+    from openleo.engine.timegrid import skyfield_times
+
+    timescale = load.timescale(builtin=True)
+    rng = np.random.default_rng(20261101)
+    whole_us = np.round(rng.uniform(0.0, 2 * 86_400.0, 500) * 1e6) / 1e6
+    offsets = np.concatenate(
+        [
+            rng.uniform(0.0, 2 * 86_400.0, 5_000),
+            np.arange(0.0, 86_400.0, 30.0),
+            whole_us + 5e-7,  # ties, rounded half to even
+            [0.0, 86_400.0, 1.2345674, 1.2345665, 5e-7, 1.5e-6, 2.5e-6],
+        ]
+    )
+    actual = skyfield_times(timescale, start, offsets)
+    expected = timescale.from_datetimes([start + timedelta(seconds=x) for x in offsets.tolist()])
+
+    for name in ("whole", "tai_fraction", "tt_fraction", "ut1_fraction"):
+        np.testing.assert_array_equal(getattr(actual, name), getattr(expected, name), name)
+    np.testing.assert_array_equal(actual._leap_seconds(), expected._leap_seconds())
