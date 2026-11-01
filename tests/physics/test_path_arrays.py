@@ -28,6 +28,12 @@ REFINEMENTS = (1, 2)
 LOWER_HEIGHTS_KM = (0.0, 0.65, 2.85)
 CONFIGURATIONS = tuple(product(FREQUENCIES_HZ, REFINEMENTS, LOWER_HEIGHTS_KM))
 DB_FIELDS = ("dry_air_db", "water_vapour_db", "total_db")
+# Array-vs-scalar tolerances. numpy may evaluate float64 transcendentals with SIMD code
+# (SVML on AVX-512) that differs from libm by an ulp; one flipped final bisection step
+# can then move the excess delay by up to ~2.4e-14 s.
+DB_ATOL = 1e-10
+APPARENT_ELEVATION_ATOL_DEG = 1e-9
+EXCESS_DELAY_ATOL_S = 1e-13
 
 
 def _ground_geometry(lower_height_km, count):
@@ -51,15 +57,18 @@ def _assert_ground_paths_match(column, elevation, range_m):
     ]
     for name in DB_FIELDS:
         expected = [getattr(scalar, name) for scalar in scalars]
-        np.testing.assert_allclose(getattr(arrays, name), expected, rtol=0, atol=1e-10)
+        np.testing.assert_allclose(getattr(arrays, name), expected, rtol=0, atol=DB_ATOL)
     np.testing.assert_allclose(
         arrays.apparent_elevation_deg,
         [scalar.apparent_elevation_deg for scalar in scalars],
         rtol=0,
-        atol=1e-9,
+        atol=APPARENT_ELEVATION_ATOL_DEG,
     )
     np.testing.assert_allclose(
-        arrays.excess_delay_s, [scalar.excess_delay_s for scalar in scalars], rtol=0, atol=1e-15
+        arrays.excess_delay_s,
+        [scalar.excess_delay_s for scalar in scalars],
+        rtol=0,
+        atol=EXCESS_DELAY_ATOL_S,
     )
 
 
@@ -70,11 +79,24 @@ def _assert_ground_paths_match(column, elevation, range_m):
 def test_for_geometry_array_matches_scalar(index, frequency_hz, refinement, lower_height_km):
     # The 10,000 seeded geometries are shared out across the 18 configurations, because one
     # scalar ray trace costs about a millisecond (40 bisection steps over ~1,000 layers).
+    # The slow test below checks all 10,000 in every configuration.
     share = np.array_split(np.arange(SAMPLES), len(CONFIGURATIONS))[index]
     elevation, range_m = _ground_geometry(lower_height_km, SAMPLES)
     column = build_reference_column(frequency_hz, lower_height_km, refinement=refinement)
 
     _assert_ground_paths_match(column, elevation[share], range_m[share])
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(("frequency_hz", "refinement", "lower_height_km"), CONFIGURATIONS)
+def test_for_geometry_array_matches_scalar_for_every_sample_in_every_configuration(
+    frequency_hz, refinement, lower_height_km
+):
+    elevation, range_m = _ground_geometry(lower_height_km, SAMPLES)
+    column = build_reference_column(frequency_hz, lower_height_km, refinement=refinement)
+
+    assert elevation.size == SAMPLES
+    _assert_ground_paths_match(column, elevation, range_m)
 
 
 def test_for_geometry_array_matches_scalar_at_domain_edges():
@@ -191,8 +213,9 @@ def test_hydrometeor_path_array_matches_scalar(frequency_hz, station_height_amsl
         np.testing.assert_allclose(
             getattr(arrays, f.name),
             [getattr(scalar, f.name) for scalar in scalars],
-            rtol=0,
-            atol=1e-12,
+            rtol=1e-14,
+            # Lengths are metres: one ulp of sin(elevation) moves them by up to ~7e-12 m.
+            atol=1e-9 if f.name == "rain_path_length_m" else 1e-12,
         )
 
 

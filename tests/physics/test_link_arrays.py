@@ -16,6 +16,10 @@ from openleo.physics.link import (
 
 SEED = 20261101
 SAMPLES = 10_000
+# numpy may evaluate float64 transcendentals with SIMD code (SVML on AVX-512) that differs
+# from libm by an ulp, so large values such as Shannon bounds near 1e11 bps need rtol.
+RTOL = 1e-14
+ATOL = 1e-12
 
 
 def _log_uniform(rng, low, high):
@@ -61,7 +65,7 @@ def test_array_kernels_equal_scalar_kernels(kernel, arguments):
     assert isinstance(result, np.ndarray)
     assert result.dtype == np.float64
     assert result.shape == (SAMPLES,)
-    np.testing.assert_allclose(result, expected, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(result, expected, rtol=RTOL, atol=ATOL)
     assert type(kernel(*(float(values[0]) for values in arguments))) is float
 
 
@@ -88,7 +92,7 @@ def test_one_array_argument_broadcasts_against_float_arguments(kernel, arguments
         scalar = list(arguments)
         scalar[array_position] = float(value)
         expected.append(kernel(*scalar))
-    np.testing.assert_allclose(result, expected, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(result, expected, rtol=RTOL, atol=ATOL)
 
 
 def test_array_kernels_keep_the_input_shape():

@@ -48,8 +48,8 @@ exclude = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib -m 'not slow'"
 pythonpath = ["tests"]
 markers = [
-    "slow: long-running tests; deselect with -m 'not slow'",
+    "slow: long-running tests, deselected by default; run them with -m slow",
 ]
