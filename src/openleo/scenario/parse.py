@@ -414,6 +414,11 @@ def _ground_segment(
     def station(pointer: str, raw: Any) -> Station:
         item = _Section(raw, pointer, Station)
         name = item.string("name")
+        if "/" in name:
+            raise ValueError(
+                f"{item.pointer_of('name')}={_safe_repr(name)} must not contain '/': metric ids "
+                "use it as a separator"
+            )
         if name in names:
             raise ValueError(
                 f"{item.pointer_of('name')}={_safe_repr(name)} duplicates a station name"

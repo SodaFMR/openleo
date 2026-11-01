@@ -69,6 +69,13 @@ _NON_BLANK = {"type": "string", "minLength": 1, "pattern": rf"[^{_SPACE}]"}
 # character class is escaped because the JavaScript v flag requires it.
 # _END: Python's re also lets $ match before a final newline, which the parser rejects.
 _END = r"$(?!\n)"
+# A station name: non-blank and without /, which separates the parts of a metric id (a
+# / in a class is escaped as in _URL).
+_STATION_NAME = {
+    "type": "string",
+    "minLength": 1,
+    "pattern": rf"^[^\/]*[^{_SPACE}\/][^\/]*{_END}",
+}
 # Printable ASCII except / ? # @ [ ]. The schema is stricter than the parser on hosts: it takes
 # no bracketed host literal (IPv6 or IPvFuture), no non-ASCII name (write punycode, xn--) and no
 # control character.
@@ -94,7 +101,7 @@ _STRINGS: dict[tuple[type, str], dict[str, Any]] = {
     (CatalogSource, "source_url"): _URL,
     (CatalogSource, "terms_url"): _URL,
     (CatalogSource, "sha256"): _SHA256,
-    (Station, "name"): _NON_BLANK,
+    (Station, "name"): _STATION_NAME,
     (Station, "terminal"): _NON_BLANK,
     (RoutePair, "source"): _NON_BLANK,
     (RoutePair, "target"): _NON_BLANK,

@@ -817,6 +817,32 @@ def test_every_pattern_compiles_under_the_javascript_u_and_v_flags_and_agrees_on
     assert json.loads(result.stdout) == []
 
 
+def _renamed_madrid(name: str) -> dict:
+    """The spec example with the station Madrid renamed everywhere it is referred to."""
+    document = _spec_example()
+    document["ground_segment"]["stations"][0]["name"] = name
+    stations = document["propagation"]["hydrometeors"]["stations"]
+    stations[name] = stations.pop("Madrid")
+    for pair in document["network"]["pairs"]:
+        for end in ("source", "target"):
+            if pair[end] == "Madrid":
+                pair[end] = name
+    return document
+
+
+def test_station_names_must_not_contain_a_slash_in_both(tmp_path: Path) -> None:
+    # Metric ids (pair/<station>/<norad>/<metric>) use / as their separator.
+    for name in ("Mad/rid", "/", "Madrid/", "/Madrid", " / "):
+        document = _renamed_madrid(name)
+        assert not schema_accepts(document), name
+        with pytest.raises(ValueError, match=r"/ground_segment/stations/0/name=.*must not contain"):
+            parse_scenario(document, tmp_path / "scenario.json", SHA)
+    for name in ("Mad-rid", "Madrid (ES)", "Madrid\\Sur", " Madrid", "Madrid\n"):
+        document = _renamed_madrid(name)
+        assert schema_accepts(document), repr(name)
+        assert parser_accepts(document, tmp_path), repr(name)
+
+
 def test_terminal_names_must_be_non_blank_in_both(tmp_path: Path) -> None:
     terminal = _spec_example()["terminals"]["default"]
     for blank in ("", "   ", "\x1c", "\x85", "\x1f \x85"):

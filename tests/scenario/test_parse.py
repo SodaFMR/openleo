@@ -423,8 +423,10 @@ def test_a_catalog_path_the_system_cannot_resolve_is_a_pointer_prefixed_value_er
 
 # --- hydrometeor errors name their station ------------------------------------------------------
 
-AWKWARD = "Tromsø/N~1"  # a station name whose pointer token needs both RFC 6901 escapes
-AWKWARD_POINTER = "/propagation/hydrometeors/stations/Tromsø~1N~01"
+# A station name whose pointer token needs the RFC 6901 ~0 escape, and whose literal "~1" must
+# not read as "/" (station names cannot hold "/": metric ids use it as a separator).
+AWKWARD = "Tromsø~N~1"
+AWKWARD_POINTER = "/propagation/hydrometeors/stations/Tromsø~0N~01"
 
 
 def _awkward_document() -> dict:

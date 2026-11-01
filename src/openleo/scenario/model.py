@@ -173,7 +173,10 @@ class Terminal:
 @dataclass(frozen=True, slots=True)
 class Station:
     name: str = field(
-        metadata=_meta("Unique station name; routes and hydrometeor states refer to it.")
+        metadata=_meta(
+            "Unique station name without '/' (metric ids use it as a separator); routes and "
+            "hydrometeor states refer to it."
+        )
     )
     latitude_deg: float = field(
         metadata=_meta("Geodetic latitude.", "deg", minimum=-90.0, maximum=90.0)
