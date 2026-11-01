@@ -1,0 +1,107 @@
+{
+  "schema": "openleo.scenario/2",
+  "name": "Global LEO declared hydrometeor sensitivity experiment",
+  "description": "optional free text",
+  "time": {
+    "start_utc": "2026-01-01T00:00:00.000001Z",
+    "stop_utc": "2026-01-12T13:46:39.000001Z",
+    "step_s": 1,
+    "events": {
+      "enabled": true,
+      "tolerance_s": 1.0
+    },
+    "convergence": {
+      "mode": "off",
+      "refinement_factor": 2.0,
+      "relative_tolerance": 1.0,
+      "absolute_tolerance_bits": 1e-09
+    }
+  },
+  "space_segment": {
+    "catalogs": [
+      {
+        "path": "../../../../examples/data/iridium_next_2026-09-10.csv",
+        "format": "celestrak_gp_csv",
+        "source_url": "https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-NEXT&FORMAT=CSV",
+        "retrieved_at_utc": "2026-09-10T22:00:25Z",
+        "terms_url": "https://celestrak.org/usage-policy.php",
+        "sha256": "e9dac20f80bb4d0ae0090996619827aab1abf16d448ed8b0edf47b965abf6273"
+      }
+    ],
+    "select_norad_ids": null,
+    "synthetic_rf": true
+  },
+  "terminals": {
+    "default": {
+      "receive_gain_dbi": 20.0,
+      "system_noise_temperature_k": 300.0,
+      "miscellaneous_loss_db": 2.0
+    }
+  },
+  "ground_segment": {
+    "default_minimum_elevation_deg": 0,
+    "stations": [
+      {
+        "name": "Madrid",
+        "latitude_deg": 90,
+        "longitude_deg": -180,
+        "height_ellipsoid_m": 650.0,
+        "height_amsl_m": 650.0,
+        "terminal": "default",
+        "minimum_elevation_deg": null
+      },
+      {
+        "name": "Tromso",
+        "latitude_deg": -90,
+        "longitude_deg": 180,
+        "height_ellipsoid_m": 0.0,
+        "height_amsl_m": 0.0,
+        "terminal": "default",
+        "minimum_elevation_deg": null
+      }
+    ]
+  },
+  "radio": {
+    "carrier_frequency_hz": 12000000000.0,
+    "channel_bandwidth_hz": 2000000.0,
+    "eirp_dbw": 15.0
+  },
+  "adaptation": {
+    "standard": "dvb-s2",
+    "table": "v1-reference-subset",
+    "symbol_rate_baud": 1000000.0,
+    "rolloff": 1,
+    "implementation_margin_db": 2.0,
+    "hysteresis_db": 0.5,
+    "feedback_delay_s": 0.0
+  },
+  "propagation": {
+    "model": "free_space"
+  },
+  "network": {
+    "pairs": [
+      {
+        "source": "Madrid",
+        "target": "Tromso"
+      }
+    ],
+    "isl": {
+      "rule": "all_pairs_within_range",
+      "max_range_m": 0,
+      "capacity_bps": 1000000000.0
+    },
+    "fixed_capacity_bps": 2228124.0,
+    "route_models": [
+      "minimum_delay",
+      "maximum_rate",
+      "fixed_capacity"
+    ]
+  },
+  "outputs": {
+    "formats": [
+      "csv",
+      "olc"
+    ],
+    "satellite_positions": "grid"
+  }
+}

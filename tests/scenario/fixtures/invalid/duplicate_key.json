@@ -1,0 +1,4 @@
+{
+  "error_startswith": "/time/step_s",
+  "scenario_text": "{\"schema\": \"openleo.scenario/2\", \"time\": {\"step_s\": 60.0, \"step_s\": 30.0}}"
+}

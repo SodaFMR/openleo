@@ -1,0 +1,128 @@
+{
+  "schema": "openleo.scenario/2",
+  "name": "Two catalogs, two terminals, per-station masks",
+  "description": "Exercises every optional key with a non-default value.",
+  "time": {
+    "start_utc": "2026-09-10T12:00:00Z",
+    "stop_utc": "2026-09-10T14:00:00Z",
+    "step_s": 60.0,
+    "events": {
+      "enabled": false,
+      "tolerance_s": 0.25
+    },
+    "convergence": {
+      "mode": "warn",
+      "refinement_factor": 8,
+      "relative_tolerance": 0.05,
+      "absolute_tolerance_bits": 0.5
+    }
+  },
+  "space_segment": {
+    "catalogs": [
+      {
+        "path": "../../../../examples/data/iridium_next_2026-09-10.csv",
+        "format": "celestrak_gp_csv",
+        "source_url": "https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-NEXT&FORMAT=CSV",
+        "retrieved_at_utc": "2026-09-10T22:00:25Z",
+        "terms_url": "https://celestrak.org/usage-policy.php",
+        "sha256": "e9dac20f80bb4d0ae0090996619827aab1abf16d448ed8b0edf47b965abf6273"
+      },
+      {
+        "path": "../../../../examples/data/iss_2026-08-30.csv",
+        "format": "celestrak_gp_csv",
+        "source_url": "https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-NEXT&FORMAT=CSV",
+        "retrieved_at_utc": "2026-08-30T22:01:11Z",
+        "terms_url": "https://celestrak.org/usage-policy.php",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ],
+    "select_norad_ids": [
+      25544,
+      43478,
+      2147483647
+    ],
+    "synthetic_rf": true
+  },
+  "terminals": {
+    "default": {
+      "receive_gain_dbi": 20.0,
+      "system_noise_temperature_k": 300.0,
+      "miscellaneous_loss_db": 2.0
+    },
+    "dish": {
+      "receive_gain_dbi": 38.5,
+      "system_noise_temperature_k": 150.0,
+      "miscellaneous_loss_db": 0.5
+    }
+  },
+  "ground_segment": {
+    "default_minimum_elevation_deg": 10.0,
+    "stations": [
+      {
+        "name": "Madrid",
+        "latitude_deg": 40.4168,
+        "longitude_deg": -3.7038,
+        "height_ellipsoid_m": 650.0,
+        "height_amsl_m": 650.0,
+        "terminal": "default",
+        "minimum_elevation_deg": null
+      },
+      {
+        "name": "Tromso",
+        "latitude_deg": 69.6492,
+        "longitude_deg": 18.9553,
+        "height_ellipsoid_m": 0.0,
+        "height_amsl_m": 0.0,
+        "terminal": "dish",
+        "minimum_elevation_deg": 25.0
+      }
+    ]
+  },
+  "radio": {
+    "carrier_frequency_hz": 12000000000.0,
+    "channel_bandwidth_hz": 1200000.0,
+    "eirp_dbw": 15.0
+  },
+  "adaptation": {
+    "standard": "dvb-s2",
+    "table": "v1-reference-subset",
+    "symbol_rate_baud": 1000000.0,
+    "rolloff": 0.2,
+    "implementation_margin_db": 2.0,
+    "hysteresis_db": 0.5,
+    "feedback_delay_s": 0.0
+  },
+  "propagation": {
+    "model": "free_space",
+    "refinement": 2
+  },
+  "network": {
+    "pairs": [
+      {
+        "source": "Madrid",
+        "target": "Tromso"
+      },
+      {
+        "source": "Tromso",
+        "target": "Madrid"
+      }
+    ],
+    "isl": {
+      "rule": "all_pairs_within_range",
+      "max_range_m": 0.0,
+      "capacity_bps": 500000000.0
+    },
+    "fixed_capacity_bps": null,
+    "route_models": [
+      "maximum_rate",
+      "minimum_delay"
+    ]
+  },
+  "outputs": {
+    "formats": [
+      "parquet",
+      "csv"
+    ],
+    "satellite_positions": "none"
+  }
+}

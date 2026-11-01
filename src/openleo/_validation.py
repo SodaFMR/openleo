@@ -25,12 +25,14 @@ def _read_scenario_bytes(path: Path) -> bytes:
     return source_bytes
 
 
-def _object(raw: Any, expected: frozenset[str], path: str) -> Mapping[str, Any]:
+def _object(
+    raw: Any, expected: frozenset[str], path: str, optional: frozenset[str] = frozenset()
+) -> Mapping[str, Any]:
     if not isinstance(raw, Mapping):
         raise TypeError(f"{path} must be a JSON object")
     actual = set(raw)
     missing = expected - actual
-    unknown = actual - expected
+    unknown = actual - expected - optional
     if missing:
         raise ValueError(f"{_field(path, min(missing))} is required")
     if unknown:
@@ -39,7 +41,16 @@ def _object(raw: Any, expected: frozenset[str], path: str) -> Mapping[str, Any]:
 
 
 def _field(path: str, name: str) -> str:
-    return name if path == "scenario" else f"{path}.{name}"
+    """Name a child of ``path``: dotted for the v1 ``scenario`` root, a JSON pointer otherwise.
+
+    A path that is empty or starts with ``/`` is an RFC 6901 pointer (the empty string is the
+    document root), and ``name`` is escaped as one reference token.
+    """
+    if path == "scenario":
+        return name
+    if path == "" or path.startswith("/"):
+        return f"{path}/{name.replace('~', '~0').replace('/', '~1')}"
+    return f"{path}.{name}"
 
 
 def _string(value: Any, path: str) -> str:

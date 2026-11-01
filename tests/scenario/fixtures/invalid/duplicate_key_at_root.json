@@ -1,0 +1,4 @@
+{
+  "error_startswith": "/name",
+  "scenario_text": "{\"name\": \"first\", \"name\": \"second\"}"
+}

@@ -1,0 +1,4 @@
+{
+  "error_startswith": "/ground_segment/stations/1/name",
+  "scenario_text": "{\"ground_segment\": {\"stations\": [{\"name\": \"A\"}, {\"name\": \"B\", \"name\": \"C\"}]}}"
+}
