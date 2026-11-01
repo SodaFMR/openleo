@@ -25,8 +25,8 @@ from typing import Any
 
 from openleo import sweep
 from openleo.engine import _assembly as assembly
-from openleo.orbit_verification import verify_orbit_reference
 from openleo.results import manifest_digest, publish_atomically, write_manifest
+from openleo.verify.orbit import verify_orbit_reference
 
 EVIDENCE_KIND = "openleo.release-evidence"
 EVIDENCE_SCHEMA_VERSION = "2"

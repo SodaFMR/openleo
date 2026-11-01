@@ -22,10 +22,17 @@ from sgp4.io import twoline2rv, verify_checksum
 from skyfield.api import load
 from skyfield.sgp4lib import TEME
 
-from openleo._validation import _finite_number, _object, _positive_number, _string, _url
-from openleo.catalog import _epoch, load_catalog
+from openleo._validation import (
+    _finite_number,
+    _object,
+    _positive_number,
+    _read_bounded,
+    _string,
+    _unique_object,
+    _url,
+)
+from openleo.engine.catalogs import _epoch, load_catalog
 from openleo.model import OrbitSource, Provenance
-from openleo.workbench import _read, _unique_object
 
 _UNITS = {"position": "km", "velocity": "km/s", "elapsed_time": "s"}
 _SOURCE_FIELDS = frozenset(
@@ -44,7 +51,7 @@ _SOURCE_FIELDS = frozenset(
 
 
 def _reference(path):
-    raw = _read(path, 100_000)
+    raw = _read_bounded(path, 100_000)
     data = json.loads(raw, object_pairs_hook=_unique_object)
     _object(
         data,

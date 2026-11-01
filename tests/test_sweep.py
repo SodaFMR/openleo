@@ -700,9 +700,47 @@ def test_replay_run_checks_against_each_scenario(tmp_path):
     assert len(sweep.expand_sweep(sweep.load_sweep(path), _document(GLOBAL))) == 1
 
 
-def test_replays_seam_is_a_stub():
-    with pytest.raises(NotImplementedError, match="replay bridges arrive in Task 15"):
-        sweep._run_replays(Path("."), {}, None, None)
+def test_replays_seam_needs_a_results_directory(tmp_path):
+    with pytest.raises(ValueError, match="manifest"):
+        sweep._run_replays(tmp_path, {"link": None, "network": None}, None, None)
+
+
+def test_replays_seam_runs_the_native_backends(tmp_path):
+    packet = os.environ.get("OPENLEO_NS3_REPLAY")
+    network = os.environ.get("OPENLEO_NS3_NETWORK")
+    if not (packet and network):
+        pytest.skip("set OPENLEO_NS3_REPLAY and OPENLEO_NS3_NETWORK to the pinned ns-3 backends")
+    base = _scenario_with_network(tmp_path)
+    norad = json.loads(base.read_text())["space_segment"]["select_norad_ids"][0]
+    replay = {
+        **NETWORK_REPLAY,
+        "link": {"station": "Madrid", "norad_id": norad, "loads_bps": [1000, 20000]},
+    }
+    spec = _replay_spec(replay, window={"start_offset_s": 0, "duration_s": 120})
+    output = tmp_path / "out"
+    summary = sweep.run_sweep(
+        _write(tmp_path, spec, base=base),
+        output,
+        packet_backend=Path(packet),
+        network_backend=Path(network),
+    )
+    assert summary["replay"] == {"evidence": "actual", "missing": []}
+    replays = summary["runs"][0]["replay"]["replays"]
+    assert [(r["kind"], r["routing_model"], r["offered_load_bps"]) for r in replays] == [
+        ("link", None, 1000),
+        ("link", None, 20000),
+        ("network", "minimum_delay", 10000),
+        ("network", "minimum_delay", 300000),
+    ]
+    verify_manifest(output)
+    for entry in replays:
+        directory = output / entry["directory"]
+        assert directory.parent.parent.name in ("replays", "variant%3Aa", "network")
+        stored = json.loads((directory / entry["summary_file"]).read_text(encoding="utf-8"))
+        assert stored == entry["summary"]
+        assert entry["summary"]["aggregate"]["unresolved_packets"] == 0
+        assert entry["summary"]["window"]["duration_s"] == 120.0
+    verify_manifest(output / "runs" / "variant%3Aa")
 
 
 # --- running -------------------------------------------------------------------------------------
@@ -922,7 +960,7 @@ def test_replay_seam_receives_each_run_and_the_evidence_is_recorded(tmp_path, mo
     def seam(run_dir, replay_spec, packet_backend, network_backend):
         calls.append((run_dir, replay_spec, packet_backend, network_backend))
         assert (run_dir / "results.json").is_file()
-        return {"evidence": "actual_ns3", "replays": []}
+        return {"evidence": "actual_ns3", "replays": [{"kind": "network"}]}
 
     monkeypatch.setattr(sweep, "_run_replays", seam)
     spec = _replay_spec(NETWORK_REPLAY)
@@ -939,7 +977,10 @@ def test_replay_seam_receives_each_run_and_the_evidence_is_recorded(tmp_path, mo
     assert all(c[2] is None and c[3] == backend for c in calls)
     assert all(c[1] == summary["spec"]["replay"] for c in calls)
     assert summary["replay"] == {"evidence": "actual", "missing": []}
-    assert all(r["replay"] == {"evidence": "actual_ns3", "replays": []} for r in summary["runs"])
+    assert all(
+        r["replay"] == {"evidence": "actual_ns3", "replays": [{"kind": "network"}]}
+        for r in summary["runs"]
+    )
     verify_manifest(tmp_path / "out")
 
 
@@ -957,13 +998,40 @@ def test_replay_without_its_backend_is_recorded_as_missing(tmp_path, monkeypatch
     assert any("replay" in text and "missing" in text for text in summary["limitations"])
 
 
+@pytest.mark.parametrize(
+    ("returned", "expected"),
+    [
+        ([{"evidence": "actual_ns3", "replays": [{"kind": "network"}]}] * 2, "actual"),
+        (
+            [
+                {"evidence": "actual_ns3", "replays": [{"kind": "network"}]},
+                {"evidence": "missing", "replays": []},
+            ],
+            "partial",
+        ),
+        ([{"evidence": "actual_ns3", "replays": []}] * 2, "missing"),
+        ([{"evidence": "missing", "replays": []}] * 2, "missing"),
+    ],
+)
+def test_replay_evidence_is_derived_from_the_runs(tmp_path, monkeypatch, returned, expected):
+    base = _scenario_with_network(tmp_path)
+    answers = iter(returned)
+    monkeypatch.setattr(sweep, "_run_replays", lambda *args: next(answers))
+    spec = _replay_spec(NETWORK_REPLAY, window={"start_offset_s": 0, "duration_s": 120})
+    spec["variants"] = [{"id": "a", "patch": []}, {"id": "b", "patch": []}]
+    summary = sweep.run_sweep(
+        _write(tmp_path, spec, base=base), tmp_path / "out", network_backend=tmp_path / "n"
+    )
+    assert summary["replay"] == {"evidence": expected, "missing": []}
+
+
 def test_partial_replay_only_runs_the_available_kinds(tmp_path, monkeypatch):
     base = _scenario_with_network(tmp_path)
     seen = []
 
     def seam(run_dir, replay_spec, packet_backend, network_backend):
         seen.append((replay_spec, packet_backend, network_backend))
-        return {"evidence": "actual_ns3", "replays": []}
+        return {"evidence": "actual_ns3", "replays": [{"kind": "network"}]}
 
     monkeypatch.setattr(sweep, "_run_replays", seam)
     both = {

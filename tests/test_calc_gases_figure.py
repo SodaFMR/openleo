@@ -9,12 +9,12 @@ from pathlib import Path
 import pytest
 from matplotlib import pyplot as plt
 
-from openleo.gases_plotting import render_gases_overview
-from openleo.physics.gases import (
+from openleo.calc.gases import (
     GasesBenchmark,
     run_gases_benchmark,
     write_gases_result,
 )
+from openleo.calc.gases_figure import render_gases_overview
 
 FOOTER = (
     "P.676-13 Annex 1 specific attenuation at declared homogeneous conditions; "

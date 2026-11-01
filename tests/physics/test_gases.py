@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from openleo.physics.gases import (
+from openleo.calc.gases import (
     GasesBenchmark,
     load_gases_benchmark,
     run_gases_benchmark,
-    specific_gaseous_attenuation,
     write_gases_result,
 )
+from openleo.physics.gases import specific_gaseous_attenuation
 
 CANONICAL_BENCHMARK = Path("examples/atmosphere/p676_13_validation.json")
 CANONICAL_BENCHMARK_SHA256 = "8bb73d2f3b3fe971cee54fa5feeeb4e041e2e77a3f272dc83842614d996e7bc0"

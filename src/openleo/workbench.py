@@ -22,9 +22,11 @@ from openleo._validation import (
     _range,
     _sha256,
     _string,
+    _unique_object,
     _url,
     _utc,
 )
+from openleo._validation import _read_bounded as _read
 from openleo.constellation import parse_constellation
 from openleo.input import GROUND_STATION_KEYS, _ground_station
 from openleo.network import ROUTE_MODELS, _ground_edges, _list, _position
@@ -562,26 +564,6 @@ def write_workbench(document: dict, output_dir: str | Path) -> tuple[Path, ...]:
     for name, content in all_contents.items():
         (directory / name).write_text(content, encoding="utf-8", newline="\n")
     return tuple(directory / name for name in all_contents)
-
-
-def _read(path: Path, limit: int) -> bytes:
-    try:
-        with path.open("rb") as file:
-            raw = file.read(limit + 1)
-    except OSError as exc:
-        raise ValueError(f"could not read {path.name}") from exc
-    if len(raw) > limit:
-        raise ValueError(f"{path.name} exceeds {limit} bytes")
-    return raw
-
-
-def _unique_object(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(f"duplicate JSON key {key!r}")
-        result[key] = value
-    return result
 
 
 def load_experiment(run_directory: str | Path) -> dict:

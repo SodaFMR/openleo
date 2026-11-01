@@ -10,7 +10,7 @@ from openleo.benchmark import run_benchmark
 from openleo.experiment import _manifest, _write_json
 from openleo.fidelity_report import _CSS
 from openleo.fidelity_study import _check_output
-from openleo.orbit_verification import verify_orbit_reference
+from openleo.verify.orbit import verify_orbit_reference
 from openleo.workbench import _read
 
 

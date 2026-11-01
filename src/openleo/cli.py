@@ -9,9 +9,9 @@ from collections.abc import Sequence
 from dataclasses import fields
 from pathlib import Path
 
+from openleo.calc.gases import load_gases_benchmark, run_gases_benchmark, write_gases_result
 from openleo.input import load_scenario
 from openleo.output import write_result
-from openleo.physics.gases import load_gases_benchmark, run_gases_benchmark, write_gases_result
 from openleo.sensitivity import load_sensitivity_study, run_sensitivity, write_sensitivity_result
 from openleo.simulation import simulate_scenario
 
@@ -215,7 +215,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command in ("benchmark", "verify-orbit", "reproduce"):
         try:
             if args.command == "verify-orbit":
-                from openleo.orbit_verification import verify_orbit_reference
+                from openleo.verify.orbit import verify_orbit_reference
 
                 result = verify_orbit_reference(args.configuration)
                 print(json.dumps(result, indent=2, allow_nan=False))
@@ -289,7 +289,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
     if args.command == "hydrometeors":
         try:
-            from openleo.hydrometeor_benchmark import run_hydrometeors
+            from openleo.calc.hydrometeors import run_hydrometeors
 
             result = run_hydrometeors(args.configuration, args.output)
             print(f"study: {result['name']}")
@@ -448,7 +448,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
     if args.command == "plot-gases":
         try:
-            from openleo.gases_plotting import render_gases_overview
+            from openleo.calc.gases_figure import render_gases_overview
 
             output_path = render_gases_overview(args.run_directory, args.output)
             print(f"plot: {output_path}")

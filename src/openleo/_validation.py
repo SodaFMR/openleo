@@ -25,6 +25,28 @@ def _read_scenario_bytes(path: Path) -> bytes:
     return source_bytes
 
 
+def _read_bounded(path: Path, limit: int) -> bytes:
+    """At most ``limit`` bytes of a file; ValueError naming the file if it is longer."""
+    try:
+        with path.open("rb") as file:
+            raw = file.read(limit + 1)
+    except OSError as exc:
+        raise ValueError(f"could not read {path.name}") from exc
+    if len(raw) > limit:
+        raise ValueError(f"{path.name} exceeds {limit} bytes")
+    return raw
+
+
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """``object_pairs_hook`` that rejects repeated JSON keys."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key {key!r}")
+        result[key] = value
+    return result
+
+
 def _object(
     raw: Any, expected: frozenset[str], path: str, optional: frozenset[str] = frozenset()
 ) -> Mapping[str, Any]:

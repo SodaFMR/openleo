@@ -76,6 +76,7 @@ LOAD_BOUNDS = (1.0, 1e9)
 ACQUISITION_BOUNDS = (0.0, 60.0)
 MAX_LOADS = 8
 REPLAY_KINDS = ("link", "network")
+NATIVE_REPLAY_EVIDENCE = "actual_ns3"
 BASELINE_RULES = {
     "oat": "the nominal run, which reproduces the base scenario",
     "grid": "the first combination of the grid (grid:0)",
@@ -964,16 +965,100 @@ def _run_replays(
     packet_backend: Path | None,
     network_backend: Path | None,
 ) -> dict:
-    """The one seam to the trusted packet backends: replay one saved run (Task 15 wires it).
+    """The one seam to the trusted packet backends: replay one saved run.
 
     ``run_dir`` is the run's results directory (``results.json``, ``tables/``, ``inputs/``) and
-    must be left unchanged. ``replay_spec`` is the normalised ``replay`` block holding only the
-    kinds whose backend is available (the others are ``None``). The result is stored under the
-    run's ``replay`` key in ``sweep.json``. ``reproduce`` requires this shape:
-    ``{"evidence": "actual_ns3", "replays": [{"kind", ..., "summary": {"aggregate":
-    {"unresolved_packets": 0, "send_error_packets": 0, ...}}}]}``.
+    is left unchanged. ``replay_spec`` is the normalised ``replay`` block holding only the kinds
+    whose backend is available (the others are ``None``). Every replay covers the run's whole
+    window: one link replay per offered load, and one network replay of the first network pair
+    per routing model (``routing_models``, else all the run's ``network.route_models``) and
+    load. Each is published under ``replays/<run id>/link/<load>`` or
+    ``replays/<run id>/network/<model>/<load>``, next to ``runs/``. The result, stored under the
+    run's ``replay`` key in ``sweep.json``, is ``{"evidence": "actual_ns3", "replays": [{"kind",
+    "routing_model", "offered_load_bps", "directory", "summary_file", "summary"}]}``; every
+    summary carries an ``aggregate`` accounting of both directions (``reproduce`` checks its
+    ``unresolved_packets`` and ``send_error_packets``). A failing replay raises ValueError.
     """
-    raise NotImplementedError("replay bridges arrive in Task 15")
+    from openleo.replay import (
+        NetworkReplayConfig,
+        ReplayConfig,
+        ReplaySource,
+        run_network_replay,
+        run_packet_replay,
+    )
+
+    run_dir = Path(run_dir)
+    source = ReplaySource.from_results(run_dir)
+    root = run_dir.parent.parent
+    base = f"replays/{run_dir.name}"
+    replays = []
+    link = replay_spec.get("link")
+    if link is not None:
+        for load in link["loads_bps"]:
+            directory = f"{base}/link/{number_text(load)}"
+            config = ReplayConfig(
+                station_name=link["station"],
+                norad_id=link["norad_id"],
+                start_offset_s=0,
+                duration_s=source.window_s,
+                offered_load_bps=load,
+                packet_size_bytes=link["packet_size_bytes"],
+                queue_packets=link["queue_packets"],
+                seed=link["seed"],
+            )
+            summary = run_packet_replay(run_dir, config, packet_backend, root / directory)
+            replays.append(
+                {
+                    "kind": "link",
+                    "routing_model": None,
+                    "offered_load_bps": load,
+                    "directory": directory,
+                    "summary_file": "packet-summary.json",
+                    "summary": summary,
+                }
+            )
+    network = replay_spec.get("network")
+    if network is not None:
+        for model in network["routing_models"] or source.route_models:
+            for load in network["loads_bps"]:
+                directory = f"{base}/network/{model}/{number_text(load)}"
+                config = NetworkReplayConfig(
+                    routing_model=model,
+                    start_offset_s=0,
+                    duration_s=source.window_s,
+                    offered_load_bps=load,
+                    packet_size_bytes=network["packet_size_bytes"],
+                    queue_packets=network["queue_packets"],
+                    flows_per_direction=network["flows_per_direction"],
+                    acquisition_delay_s=network["acquisition_delay_s"],
+                    seed=network["seed"],
+                )
+                summary = run_network_replay(run_dir, config, network_backend, root / directory)
+                replays.append(
+                    {
+                        "kind": "network",
+                        "routing_model": model,
+                        "offered_load_bps": load,
+                        "directory": directory,
+                        "summary_file": "network-summary.json",
+                        "summary": summary,
+                    }
+                )
+    return {"evidence": NATIVE_REPLAY_EVIDENCE, "replays": replays}
+
+
+def _replay_evidence(entries: Sequence[dict], missing: Sequence[str]) -> str:
+    """``actual`` when every run returned native replays and no kind lacked its backend,
+    ``partial`` when some did, ``missing`` when none did."""
+    native = [
+        isinstance(entry["replay"], dict)
+        and entry["replay"].get("evidence") == NATIVE_REPLAY_EVIDENCE
+        and bool(entry["replay"].get("replays"))
+        for entry in entries
+    ]
+    if native and all(native) and not missing:
+        return "actual"
+    return "partial" if any(native) else "missing"
 
 
 def _replay_plan(replay: dict | None, packet_backend, network_backend) -> tuple[dict | None, list]:
@@ -1077,8 +1162,7 @@ def execute_sweep(
     if requested is None:
         replay_block = None
     else:
-        evidence = "actual" if not missing else ("partial" if plan is not None else "missing")
-        replay_block = {"evidence": evidence, "missing": missing}
+        replay_block = {"evidence": _replay_evidence(entries, missing), "missing": missing}
     document = {
         "kind": SWEEP_RESULT_KIND,
         "schema_version": SWEEP_RESULT_SCHEMA_VERSION,

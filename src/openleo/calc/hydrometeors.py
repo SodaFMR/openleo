@@ -1,24 +1,30 @@
-"""Bounded, input-driven rain/cloud calculations and portable reference reports."""
+"""Bounded, input-driven rain/cloud calculations and portable reference reports.
+
+``run_hydrometeors(config, output_dir)`` writes ``rain.csv``, ``cloud.csv``,
+``hydrometeors.json``, ``index.html`` and ``manifest.json`` in v1's formats, byte for byte.
+"""
 
 from __future__ import annotations
 
+import csv
 import json
 import re
 from dataclasses import asdict
 from hashlib import sha256
 from html import escape
 from importlib.metadata import version
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from openleo._validation import _object, _string
+from openleo._validation import _object, _string, _unique_object
+from openleo._validation import _read_bounded as _read
 from openleo.physics.hydrometeors import (
     CLOUD_SOURCE,
     RAIN_SOURCE,
     cloud_slant_attenuation,
     rain_specific_attenuation,
 )
-from openleo.workbench import _csv, _json, _read, _unique_object
 
 _RAIN_INPUTS = ("frequency_hz", "rain_rate_mm_h", "elevation_deg", "polarization_tilt_deg")
 _CLOUD_INPUTS = ("frequency_hz", "liquid_water_kg_m2", "elevation_deg")
@@ -30,6 +36,30 @@ _LIMITATIONS = [
     "Cloud slant loss requires an explicitly supplied integrated liquid-water column; no maps or exceedance probability are inferred.",
     "These independent calculations do not modify constellation C/N0, receiver noise or packet results.",
 ]
+
+
+def _json(value) -> str:
+    return json.dumps(
+        value, allow_nan=False, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+
+
+def _csv_value(value):
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float):
+        return format(value, ".15g")
+    return value
+
+
+def _csv(fields: tuple[str, ...], rows) -> str:
+    file = StringIO(newline="")
+    writer = csv.DictWriter(file, fieldnames=fields, lineterminator="\n", extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows({key: _csv_value(value) for key, value in row.items()} for row in rows)
+    return file.getvalue()
 
 
 def _calculate(path: Path) -> dict:

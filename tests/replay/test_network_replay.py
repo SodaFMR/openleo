@@ -2,53 +2,29 @@ import csv
 import json
 import os
 import subprocess
-from copy import deepcopy
 from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
 
 import pytest
-from test_packet_replay import _base_document
+from replay_fakes import multihop_source, network_source
 
-from openleo.network_replay import (
+from openleo.replay import (
     EDGE_FIELDS,
     HOP_FIELDS,
-    PACKET_FIELDS,
     NetworkReplayConfig,
+    ReplaySource,
     parse_network_results,
     prepare_network_replay,
     run_network_replay,
 )
-from openleo.workbench import write_workbench
+from openleo.replay import NETWORK_PACKET_FIELDS as PACKET_FIELDS
+from openleo.replay.network_replay import _execute_network_replay
+from openleo.results import manifest_digest
 
 
 def document():
-    result = deepcopy(_base_document())
-    modcod = result["models"]["adaptation"]["modcod_table"][0]["name"]
-    result["links"] = [
-        [
-            {
-                **link,
-                "rate_bps": 1_000_000.75,
-                "delay_s": 0.0020000004,
-                "modcod": modcod,
-                "margin_db": 0.0,
-            }
-            for link in frame
-        ]
-        for frame in result["links"]
-    ]
-    result["network"]["frames"] = [
-        {
-            **frame,
-            **{
-                model: {"nodes": [1, 0, 2], "delay_s": 0.004, "bottleneck_bps": 1_000_000.75}
-                for model in ("minimum_delay", "maximum_rate", "fixed_capacity")
-            },
-        }
-        for frame in result["network"]["frames"]
-    ]
-    return result
+    return network_source()
 
 
 def config(**kwargs):
@@ -83,7 +59,7 @@ def write_results(directory, packets=None, hops=None):
 
 def test_prepare_left_hold_quantization_and_selected_edges_without_mutation():
     source = document()
-    original = deepcopy(source)
+    original = source.copy()
     result = prepare_network_replay(source, replace(config(), start_offset_s=5, duration_s=15))
     assert source == original
     assert result["routes"] == [
@@ -121,11 +97,9 @@ def test_acquisition_adds_boundary_and_retains_ready_time_across_frames():
 
 def test_fixed_capacity_uses_declared_baseline():
     source = document()
-    source["links"][0] = [
-        {**link, "rate_bps": 0.0, "modcod": None, "margin_db": -1.0} for link in source["links"][0]
-    ]
-    source["network"]["frames"][0]["minimum_delay"] = None
-    source["network"]["frames"][0]["maximum_rate"] = None
+    source.links[0] = {key: (0.0, delay) for key, (_, delay) in source.links[0].items()}
+    source.routes[0]["minimum_delay"] = None
+    source.routes[0]["maximum_rate"] = None
     assert prepare_network_replay(source, config())["routes"][0]["state"] == "disconnected"
     fixed = prepare_network_replay(source, replace(config(), routing_model="fixed_capacity"))
     assert fixed["routes"][0]["state"] == "ready"
@@ -136,6 +110,8 @@ def test_fixed_capacity_uses_declared_baseline():
     "kwargs",
     [
         {"routing_model": "unknown"},
+        {"pair_index": 1},
+        {"pair_index": True},
         {"flows_per_direction": True},
         {"flows_per_direction": 5},
         {"acquisition_delay_s": 61},
@@ -193,32 +169,79 @@ def test_missing_packets_and_invented_receive_time_are_rejected(tmp_path):
         parse_network_results(tmp_path, prepared())
 
 
-def test_output_preserved_before_backend_execution(tmp_path):
-    bundle = tmp_path / "bundle"
-    write_workbench(document(), bundle)
+def execute(source, settings, backend, output):
+    """Replay a hand-built source through the same backend execution as ``run_network_replay``."""
+    return _execute_network_replay(
+        prepare_network_replay(source, settings),
+        {"synthetic": "hand-built test topology"},
+        backend,
+        output,
+        ["test topology"],
+    )
+
+
+def test_output_preserved_before_backend_execution(tmp_path, global_on):
     output = tmp_path / "output"
     output.mkdir()
     (output / "sentinel").write_text("keep")
     with pytest.raises(ValueError, match="non-empty"):
-        run_network_replay(bundle, config(), tmp_path / "missing", output)
+        run_network_replay(global_on, config(), tmp_path / "missing", output)
     assert (output / "sentinel").read_text() == "keep"
+
+
+def test_run_rejects_a_model_or_pair_the_results_lack(tmp_path, global_on):
+    from openleo.replay import ReplaySource
+
+    source = ReplaySource.from_results(global_on)
+    with pytest.raises(ValueError, match="pair_index"):
+        prepare_network_replay(source, replace(config(), pair_index=1))
+    trimmed = network_source()
+    trimmed.route_models = ("minimum_delay",)
+    with pytest.raises(ValueError, match="route_models"):
+        prepare_network_replay(trimmed, replace(config(), routing_model="maximum_rate"))
 
 
 def test_actual_backend(tmp_path):
     backend = os.environ.get("OPENLEO_NS3_NETWORK")
     if not backend:
         pytest.skip("set OPENLEO_NS3_NETWORK to the actual pinned ns-3 network backend")
-    bundle = tmp_path / "bundle"
-    write_workbench(document(), bundle)
-    result = run_network_replay(bundle, config(), backend, tmp_path / "output")
+    result = execute(document(), config(), backend, tmp_path / "output")
     assert result["aggregate"]["mean_delay_s"] == pytest.approx(0.02)
     assert result["aggregate"]["received_packets"] == 2
 
 
+def test_actual_backend_on_v2_results(tmp_path, global_on):
+    backend = os.environ.get("OPENLEO_NS3_NETWORK")
+    if not backend:
+        pytest.skip("set OPENLEO_NS3_NETWORK to the actual pinned ns-3 network backend")
+    settings = NetworkReplayConfig(duration_s=60, offered_load_bps=20_000, flows_per_direction=2)
+    output = tmp_path / "output"
+    summary = run_network_replay(global_on, settings, backend, output)
+    aggregate = summary["aggregate"]
+    assert aggregate["offered_packets"] == summary["traffic"]["total_offered_packets"]
+    # The route 80-25-26-81 holds until 52.53 s, then the pair is disconnected.
+    assert aggregate["received_in_window_packets"] > 0.8 * aggregate["offered_packets"]
+    assert aggregate["no_route_packets"] > 0
+    assert aggregate["unresolved_packets"] == aggregate["send_error_packets"] == 0
+    # Route 80-25-26-81 has a ~20.9 ms path delay; three hops add serialization.
+    assert 0.0209 < aggregate["mean_delay_s"] < 0.04
+    assert summary["source"]["results"]["manifest_sha256"] == manifest_digest(global_on)
+    assert summary["selection"]["pair_index"] == 0
+    assert sorted(path.name for path in output.iterdir()) == [
+        "edges.csv",
+        "hops.csv",
+        "manifest.json",
+        "network-summary.json",
+        "packets.csv",
+        "routes.csv",
+    ]
+
+
 def test_supported_high_rate_is_not_bounded_by_measurement_time(tmp_path):
     source = document()
-    source["links"] = [
-        [{**link, "rate_bps": 1_000_000_000.0} for link in frame] for frame in source["links"]
+    source.links = [
+        {key: (1_000_000_000.0, delay) for key, (_, delay) in frame.items()}
+        for frame in source.links
     ]
     state = prepare_network_replay(source, config())
     packets = [[d, 0, 0, 0, 0, 4_016_000, "received", 970, 2] for d in (0, 1)]
@@ -273,8 +296,6 @@ def test_prepared_ready_route_rejects_intermediate_ground_nodes(tmp_path):
 
 
 def test_atomic_wrapper_generates_hashed_evidence_without_private_paths(tmp_path, monkeypatch):
-    bundle = tmp_path / "bundle"
-    write_workbench(document(), bundle)
     backend = tmp_path / "trusted-backend"
     backend.write_bytes(b"portable backend test fixture")
 
@@ -287,10 +308,10 @@ def test_atomic_wrapper_generates_hashed_evidence_without_private_paths(tmp_path
         write_results(destination)
         return subprocess.CompletedProcess(command, 0, b"", b"")
 
-    monkeypatch.setattr("openleo.network_replay.subprocess.run", native)
+    monkeypatch.setattr("openleo.replay.network_replay.subprocess.run", native)
     output = tmp_path / "output"
     output.mkdir()
-    summary = run_network_replay(bundle, config(), backend, output)
+    summary = execute(document(), config(), backend, output)
     assert sorted(path.name for path in output.iterdir()) == [
         "edges.csv",
         "hops.csv",
@@ -308,6 +329,39 @@ def test_atomic_wrapper_generates_hashed_evidence_without_private_paths(tmp_path
         "packets.csv",
         "routes.csv",
     }
+
+
+def test_run_publishes_v2_evidence_for_a_disconnected_window(tmp_path, monkeypatch, global_on):
+    source = ReplaySource.from_results(global_on)
+    assert source.route(0, "minimum_delay", 500.0) is None
+    settings = replace(config(), start_offset_s=497, duration_s=10, offered_load_bps=7760)
+    backend = tmp_path / "trusted-backend"
+    backend.write_bytes(b"portable backend test fixture")
+
+    def native(command, **kwargs):
+        if command[1:] == ["--PrintVersion"]:
+            return subprocess.CompletedProcess(command, 0, b"openleo-ns3-network/1 ns-3.48\n", b"")
+        destination = Path(
+            next(arg.split("=", 1)[1] for arg in command if arg.startswith("--output="))
+        )
+        interval = int(next(a.split("=", 1)[1] for a in command if a.startswith("--intervalNs=")))
+        write_results(
+            destination,
+            [
+                [d, 0, n, n * interval, "", "", "no_route", 970, 0]
+                for n in range((10_000_000_000 + interval - 1) // interval)
+                for d in (0, 1)
+            ],
+            [],
+        )
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    monkeypatch.setattr("openleo.replay.network_replay.subprocess.run", native)
+    summary = run_network_replay(global_on, settings, backend, tmp_path / "output")
+    assert summary["aggregate"]["no_route_packets"] == summary["aggregate"]["offered_packets"]
+    assert summary["source"]["results"]["manifest_sha256"] == manifest_digest(global_on)
+    assert summary["window"]["start_utc"] == "2026-09-10T12:08:17Z"
+    assert any("breakpoint" in text for text in summary["limitations"])
 
 
 def test_queued_hop_retains_route_selected_at_previous_receive_time(tmp_path):
@@ -373,28 +427,7 @@ def test_queued_hop_retains_route_selected_at_previous_receive_time(tmp_path):
 
 
 def multihop_document(second_path):
-    result = document()
-    satellite = result["satellites"][0]
-    result["satellites"] = [
-        {**deepcopy(satellite), "norad_id": satellite["norad_id"] + index} for index in range(4)
-    ]
-    result["links"] = [
-        [{**link, "satellite_index": index} for index in range(4) for link in frame]
-        for frame in result["links"]
-    ]
-    paths = ([4, 0, 1, 3, 5], second_path, second_path)
-    result["network"]["frames"] = [
-        {
-            **frame,
-            "isl_edges": [[a, b, 0.001] for a, b in ((0, 1), (0, 2), (1, 2), (1, 3), (2, 3))],
-            **{
-                model: {"nodes": path, "delay_s": 0.006, "bottleneck_bps": 1_000_000}
-                for model in ("minimum_delay", "maximum_rate", "fixed_capacity")
-            },
-        }
-        for frame, path in zip(result["network"]["frames"], paths)
-    ]
-    return result
+    return multihop_source(second_path)
 
 
 def test_internal_route_switch_keeps_endpoint_acquisition_and_only_selected_union():
@@ -433,25 +466,10 @@ def test_endpoint_change_reacquires_and_gates_only_selected_ground_edges():
 
 def test_loss_resets_pending_acquisition():
     source = document()
-    source["timestamps_utc"] = [
-        source["timestamps_utc"][0],
-        "2026-08-30T06:17:05Z",
-        *source["timestamps_utc"][1:],
-    ]
-    source["satellites"] = [
-        {**sat, "positions_ecef_m": [sat["positions_ecef_m"][0], *sat["positions_ecef_m"]]}
-        for sat in source["satellites"]
-    ]
-    source["links"] = [
-        source["links"][0],
-        [
-            {**link, "remaining_contact_s": min(link["remaining_contact_s"], 15)}
-            for link in source["links"][0]
-        ],
-        *source["links"][1:],
-    ]
-    frames = source["network"]["frames"]
-    source["network"]["frames"] = [frames[0], {**frames[0], "minimum_delay": None}, *frames[1:]]
+    source.offsets.insert(1, 5.0)
+    source.links.insert(1, dict(source.links[0]))
+    source.routes.insert(1, {**source.routes[0], "minimum_delay": None})
+    source.isl.insert(1, {})
     result = prepare_network_replay(source, replace(config(), duration_s=20, acquisition_delay_s=8))
     assert [(r["time_ns"], r["state"]) for r in result["routes"]] == [
         (0, "acquiring"),
@@ -464,9 +482,8 @@ def test_loss_resets_pending_acquisition():
 
 def test_empty_disconnected_topology_and_phase_aware_offers(tmp_path):
     source = document()
-    source["network"]["frames"] = [
-        {**frame, "minimum_delay": None} for frame in source["network"]["frames"]
-    ]
+    for frame in source.routes:
+        frame["minimum_delay"] = None
     state = prepare_network_replay(
         source, replace(config(), duration_s=0.06, flows_per_direction=2)
     )
@@ -559,18 +576,18 @@ def test_outage_hop_has_actual_phy_receive_but_no_udp_delivery_time(tmp_path):
 
 
 @pytest.mark.parametrize("handshake", [b"wrong\n", b"openleo-ns3-network/1 ns-3.48"])
-def test_wrong_or_inexact_handshake_leaves_output_absent(tmp_path, monkeypatch, handshake):
-    bundle = tmp_path / "bundle"
-    write_workbench(document(), bundle)
+def test_wrong_or_inexact_handshake_leaves_output_absent(
+    tmp_path, monkeypatch, handshake, global_on
+):
     backend = tmp_path / "backend"
     backend.write_bytes(b"fixture")
     monkeypatch.setattr(
-        "openleo.network_replay.subprocess.run",
+        "openleo.replay.network_replay.subprocess.run",
         lambda command, **kwargs: subprocess.CompletedProcess(command, 0, handshake, b""),
     )
     output = tmp_path / "output"
     with pytest.raises(ValueError, match="handshake"):
-        run_network_replay(bundle, config(), backend, output)
+        run_network_replay(global_on, config(), backend, output)
     assert not output.exists()
 
 
@@ -589,15 +606,14 @@ def test_actual_backend_flow_queue_and_route_variants(tmp_path, mode):
     elif mode == "acquisition":
         settings = replace(settings, offered_load_bps=155_200, acquisition_delay_s=0.02)
     elif mode == "disconnected":
-        source["network"]["frames"] = [
-            {**frame, "minimum_delay": None} for frame in source["network"]["frames"]
-        ]
+        for frame in source.routes:
+            frame["minimum_delay"] = None
     elif mode == "outage":
         settings = replace(settings, duration_s=20, offered_load_bps=7760, queue_packets=1)
-        source["links"] = [
-            [{**link, "rate_bps": 1000.0} for link in frame] for frame in source["links"]
+        source.links = [
+            {key: (1000.0, delay) for key, (_, delay) in frame.items()} for frame in source.links
         ]
-        source["network"]["frames"][1]["minimum_delay"] = None
+        source.routes[1]["minimum_delay"] = None
     elif mode == "high_rate":
         settings = replace(
             settings,
@@ -606,15 +622,14 @@ def test_actual_backend_flow_queue_and_route_variants(tmp_path, mode):
             offered_load_bps=1_000_000_000,
             flows_per_direction=4,
         )
-        source["links"] = [
-            [{**link, "rate_bps": 1_000_000_000_000} for link in frame] for frame in source["links"]
+        source.links = [
+            {key: (1_000_000_000_000.0, delay) for key, (_, delay) in frame.items()}
+            for frame in source.links
         ]
     else:
         source = multihop_document([4, 0, 2, 3, 5])
         settings = replace(settings, offered_load_bps=1552, duration_s=20, acquisition_delay_s=12)
-    bundle = tmp_path / "bundle"
-    write_workbench(source, bundle)
-    result = run_network_replay(bundle, settings, backend, tmp_path / "output")["aggregate"]
+    result = execute(source, settings, backend, tmp_path / "output")["aggregate"]
     if mode == "overload":
         assert result["queue_drop_packets"] > 0
         assert result["end_of_window_drop_packets"] > 0
@@ -729,7 +744,9 @@ def test_uncontended_phy_transmissions_cannot_invent_idle_queue_delay(tmp_path):
 
 def fifo_fixture(directory, statuses, transmitted=(0, 1), rate=1_000_000):
     source = document()
-    source["links"] = [[{**link, "rate_bps": rate} for link in frame] for frame in source["links"]]
+    source.links = [
+        {key: (rate, delay) for key, (_, delay) in frame.items()} for frame in source.links
+    ]
     state = prepare_network_replay(
         source, replace(config(), duration_s=0.009, offered_load_bps=1_940_000, queue_packets=1)
     )

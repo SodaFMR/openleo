@@ -8,7 +8,7 @@ FIXTURE = Path("examples/validation/vallado_06251.json")
 
 
 def _verify(path=FIXTURE):
-    from openleo.orbit_verification import verify_orbit_reference
+    from openleo.verify import verify_orbit_reference
 
     return verify_orbit_reference(path)
 
@@ -133,3 +133,18 @@ def test_tle_requires_numeric_checksum(tmp_path):
     tle = json.loads(FIXTURE.read_text())["tle"]
     with pytest.raises(ValueError, match="TLE"):
         _verify(_changed(tmp_path, tle=[tle[0][:-1] + "x", tle[1]]))
+
+
+def test_verify_orbit_passes_vallado():
+    result = _verify()
+    assert result["passed"] is True
+    assert result["fixture_sha256"] == sha256(FIXTURE.read_bytes()).hexdigest()
+    assert len(result["epochs"]) == 5
+    assert all(row["passed"] for row in result["epochs"])
+
+
+def test_itu_workbook_stub_message(tmp_path):
+    from openleo.verify import verify_itu_workbook
+
+    with pytest.raises(NotImplementedError, match="available in S3"):
+        verify_itu_workbook(tmp_path / "workbook.xlsx")

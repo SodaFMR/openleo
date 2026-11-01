@@ -214,10 +214,27 @@ def test_reproduce_publishes_nothing_without_native_evidence(tmp_path, monkeypat
     assert list(tmp_path.glob("evidence*")) == []
 
 
-def test_reproduce_on_the_unwired_seam_fails_clearly(tmp_path):
+def test_reproduce_with_an_untrusted_backend_fails_closed(tmp_path):
     config = _config(tmp_path, {"network": NETWORK})
     backend = tmp_path / "ns3"
     backend.touch()
-    with pytest.raises(NotImplementedError, match="Task 15"):
+    with pytest.raises(ValueError, match="handshake"):
         reproduce.run_reproduce(config, REFERENCE, backend, tmp_path / "evidence")
     assert list(tmp_path.glob("evidence*")) == []
+
+
+def test_reproduce_with_the_native_backend(tmp_path):
+    backend = os.environ.get("OPENLEO_NS3_NETWORK")
+    if not backend:
+        pytest.skip("set OPENLEO_NS3_NETWORK to the actual pinned ns-3 network backend")
+    config = _config(tmp_path, {"network": NETWORK})
+    summary = reproduce.run_reproduce(config, REFERENCE, Path(backend), tmp_path / "evidence")
+    assert summary["completed_runs"] == 2
+    assert summary["native_packet_replays"] == 2 * 2 * 3
+    sweep_document = json.loads((tmp_path / "evidence" / "sweep" / "sweep.json").read_text())
+    assert sweep_document["replay"] == {"evidence": "actual", "missing": []}
+    for entry in sweep_document["runs"]:
+        for replay in entry["replay"]["replays"]:
+            directory = tmp_path / "evidence" / "sweep" / replay["directory"]
+            assert (directory / "network-summary.json").is_file()
+            assert replay["summary"]["aggregate"]["unresolved_packets"] == 0

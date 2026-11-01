@@ -2,6 +2,14 @@
 
 __version__ = "2.0.0.dev0"
 
+from openleo.calc.gases import (
+    GasesBenchmark,
+    GasesCase,
+    GasesResult,
+    load_gases_benchmark,
+    run_gases_benchmark,
+    write_gases_result,
+)
 from openleo.cli import main
 from openleo.constellation import (
     ConstellationScenario,
@@ -16,16 +24,7 @@ from openleo.network import NetworkConfig, add_network
 from openleo.orbit import LoadedOrbit, load_orbit
 from openleo.output import write_result
 from openleo.physics.adaptation import AdaptationConfig, Modcod, select_modcod
-from openleo.physics.gases import (
-    GasesBenchmark,
-    GasesCase,
-    GasesResult,
-    SpecificGaseousAttenuation,
-    load_gases_benchmark,
-    run_gases_benchmark,
-    specific_gaseous_attenuation,
-    write_gases_result,
-)
+from openleo.physics.gases import SpecificGaseousAttenuation, specific_gaseous_attenuation
 from openleo.results import Results, load_results
 from openleo.scenario import load_scenario
 from openleo.sensitivity import (

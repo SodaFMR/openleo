@@ -10,7 +10,7 @@ REFERENCE = Path("examples/atmosphere/hydrometeors_reference.json")
 
 
 def test_reference_batch_writes_calculated_values_and_hashed_outputs(tmp_path):
-    from openleo.hydrometeor_benchmark import run_hydrometeors
+    from openleo.calc.hydrometeors import run_hydrometeors
 
     output = tmp_path / "results"
     result = run_hydrometeors(REFERENCE, output)
@@ -44,7 +44,7 @@ def test_reference_batch_writes_calculated_values_and_hashed_outputs(tmp_path):
     ],
 )
 def test_invalid_inputs_do_not_create_output(tmp_path, change):
-    from openleo.hydrometeor_benchmark import run_hydrometeors
+    from openleo.calc.hydrometeors import run_hydrometeors
 
     data = json.loads(REFERENCE.read_text())
     change(data)
@@ -65,7 +65,7 @@ def test_invalid_inputs_do_not_create_output(tmp_path, change):
     ids=["duplicate-keys", "deeply-nested", "oversized"],
 )
 def test_malformed_and_oversized_json_fails_cleanly(tmp_path, raw):
-    from openleo.hydrometeor_benchmark import run_hydrometeors
+    from openleo.calc.hydrometeors import run_hydrometeors
 
     source = tmp_path / "input.json"
     source.write_text(raw)
@@ -75,7 +75,7 @@ def test_malformed_and_oversized_json_fails_cleanly(tmp_path, raw):
 
 
 def test_existing_results_are_preserved(tmp_path):
-    from openleo.hydrometeor_benchmark import run_hydrometeors
+    from openleo.calc.hydrometeors import run_hydrometeors
 
     output = tmp_path / "results"
     output.mkdir()
@@ -86,7 +86,7 @@ def test_existing_results_are_preserved(tmp_path):
 
 
 def test_report_escapes_labels_and_separates_the_two_physical_quantities(tmp_path):
-    from openleo.hydrometeor_benchmark import run_hydrometeors
+    from openleo.calc.hydrometeors import run_hydrometeors
 
     data = json.loads(REFERENCE.read_text())
     data["name"] = '<script>alert("bad")</script>'

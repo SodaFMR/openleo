@@ -304,7 +304,7 @@ jobs:
       - name: Verify native multi-hop event semantics
         run: uv run python tests/ns3_network_checks.py "$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-network-replay"
       - name: Verify Python-to-simulator integration
-        run: OPENLEO_NS3_REPLAY="$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-replay" OPENLEO_NS3_NETWORK="$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-network-replay" uv run pytest tests/test_packet_replay.py tests/test_packet_cli.py tests/test_network_replay.py tests/test_experiment.py tests/test_benchmark.py tests/test_release_evidence.py
+        run: OPENLEO_NS3_REPLAY="$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-replay" OPENLEO_NS3_NETWORK="$RUNNER_TEMP/ns-3.48/build/scratch/ns3.48-openleo-network-replay" uv run pytest tests/replay tests/test_sweep.py tests/test_reproduce.py tests/test_experiment.py tests/test_benchmark.py tests/test_release_evidence.py
       - name: Replay an archived-orbit model trace
         run: |
           uv run openleo constellation examples/constellations/iridium_global_reference.json --output runs/packet-source
