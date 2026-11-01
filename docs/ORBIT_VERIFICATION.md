@@ -1,19 +1,20 @@
 # Published orbit reference verification
 
-`openleo.orbit_verification.verify_orbit_reference(config_path)` checks five
+`openleo verify orbit REFERENCE.json` (Python: `openleo.verify.verify_orbit_reference(config_path)`)
+checks five
 published states for Vallado case 06251 (DELTA 1 DEB), a near-Earth orbit with
 moderate drag. The offline fixture is `examples/validation/vallado_06251.json`.
 No network access or new dependency is required to run the check.
 
 ```python
-from openleo.orbit_verification import verify_orbit_reference
+from openleo.verify import verify_orbit_reference
 
 result = verify_orbit_reference("examples/validation/vallado_06251.json")
 assert result["passed"]
 ```
 
 The TLE is parsed and exported to a new OMM CSV record using the installed SGP4
-package. OpenLEO's checksum-verifying `load_catalog` loads that record. Skyfield
+package. OpenLEO's checksum-verifying `openleo.engine.catalogs.load_catalog` loads that record. Skyfield
 propagates the returned satellite and converts its state to TEME with
 `frame_xyz_and_velocity(TEME)`. The published ephemeris provides the expected
 values as fixed literals; the production implementation never computes them.

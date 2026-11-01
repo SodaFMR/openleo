@@ -49,7 +49,7 @@ are documented in [Reference propagation](docs/REFERENCE_PROPAGATION.md).
 - SHA-256: `8f07bb7e1a70ef10f511ed9b5aebdee3fbd4b3b3d29b0198c7684ac00e438383`.
 - Original response bytes, including CRLF line endings, are preserved.
 
-`examples/v2/performance/starlink_1000_24h.json` selects the first 1,000 NORAD ids of
+`examples/performance/starlink_1000_24h.json` selects the first 1,000 NORAD ids of
 this catalog in ascending order for the engine's performance acceptance benchmark
 (design spec section 11.6). The stations, terminals, Ku-band radio and DVB-S2
 adaptation settings are the OpenLEO Iridium example assumptions; they do not describe
@@ -96,5 +96,6 @@ the exact verification procedure are in
 - SHA-256: `851f581ff5ffb844deed8ae1a9ce22e3c4bb3d74fa342cadb5d8e39b41ae7c3c`.
 - Terms: https://www.naturalearthdata.com/about/terms-of-use/ (public domain).
 
-This generalized 1:110 million cartography supplies visual geographic context only.
+It is packaged for the workbench that ships in a later 2.0 milestone; the S1 engine and API do
+not read it. This generalized 1:110 million cartography supplies visual geographic context only.
 It is not a terrain, elevation, horizon-obstruction or station-location dataset.

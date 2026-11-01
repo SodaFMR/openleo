@@ -10,22 +10,24 @@ operational system.
 
 OpenLEO can:
 
-- generate a deterministic free-space trace for a visible pass;
-- compare declared inputs in one-at-a-time sensitivity studies;
-- calculate homogeneous P.676-13 gaseous specific attenuation;
-- calculate standalone P.838-3 rain and P.840-9 cloud cases;
-- simulate bounded constellations and station sets from archived GP records;
+- simulate 1 to N satellites from archived GP records against 1 to M stations, with
+  root-found AOS/LOS, refined culminations and continuous-time MODCOD switches;
 - integrate an idealized P.835-7/P.453-14/P.676-13 atmosphere;
 - optionally subtract declared uniform rain and cloud loss before adaptation;
-- select ideal AWGN reference MODCODs and report RF outages;
-- compare minimum-delay, maximum-rate, and fixed-capacity snapshot routes;
-- compare gas grids and sampling steps as numerical sensitivity studies;
-- run aligned propagation experiments with optional native packet replay;
-- replay one ground link or selected multi-hop routes with actual ns-3.48 UDP,
-  finite shared device queues, and declared endpoint acquisition timing;
+- select ideal AWGN reference MODCODs with hysteresis and an optional feedback delay, and
+  report RF outages;
+- integrate rates, durations and fractions on one time-measure convention and check every
+  exported integrated metric against a refined grid;
+- compare minimum-delay, maximum-rate and fixed-capacity snapshot routes;
+- vary declared inputs one at a time, over grids or through explicit variants (sweeps);
+- calculate homogeneous P.676-13 gaseous specific attenuation and standalone P.838-3 rain and
+  P.840-9 cloud cases;
+- replay one ground link or one routed station pair with actual ns-3.48 UDP, finite shared
+  device queues and declared endpoint acquisition timing;
 - check a published Vallado TEME numerical orbit reference;
-- run a frozen benchmark and require native evidence for complete reproduction; and
-- export portable JSON, CSV, manifests, inputs, and offline HTML reports.
+- reproduce a frozen benchmark that requires native evidence; and
+- export portable results (JSON metadata, CSV, OLC, optional Parquet, archived inputs and
+  SHA-256 manifests) and static Markdown reports.
 
 These are controlled numerical experiments. Their outputs alone do not
 establish operational prediction accuracy.
@@ -78,9 +80,33 @@ independence of a published numerical orbit comparison.
 - Label Shannon capacity as an upper bound and DVB-S2 rates as ideal AWGN references.
 - Distinguish reference rates from receive-event simulated payload goodput.
 - Preserve unchanged, zero-effect, and missing-evidence cases.
-- Treat deterministic and refinement differences as comparisons, not uncertainty intervals.
+- Treat deterministic sweep and grid-refinement differences as comparisons, not uncertainty
+  intervals.
 - Reject invalid domains and inconsistent artifacts; retain source-age warnings in provenance.
 - Identify the original configuration and each derived configuration by their own hashes.
+
+## OpenLEO 2.0 (S1) limitations
+
+These are recorded in the `limitations` of every `results.json` that they apply to.
+
+- **Route breakpoints and ISLs.** Routes are evaluated at event-aware breakpoints (the grid plus
+  every pass and MODCOD boundary of the route endpoints' links) and held between them.
+  Inter-satellite range and occlusion changes between breakpoints are not resolved; ISL topology
+  events belong to a later stage. The ISL rule remains v1's all-pairs-within-range rule.
+- **Fixed-capacity threshold waiver.** The `fixed_capacity` baseline assigns
+  `fixed_capacity_bps` to every geometrically visible ground link of the route endpoints
+  regardless of the RF threshold (MODCOD lock): it can route over links whose adaptive rate is
+  zero. It is a geometric baseline, not an RF-usable one.
+- **Route convergence not gated.** Route metrics are compared on the refined grid and reported in
+  the `convergence` table (class `route`), but a route failure is only a warning: because of the
+  first limitation, route metrics can depend on the grid step. Link and station metrics are
+  gated.
+- **Events off.** `time.events.enabled = false` reproduces v1's sampled semantics for
+  comparison; its contact boundaries and route choices are sampled, and finer events between
+  samples can be missed. It is not intended for scientific claims.
+- **Culmination times** are accurate to max(`tolerance_s`, about 1e-5 s); AOS/LOS and MODCOD
+  switches to `tolerance_s`. A MODCOD crossing in the last `tolerance_s` before LOS is not
+  resolved.
 
 ## Outside the current model
 
@@ -96,5 +122,5 @@ The frozen 12/20 GHz benchmark keeps gains and EIRP identical; it does not
 establish fixed-aperture performance or compare frequency-specific hardware.
 Numerical refinement cannot quantify unknown physical model discrepancy.
 New models need their own provenance, domains, verification, and limitations.
-See [Validation](VALIDATION.md), [Experiments](EXPERIMENTS.md), and
+See [Validation](VALIDATION.md), [Sweeps](SWEEPS.md), and
 [Reproducibility](REPRODUCIBILITY.md).

@@ -107,7 +107,7 @@ dependency for this calculation.
 Run the benchmark without Matplotlib:
 
 ```bash
-uv run openleo gases examples/atmosphere/p676_13_validation.json \
+uv run openleo calc gases examples/atmosphere/p676_13_validation.json \
   --output runs/p676-validation
 ```
 
@@ -123,15 +123,18 @@ The CSV contains the ordered frequencies and three specific-attenuation componen
 The summary records the configuration fingerprint, the exact CSV filename and SHA-256,
 declared and derived conditions, Recommendation and method, coefficient provenance,
 official workbook provenance, package version, numeric format, ordering, and
-limitations. The plotter verifies the CSV fingerprint before rendering. Finite floats
+limitations. Both files are byte-identical to v1.0.0's `openleo gases` output apart from the
+package version. The figure renderer verifies the CSV fingerprint before rendering. Finite floats
 use 15 significant digits in both artifacts.
 
-Render the completed artifacts separately:
+Render the completed artifacts separately (needs the `plot` extra):
 
 ```bash
-uv run openleo plot-gases runs/p676-validation \
-  --output docs/images/p676-13-specific-attenuation.svg
+uv run --extra plot python -c "from openleo.calc.gases_figure import render_gases_overview; \
+render_gases_overview('runs/p676-validation', 'docs/images/p676-13-specific-attenuation.svg')"
 ```
+
+CI regenerates the committed figure this way and requires it to be unchanged.
 
 ![P.676-13 specific gaseous attenuation at the five official validation frequencies](images/p676-13-specific-attenuation.svg)
 
@@ -142,11 +145,11 @@ and states the omission explicitly on the figure; the calculation and CSV retain
 
 ## Claim Boundary And Non-Goals
 
-The standalone `openleo gases` benchmark deliberately does not:
+The standalone `openleo calc gases` benchmark deliberately does not:
 
 - integrate specific attenuation along a vertical, terrestrial, or slant path;
 - use a P.835 atmospheric profile or model refraction;
-- modify the existing pass `trace.csv`, link budget, `C/N0`, SNR, or capacity bound;
+- modify a run's link budget, `C/N0`, SNR, or capacity bound;
 - model rain, cloud, fog, scintillation, availability, or combined propagation loss;
 - use live weather, ERA5, radiosonde, or station measurements; or
 - establish calibrated RF or operator-performance validation.
@@ -155,7 +158,8 @@ The current result answers one narrower question: under a declared homogeneous s
 what specific attenuation does the P.676-13 Annex 1 line-by-line method predict at the
 selected frequencies?
 
-The separate constellation workflow can integrate these specific losses through an
+The engine (`openleo run` with `propagation.model = "itu_reference"`) integrates these
+specific losses through an
 idealized P.835-7 reference atmosphere, including refraction and excess delay. See
 [Reference propagation](REFERENCE_PROPAGATION.md). That optional model does not change
 the purpose or values of this homogeneous-state benchmark.

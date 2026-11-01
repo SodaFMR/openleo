@@ -1,12 +1,144 @@
-# OpenLEO Validation Boundaries
+# Validation
 
-OpenLEO separates software regression checks from physical validation. Passing the
-checks below shows numerical agreement or artifact consistency in the named
-domains; it does not show agreement with an independently measured RF link.
+OpenLEO separates software verification from physical validation. Passing the checks below
+shows numerical agreement or artifact consistency in the named domains; it does not show
+agreement with an independently measured RF link. The default suite runs with
+`uv run pytest`; long checks are marked `slow` (`uv run pytest -m slow`), and the 1000-satellite
+benchmark is also marked `benchmark`.
+
+## OpenLEO 2.0 engine oracles
+
+### v1.0.0 equivalence
+
+`tests/fixtures/v1/` holds compact extracts of what tag `v1.0.0` computes for the four shipped
+examples (ISS single pass and the three Iridium scenarios): every link sample of three stations
+and ten satellites at every grid time, satellite and station ECEF, station statistics, the
+network summary and route frames, plus the single-pass trace. They were generated once in a
+v1.0.0 checkout (`tests/fixtures/v1/README.md`); a test checks them against their recorded
+SHA-256. With events disabled at the same grid times, the 2.0 engine must match:
+
+| Quantity | Tolerance |
+| --- | --- |
+| angles | 1e-8 deg |
+| apparent elevation | 1e-9 deg |
+| range, satellite ECEF | 1e-4 m |
+| range rate | 1e-6 m/s |
+| Doppler | 1e-3 Hz |
+| dB quantities | 1e-9 dB |
+| atmospheric excess delay | 1e-13 s |
+| delay | range tolerance / c |
+| rates and MODCOD | exact |
+
+(`tests/engine/test_geometry.py`, `test_evaluator.py`, `test_run.py::test_events_off_matches_v1_samples`.)
+Events-off station integrals, best-link bits and route frames equal v1's
+(`test_statistics.py::test_grid_left_hold_bits_match_v1`, `test_routing.py::test_grid_mode_matches_v1_routes`);
+route changes differ only by v1's change at the zero-duration final sample (47 versus 48;
+[Migration](MIGRATION.md)). The array kernels equal the scalar v1 kernels on 10,000 random
+in-domain inputs per configuration (`tests/physics/test_path_arrays.py`, slow): ray trace
+within 1e-10 dB and 1e-9 deg, hydrometeor path within 1e-12 dB. The ray tracer's array endpoint
+solve is a safeguarded Newton iteration (v1: 40-step bisection); the equivalence holds at 12,
+20 and 30 GHz, and above about 50 GHz v1's bisection is the less precise solve.
+
+Off the grid, the geometry is compared with Skyfield's full TEME-GCRS-ITRS chain and the link
+budget with v1's scalar arithmetic at arbitrary times
+(`test_topocentric_matches_the_v1_skyfield_chain_off_grid`,
+`test_evaluate_off_grid_matches_the_v1_link_budget`).
+
+### Independent geometry of the ISS example
+
+`tests/engine/test_geometry_oracles.py` checks the ISS example's 40 visible samples against
+literal v1.0.0 values, recomputes the closest sample's range, elevation and azimuth from
+Skyfield's ITRS positions with standard-library east/north/up trigonometry (within 1e-5 m and
+1e-9 deg), requires negative range rate and positive Doppler while approaching and the reverse
+while receding with strictly monotone range on each side, and compares the closest sample's
+range rate with the central finite difference (ρ_{i+1} − ρ_{i−1})/(20 s) within 0.5 m/s. These
+hold the Skyfield propagation and ITRS conversion fixed; they are not an independent orbit
+propagator or a measurement.
+
+### Analytic events
+
+`tests/engine/test_events.py` uses synthetic providers with known roots, e(t) = a·sin(ωt + φ) + b:
+AOS and LOS must lie within `tolerance_s` of the analytic crossings and culminations within
+max(`tolerance_s`, the value-noise floor). A pass lasting 0.4 Δ between two samples must be
+found; a hidden dip must be bisected by the monotonicity guard and persistent non-monotonicity
+must raise. On the real ISS pass, AOS and LOS are compared with an independent 0.01 s dense
+scan within 2 × `tolerance_s` (`test_iss_pass_matches_dense_search`).
+
+### ACM ramps
+
+`tests/engine/test_acm.py` drives the MODCOD state machine with synthetic Es/N0 ramps whose
+threshold crossings are known: acquisition, hysteresis-gated upgrades, immediate downgrades,
+loss at LOS, threshold equality (a level met exactly counts as reached), tangent peaks, and
+feedback delay d > 0 (zero-rate windows, decisions at the pass end, overlapping decisions with
+fixed-delay causality), checking exact segment boundaries and rates. With d = 0 the
+continuous-time machine equals v1's `select_modcod` at every grid sample, and a real Iridium
+pass is checked against a dense v1 walk.
+
+### Integration, statistics and routing
+
+Exact integrals of piecewise-constant functions; Gauss-Legendre Shannon integrals against an
+analytic integrand, with nodes never at breakpoints; time-measure fractions on synthetic
+windows; best-link envelopes, tie-breaking and handovers on hand-built cases; route intervals on
+a hand-built graph with known breakpoints; ISL edges equal to v1's at the range and tangency
+thresholds (`test_integrate.py`, `test_statistics.py`, `test_routing.py`).
+
+### Convergence gate
+
+On the hydrometeor example (60 s grid, 4× refinement, 1 % relative tolerance), every gated link
+and station metric passes; the one failing metric is a route-change count, reported and not
+gated (`test_run.py::test_convergence_passes_on_hydrometeor_example`,
+`test_hydrometeor_convergence_fails_only_on_route_changes_between_breakpoints`). A deliberately
+coarse case fails in `error` mode and publishes with warnings in `warn` mode. In S1 route metrics
+are not gated: routes are held between route breakpoints and inter-satellite range and occlusion
+changes between them are not resolved ([Scope](SCOPE.md)).
+
+### Gas-table bound
+
+The tabulated gaseous loss used only for the Shannon integrand and MODCOD root-finding
+([Methods](METHODS.md)) is compared with the exact ray trace over the whole engine domain for
+every station height of the examples at 12, 20 and 30 GHz and two layer refinements, and with
+the scalar v1 kernel, within 1e-10 dB (`tests/physics/test_gas_table.py`). Its recorded bound is
+heuristic at the Chebyshev level; tests show that it covers the measured error between its check
+points, that an accepted table stays within its bound on dense sweeps (1 to 183 GHz in the slow
+suite), and that unverifiable tables (the 60 GHz oxygen complex) fall back to the exact trace.
+Acceptance requires a bound of at most 2.5e-11 dB, a quarter of the 1e-10 dB limit.
+
+### Performance
+
+`tests/test_performance.py` (markers `slow` and `benchmark`) runs the pinned 1,000-satellite
+Starlink catalog with 4 stations for 24 h at 30 s, events on, `itu_reference`, no network, one
+worker, with the convergence gate passing, and requires it to finish in under 5 minutes on the
+development machine (measured 174.5 s with one worker and 30.4 s with 16 when the engine was
+accepted). CI runs a 100-satellite, 2-hour variant with a 60 s bound in every job
+(`tests/test_performance_ci.py`); the 24-hour benchmark is run locally because its bound is set
+for the development machine.
+
+### Cross-platform agreement
+
+Every CI job runs the coupled example and compares it with a digest written from a Linux run
+(`tests/fixtures/ci/coupled-ubuntu.json`) with `scripts/compare_results.py`: per table, row counts
+and NaN counts must match, and column sums and extrema must agree within the bounds the §11
+per-element tolerances imply (time columns within 2 × `tolerance_s`, integrated bits within
+1 bit + 1e-6 relative, fractions within 1e-6; see the script). Within one platform, outputs are
+byte-identical, and `--workers N` is byte-identical to one worker.
+
+### Formats, API, CLI, sweeps and replays
+
+OLC round trips, hashes, corruption and golden files (`tests/fixtures/olc/`); Parquet round trips
+(skipped without the extra); CSV determinism; manifest verification; atomic publication under
+injected failure (`tests/results/`). The app API ports the v1 security checks: Host, Origin,
+session token, 60 requests per second, body size, catalog pinning, no browser-supplied paths or
+executables, the asynchronous job lifecycle, the cache by id and failure preserving prior
+results (`tests/app/`). Every CLI subcommand's success and user-error path (no traceback) and
+every retired command's pointer (`tests/test_cli.py`). OAT nominals equal the base byte for byte
+in tables, the grid run limit, the variants against the v1 aligned cases, and every shipped sweep
+and reproduce configuration resolving and expanding (`tests/test_sweep.py`). The replay bridges
+produce the same ns-3 input CSVs from 2.0 tables as v1 did from its bundles on the same grid
+(`tests/replay/`).
 
 ## Published TEME numerical reference
 
-`openleo verify-orbit examples/validation/vallado_06251.json` prints JSON for
+`openleo verify orbit examples/validation/vallado_06251.json` prints JSON for
 five published Vallado case 06251 TEME states. Position and velocity vector
 residuals must pass `1e-6 km` and `1e-9 km/s` respectively at every epoch.
 The check exercises TLE-to-OMM conversion, the checksum-verifying catalog
@@ -26,24 +158,11 @@ attribution are in [Orbit verification](ORBIT_VERIFICATION.md) and
 ## Engine Regression
 
 The frozen GP record is propagated by Skyfield's corrected Vallado SGP4 engine. At the
-element epoch, tests lock the geocentric position to
+element epoch, tests (`tests/engine/test_catalog_v1_loader.py`) lock the geocentric position to
 `[2541.22048664, -6305.90893063, -6.41569470] km` and velocity to
 `[4.41995972, 1.78637061, 5.99594561] km/s`, each with absolute tolerance `1e-8` in
 its stated unit. This detects dependency or platform drift. It is an engine regression,
 not independent measurement validation.
-
-## Independent Topocentric Geometry
-
-At the frozen pass's closest sampled approach, Skyfield supplies only the propagated
-spacecraft position converted to ITRS ECEF and the WGS84 station's ITRS ECEF position.
-The test then uses standard-library trigonometry to rotate the ECEF difference into
-east, north, and up and independently calculate slant range, geometric elevation, and
-azimuth. These agree with the production topocentric `TraceRow` within `1e-5 m` for
-range and `1e-9 deg` for each angle.
-
-This independently checks the topocentric rotation and observable calculations while
-holding the Skyfield orbit propagation and ITRS conversion fixed. It is not an
-independent orbit propagator or a calibrated measurement.
 
 ## Hand-Derived Invariants
 
@@ -57,48 +176,6 @@ The range-rate and Doppler sign checks encode the public convention: approach ha
 negative range rate and positive downlink Doppler; departure has positive range rate
 and negative Doppler. Sampled range must strictly decrease to one minimum and then
 strictly increase.
-
-## Finite-Difference Check
-
-At the frozen pass's closest sampled approach, the reported radial range rate is
-compared with the central finite difference
-$\left(\rho_{i+1}-\rho_{i-1}\right)/(20\,\mathrm{s})$. The absolute tolerance is
-`0.5 m/s`, allowing the
-expected truncation error of a 10-second sample interval without reusing the engine's
-range-rate calculation.
-
-## Deterministic Sensitivity Verification
-
-The deterministic benchmark reruns the complete pass while changing one declared input at a
-time. Tests prove that every nominal sweep row exactly reproduces the single unchanged
-baseline and that every non-nominal case replaces only its named field. Independent
-link-budget invariants require a 1 dB EIRP increase to add 1 dB to `C/N0`, a 1 dB loss
-increase to subtract 1 dB, and a doubling of noise temperature to change `C/N0` by
-`-10 log10(2)` dB.
-
-The sensitivity summary carries immutable baseline context copied from that completed
-unchanged run: fitted-record element epoch, signed endpoint ages, maximum absolute age,
-leap-table provenance, and warnings. This is retrospective benchmark evidence, not a
-pre-pass prediction artifact or an orbit-accuracy guarantee.
-
-Frozen integration checks cover every published percentage: relative to the nominal
-10 s scenario, 1, 20, 30, and 60 s sampling change the integrated Shannon-Hartley upper
-bound by `+1.39554703487%`, `-1.76263346877%`, `-0.0841572102157%`, and
-`-5.78236557037%`; 5, 20, and 30 deg elevation masks change it by
-`+17.2710744088%`, `-29.9627342354%`, and `-50.0114931452%`. These are regression
-values for one frozen configuration, not measurements or universal convergence rates.
-
-Sampling-step results are not required to be monotonic because the grid is anchored at
-the scenario start, mask crossings are not interpolated, and different steps select
-different boundary and quadrature samples. The 1 s case is only the densest declared
-numerical reference in the figure; it is not truth or proof of convergence.
-
-The deterministic OAT ranges are not confidence, credible, coverage, tolerance, or
-standard-uncertainty intervals. They contain no probability distributions, input
-standard uncertainties, covariance propagation, or interaction study. Different RF
-sweeps use heterogeneous dimensions and spans, so their plotted response ranges are not
-an importance ranking. The full method and terminology boundary are documented in
-[Deterministic Sensitivity](SENSITIVITY.md).
 
 ## P.676-13 Official Workbook Verification
 
@@ -186,127 +263,58 @@ geometric elevation directly as apparent elevation is explicitly tested as a dif
 calculation. Reported delay includes the bent path's additional geometric length and
 its refractive optical-path excess, relative to the original endpoint chord.
 
-The propagation study holds geometry, stations, RF and network settings fixed while
-comparing free space, the reference layer grid, and a grid with twice as many layers.
-It reports maximum differences in gaseous loss, apparent elevation and excess delay,
-plus MODCOD disagreements. A reference 1/2/4-layer refinement case checks decreasing
-differences; this does not prove convergence for every frequency or configuration.
-Nor does a small grid difference quantify atmospheric-model error.
-
-Integration and artifact checks preserve legacy free-space outputs, verify gaseous
-loss subtraction and delay addition, and distinguish schema `1` from the extended
-schema `2`. Exact model definitions, source fingerprints and domain restrictions are
+Layer-refinement comparisons (a `propagation.refinement` sweep) report differences in
+gaseous loss, apparent elevation and excess delay; a small grid difference does not quantify
+atmospheric-model error. Exact model definitions, source fingerprints and domain restrictions are
 in [Reference propagation](REFERENCE_PROPAGATION.md). These checks establish reference
 implementation agreement, not local meteorological accuracy or measured RF performance.
 
 ## Coupled declared hydrometeor verification
 
-`tests/test_hydrometeor_path.py` checks analytic zenith, zero-thickness and
-slant spherical-shell paths, zero rain, supported domains, finite arithmetic,
-and conversion from dB/km to dB. Constellation integration checks cover exact
-gas-only equivalence for zero declared rain/cloud, cloud-water linearity,
-attenuation sums, CN0 subtraction before adaptation, unchanged geometric
-visibility/Doppler and gaseous delay, and route use of corrected rates.
-
-Schema-3 artifact checks verify configuration pairing, the shell path, cloud and
-rain fields, total atmospheric loss, budget relations, and fingerprints.
-These establish implementation and artifact consistency for declared uniform
-layers. They do not establish local weather, P.618 effective paths/exceedance
+`tests/physics/test_hydrometeor_path.py` checks analytic zenith, zero-thickness and slant
+spherical-shell paths, zero rain, supported domains, finite arithmetic, and conversion from dB/km
+to dB. The engine applies the declared layers through the same evaluator as every other loss,
+and the v1 equivalence fixtures of the hydrometeor example cover the cloud, rain and total
+atmospheric fields of every sample. These establish implementation consistency for declared
+uniform layers. They do not establish local weather, P.618 effective paths or exceedance
 statistics, atmospheric emission, or physical RF accuracy. See
 [Coupled propagation](COUPLED_PROPAGATION.md).
 
-## Optional ns-3 single-link replay verification
+## Optional ns-3 replay verification
 
-The executable checks in `tests/ns3_replay_checks.py` run against the separately
-compiled ns-3.48 backend. They cover deterministic underload and overload, finite
-queue capacity, outage suppression and queue flushing, TX/RX outage intersections,
-recovery, changes during transmission, simultaneous events, draining, and invalid
-inputs. A literal constant-link case requires a 970-byte UDP payload, 30 bytes of
-wire headers, 1 Mbit/s serialization, and 2 ms propagation to produce a 10 ms
-one-way delay. Both full-duplex directions are checked.
+`tests/ns3_replay_checks.py` and `tests/ns3_network_checks.py` run the separately compiled
+ns-3.48 executables directly. The single-link checks cover deterministic underload and overload,
+finite queues, outage suppression and queue flushing, TX/RX outage intersections, recovery,
+changes during transmission, simultaneous events, draining and invalid inputs; a literal
+constant-link case requires a 970-byte UDP payload, 30 bytes of headers, 1 Mbit/s serialization
+and 2 ms propagation to give a 10 ms one-way delay. The multi-hop checks use a literal two-hop
+case (20 ms end-to-end), reciprocal flows, contention in shared finite queues, route changes in
+flight, acquisition gating, missing routes, TTL-bounded loops, determinism and budget rejection.
 
-Python checks cover source selection, time and rate quantization, input bounds,
-packet accounting, causal record validation, and refusal to overwrite existing
-results. The real-backend bundle test additionally checks source and executable
-fingerprints, after-window deliveries, and end-of-window queue censoring; it is
-enabled by setting `OPENLEO_NS3_REPLAY` to the compiled executable. Without that
-setting, the integration test is skipped, so a core-only test run does not verify
-the simulator.
-
-Follow the [backend build and check instructions](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/README.md), then
-run the analytical checks from the repository root:
+The Python integration tests in `tests/replay/`, `tests/test_sweep.py` and
+`tests/test_reproduce.py` run the backends when `OPENLEO_NS3_REPLAY` and `OPENLEO_NS3_NETWORK`
+name them, and are skipped otherwise, so a core-only run does not verify the simulator:
 
 ```bash
-uv run --no-dev python tests/ns3_replay_checks.py \
-  ../ns-3.48/build/scratch/ns3.48-openleo-replay
-```
-
-These checks establish the documented single-link synthetic UDP experiment,
-including finite queues and measurement-window accounting. They do not validate
-physical packet loss, a satellite MAC/PHY, multi-hop routing, TCP, real traffic,
-or operator performance. See [Packet replay](PACKET_REPLAY.md) for the precise
-service model and simulated-goodput definition.
-
-## Optional ns-3 multi-hop verification
-
-`tests/ns3_network_checks.py` runs the actual compiled network executable.
-Its literal two-hop case uses a 970-byte UDP payload, 30 wire-header bytes,
-1 Mbit/s links, and 2 ms delay per edge to require 20 ms end-to-end delay.
-Native checks cover reciprocal flows, contention in shared finite queues,
-route changes while packets travel, atomic boundaries, source suppression
-during acquisition, missing routes, queue flushing, TX/RX outage intervals,
-after-window delivery, stop/drain behavior, maximum path length, TTL-bounded
-route-change loops, determinism, and invalid input/budget rejection.
-
-Python checks validate selected-route edge unions, rate/delay quantization,
-endpoint acquisition and recovery, complete offer identity, causal hop chains,
-actual service timing and shared FIFO/overflow consistency, packet conservation,
-window censoring, source/backend hashes, and atomic publication. Equal-time
-callback ordering is checked only to the bounds observable in CSV timestamps;
-it does not justify impossible losses or idle service. See
-[Network replay](NETWORK_REPLAY.md).
-
-```bash
-uv run --no-dev python tests/ns3_network_checks.py \
-  ../ns-3.48/build/scratch/ns3.48-openleo-network-replay
+uv run python tests/ns3_replay_checks.py ../ns-3.48/build/scratch/ns3.48-openleo-replay
+uv run python tests/ns3_network_checks.py ../ns-3.48/build/scratch/ns3.48-openleo-network-replay
+OPENLEO_NS3_REPLAY=../ns-3.48/build/scratch/ns3.48-openleo-replay \
 OPENLEO_NS3_NETWORK=../ns-3.48/build/scratch/ns3.48-openleo-network-replay \
-  uv run pytest tests/test_network_replay.py tests/test_experiment.py \
-    tests/test_benchmark.py tests/test_release_evidence.py
+  uv run pytest tests/replay tests/test_sweep.py tests/test_reproduce.py
 ```
 
-Without `OPENLEO_NS3_NETWORK`, optional native integration checks are skipped.
-Passing a core-only suite does not verify the native simulator. Network packet
-metrics use validated actual UDP receive events; they remain simulated outputs
-from declared service rates, geometry, queues, and traffic.
+These establish the documented synthetic UDP experiments. They do not validate physical packet
+loss, a satellite MAC/PHY, TCP, real traffic or operator performance. See
+[Packet replay](PACKET_REPLAY.md) and [Network replay](NETWORK_REPLAY.md).
 
-## Integrated studies and release evidence
+## Release evidence
 
-`tests/test_experiment.py` checks aligned recomputation of the same bounded
-window in every propagation case, case-specific hashes, portable full-window
-inputs, metrics, native evidence selection, and failure-safe publication.
-The selected interval must fit the original scenario, span at least one
-sampling step, and remain within 3600 s even for model-only studies.
-
-HTTP/UI checks cover catalog pinning, Host/Origin and session-token checks,
-trusted startup backend selection, invalid/duplicate/non-finite input rejection,
-60 matching local requests per second, the 64 MB study-artifact ceiling,
-portable ZIP contents, and preservation of prior results after failure.
-Run `node --test tests/test_workbench_ui.mjs` and the real-browser
-`tests/browser_experiment.py` check for study-interface changes.
-
-`tests/test_benchmark.py` checks the frozen matrix, scalar units, aligned
-effects, zero baselines, missing packet evidence, fingerprints, and an explicit
-uncertainty inventory. `tests/test_release_evidence.py` checks that reproduction
-requires both a passing published orbit reference and actual native packets,
-with no unresolved packets or source send errors. The committed configuration
-expects 16 experiments and 144 native replays; those counts are configuration
-expectations until a complete execution supplies its own evidence.
-
-Sampling and gas-grid effects measure numerical sensitivity. Unknown orbital,
-station, RF/weather, and MAC/PHY discrepancies remain unknown rather than being
-converted to confidence intervals. The 12/20 GHz cases use identical declared
-gains and EIRP. See [Benchmark](BENCHMARK.md),
-[Experiments](EXPERIMENTS.md), and [Reproducibility](REPRODUCIBILITY.md).
+`tests/test_reproduce.py` checks that `openleo reproduce` requires a passing published orbit
+reference and actual native packet results with no unresolved packets or send errors, and
+publishes nothing otherwise. The frozen configuration (`examples/reproduce/release_benchmark.json`)
+expands to 8 runs (12/20 GHz × 30/60 s × layer refinement 1/2) with 2 network loads; those counts
+are configuration expectations until a complete execution supplies its own evidence. See
+[Benchmark](BENCHMARK.md) and [Reproducibility](REPRODUCIBILITY.md).
 
 ## Validation Still Required
 

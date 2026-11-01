@@ -3,14 +3,15 @@
 OpenLEO provides two independent scalar kernels for explicitly supplied rain rate
 and integrated cloud liquid water. They implement Recommendation ITU-R P.838-3
 and the instantaneous method in Recommendation ITU-R P.840-9. They do not infer
-weather from humidity or modify a constellation simulation's link budget.
+weather from humidity, and this calculator does not modify a run's link budget (the engine
+couples the same kernels separately; see [Coupled hydrometeors](COUPLED_PROPAGATION.md)).
 
 ## Batch Workflow
 
 Run the committed reference inputs from the repository root:
 
 ```bash
-uv run --no-dev openleo hydrometeors \
+uv run --no-dev openleo calc hydrometeors \
   examples/atmosphere/hydrometeors_reference.json --output runs/hydrometeors
 ```
 
@@ -27,7 +28,8 @@ quantities separate and writes:
 
 Outputs are published atomically to a new or empty directory. Existing nonempty
 directories, files, and output symlinks are refused. The Python entry point is
-`openleo.hydrometeor_benchmark.run_hydrometeors(config_path, output_dir)`.
+`openleo.calc.hydrometeors.run_hydrometeors(config_path, output_dir)`. The files are
+byte-identical to v1.0.0's `openleo hydrometeors` output apart from the package version.
 
 ## Input Contract
 

@@ -52,7 +52,7 @@ SOFTWARE.
 
 ## Natural Earth
 
-The workbench includes the unmodified Natural Earth 1:110 million coastline GeoJSON
+The package includes, for the workbench, the unmodified Natural Earth 1:110 million coastline GeoJSON
 from the source and SHA-256 recorded in `THIRD_PARTY_DATA.md`. Natural Earth declares
 its map data public domain: https://www.naturalearthdata.com/about/terms-of-use/.
 

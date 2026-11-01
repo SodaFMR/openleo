@@ -49,10 +49,10 @@ Back in the OpenLEO directory:
 ```bash
 uv run --no-dev python tests/ns3_replay_checks.py \
   ../ns-3.48/build/scratch/ns3.48-openleo-replay
-uv run --no-dev openleo constellation \
+uv run --no-dev openleo run \
   examples/constellations/iridium_global_reference.json --output runs/packet-source
-uv run --no-dev openleo packet-replay runs/packet-source \
-  --station Madrid --norad 42960 --duration-s 300 \
+uv run --no-dev openleo replay link runs/packet-source \
+  --station Madrid --satellite 42960 --duration-s 300 \
   --backend ../ns-3.48/build/scratch/ns3.48-openleo-replay \
   --output runs/packets
 ```

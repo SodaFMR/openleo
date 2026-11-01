@@ -9,26 +9,22 @@ artifacts, issues, and pull requests are written in English.
 Install Python 3.12 or newer and `uv`, then create the contributor environment:
 
 ```bash
-uv sync --locked --group dev --extra plot
+uv sync --locked --all-extras --group dev
 ```
 
-Browser tests use a separate dependency group:
-
-```bash
-uv sync --locked --group dev --group browser --extra plot
-uv run --group browser playwright install chromium
-```
-
-Users do not need the development or browser groups; the user setup is documented in
-the [README](README.md).
+`--all-extras` installs matplotlib (`plot`) and pyarrow (`parquet`), which some tests need;
+without them those tests are skipped. Users do not need the development group; the user setup
+is documented in the [README](README.md).
 
 ## Before changing scientific behavior
 
 Read the [scope](docs/SCOPE.md), [methods](docs/METHODS.md),
 [schema contracts](docs/SCHEMAS.md), and the model-specific document for the
-code you are changing. Supported v1.0 APIs, units, and artifact meanings are
-stable; compatible evolution is additive. Breaking changes require a new
-schema version and a future major software release.
+code you are changing. The 2.0 engine must not change a physical model of v1.0.0 without a
+documented decision: vectorised kernels are held to the scalar v1 kernels and the frozen v1
+fixtures (`tests/fixtures/v1/`) within the tolerances of [Validation](docs/VALIDATION.md), and
+every changed integrated metric is explained in [Migration](docs/MIGRATION.md). Schema changes
+follow the policy in [Schemas](docs/SCHEMAS.md#compatibility-policy).
 
 - Record source URL, retrieval time, terms or license, checksum, units, and assumptions
   for every external scientific input.
@@ -54,7 +50,7 @@ Coupled rain/cloud changes must retain explicit uniform-state declarations and
 the P.838-3 dB/km to path-loss conversion, without implying P.618 statistics.
 Network changes must preserve selected-route edge membership, shared directed
 queues, acquisition, causal native hop observations, packet accounting, and
-measurement-window censoring. Browser study requests must never select backend
+measurement-window censoring. App API requests must never select backend
 executables or filesystem output paths; preserve loopback, Host/Origin, token,
 pinned-catalog, request-rate, and bounded-artifact protections.
 
@@ -70,7 +66,7 @@ Behavior changes use test-driven development:
 3. Run the focused test until it passes.
 4. Run the complete checks below.
 
-Keep coverage at or above 80%. Prefer immutable values and existing repository
+Keep whole-package coverage at or above 90% without excluding lines. Prefer immutable values and existing repository
 patterns. Validate external data at the boundary and include useful error context
 without leaking secrets or local credentials.
 
@@ -87,52 +83,38 @@ test: cover output hash mismatch
 
 ```bash
 uv lock --check
-uv run ruff check src tests
-uv run ruff format --check src tests
+uv run ruff check src tests scripts
+uv run ruff format --check src tests scripts
 uv run pytest --cov=openleo --cov-report=term-missing \
-  --cov-report=xml --cov-fail-under=80
-uv run python -m build
+  --cov-report=xml --cov-fail-under=90
+uv run python scripts/migration_table.py --check
+uv build
 uvx cffconvert==2.0.0 --validate
 git diff --check
 ```
 
-Run the dependency-free browser checks:
+`uv run pytest` deselects tests marked `slow` (the 10,000-sample kernel and gas-table sweeps,
+the full propagation-cases sweep); run them with `uv run pytest -m slow` after changing a kernel,
+the event finder or the integration. The 1000-satellite 24-hour performance benchmark is marked
+`benchmark` as well (`uv run pytest -m benchmark`, about 3 minutes on the development machine);
+run it after performance-relevant changes. CI runs `-m "slow and not benchmark"`.
 
-```bash
-node --test tests/test_workbench_ui.mjs
-```
-
-Run real-browser coverage for workbench or UI changes:
-
-```bash
-uv run openleo constellation \
-  examples/constellations/iridium_global.json \
-  --output runs/global
-uv run --group browser python tests/browser_workbench.py
-uv run --group browser python tests/browser_workbench.py \
-  --scenario examples/constellations/iridium_global_reference.json
-uv run --group browser python tests/browser_experiment.py
-```
-
-On systems with an existing Chromium installation, pass it explicitly:
-
-```bash
-uv run --group browser python tests/browser_workbench.py \
-  --executable /usr/bin/chromium
-```
+`scripts/migration_table.py --check` reruns the shipped examples and fails when the table in
+[Migration](docs/MIGRATION.md) is stale; regenerate it with `--write` after an intended change.
+`scripts/compare_results.py RUN tests/fixtures/ci/coupled-ubuntu.json` is the cross-platform
+comparison CI runs on the coupled example; after an intended numerical change, regenerate the
+digest from a Linux run with `--write-digest`.
 
 Changes to packet replay also require the actual simulator, not just parser tests.
-Build the [optional ns-3 backends](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/README.md), then run:
+Build the [optional ns-3 backends](adapters/ns3/README.md), then run:
 
 ```bash
 uv run python tests/ns3_replay_checks.py ../ns-3.48/build/scratch/ns3.48-openleo-replay
-OPENLEO_NS3_REPLAY=../ns-3.48/build/scratch/ns3.48-openleo-replay \
-  uv run pytest tests/test_packet_replay.py tests/test_packet_cli.py
 uv run python tests/ns3_network_checks.py \
   ../ns-3.48/build/scratch/ns3.48-openleo-network-replay
+OPENLEO_NS3_REPLAY=../ns-3.48/build/scratch/ns3.48-openleo-replay \
 OPENLEO_NS3_NETWORK=../ns-3.48/build/scratch/ns3.48-openleo-network-replay \
-  uv run pytest tests/test_network_replay.py tests/test_experiment.py \
-    tests/test_benchmark.py tests/test_release_evidence.py
+  uv run pytest tests/replay tests/test_sweep.py tests/test_reproduce.py
 ```
 
 Use Linux, macOS, or WSL2 for these optional backend checks. The core remains
@@ -143,13 +125,13 @@ they do not establish actual simulator evidence.
 Verify the published TEME fixture after changes to orbit loading or propagation:
 
 ```bash
-uv run --no-dev openleo verify-orbit examples/validation/vallado_06251.json
+uv run --no-dev openleo verify orbit examples/validation/vallado_06251.json
 ```
 
 The full frozen matrix is a separate release run, documented in
 [Reproducibility](docs/REPRODUCIBILITY.md). Numerical reference agreement and
 synthetic packet replay are not observational RF validation. Keep full release
-evidence distinct from model-only benchmark output.
+evidence distinct from model-only sweep output.
 
 Regenerate only artifacts affected by the change. Inspect the generated summary,
 manifest, units, assumptions, limitations, and source fingerprints. Leave `runs/`

@@ -1,17 +1,23 @@
 # Optional multi-hop packet replay
 
-The Python network bridge turns a verified OpenLEO workbench bundle into a
-bounded input trace for the optional native ns-3.48 backend. Packet timing,
+The Python network bridge turns one configured route pair and routing model of a saved run (a
+results directory) into a bounded input trace for the optional native ns-3.48 backend. Packet timing,
 forwarding, shared device FIFO queues and UDP delivery come from the executable.
 Python independently validates the packet and physical-hop CSV observations
 before publishing metrics. It does not substitute model estimates when the
 backend is unavailable.
 
+```bash
+uv run --no-dev openleo replay network runs/packet-source --pair Madrid:Tromso \
+  --model minimum_delay --duration-s 300 --flows-per-direction 2 --acquisition-delay-s 0.1 \
+  --backend ../ns-3.48/build/scratch/ns3.48-openleo-network-replay --output runs/network-packets
+```
+
 ```python
-from openleo.network_replay import NetworkReplayConfig, run_network_replay
+from openleo.replay import NetworkReplayConfig, run_network_replay
 
 summary = run_network_replay(
-    "workbench-bundle",
+    "runs/packet-source",
     NetworkReplayConfig(
         routing_model="minimum_delay",
         duration_s=60,
@@ -36,23 +42,26 @@ timeout and a 120-second replay timeout.
 `NetworkReplayConfig` is frozen. Defaults are `routing_model="minimum_delay"`,
 `start_offset_s=0`, `duration_s=60`, `offered_load_bps=100000`,
 `packet_size_bytes=512`, `queue_packets=32`, `flows_per_direction=1`,
-`acquisition_delay_s=0`, and `seed=1`. The route model must be `minimum_delay`,
-`maximum_rate` or `fixed_capacity`; source and target are the scenario's declared
-stations.
+`acquisition_delay_s=0`, `seed=1` and `pair_index=0` (the index into the scenario's
+`network.pairs`; the CLI's `--pair SRC:DST` selects it by name). The route model must be one of
+the run's route models: `minimum_delay`, `maximum_rate` or `fixed_capacity`.
 
-`prepare_network_replay(document, config)` validates the portable document and
-returns `edges`, `routes` and `metadata`. The window must lie inside the source
-experiment. Geometric states are held from the latest source sample at or before
-each boundary. Only edges used by selected routes during the window belong to
-the replay topology. ISL availability and delay come from network frames; ground
-rates come from link frames, or from the declared fixed-capacity baseline for
+`prepare_network_replay(source, config)` reads a `ReplaySource` (the verified results directory)
+and returns `edges`, `routes` and `metadata`. The window must lie inside the run's window.
+Snapshots are the window start and every route breakpoint strictly inside the window (the grid and
+the pass and MODCOD switch times of the route endpoints' links, root-found when the run had events
+enabled); each snapshot holds the route, the link states and the inter-satellite geometry of the
+latest route breakpoint at or before it, which is where the engine evaluated that route. Only edges
+used by selected routes during the window belong to the replay topology. ISL availability and
+delay come from the satellites' exact positions at that breakpoint under the engine's ISL rule;
+ground rates come from the run's rate segments, or from the declared fixed-capacity baseline for
 `fixed_capacity`. Only the selected ground edge at each endpoint is available.
 
 Initial acquisition, an endpoint satellite-pair change, or recovery after route
 loss incurs `acquisition_delay_s`. Both selected ground edges remain unavailable
 while acquiring. An internal path change with the same endpoint satellites
 retains the pending completion time or existing readiness. Completion boundaries
-are explicitly inserted without advancing the underlying geometric sample.
+are explicitly inserted without advancing the underlying route breakpoint.
 The terminal stop is exclusive and disables all edges.
 
 ## Traffic and numeric bounds
@@ -148,7 +157,7 @@ permit idle service time, over-capacity persistent queues or impossible losses.
 
 ## Published evidence and metrics
 
-`run_network_replay(bundle_dir, config, backend, output_dir)` returns a
+`run_network_replay(results_dir, config, backend, output_dir)` returns a
 `kind="openleo.network-replay"`, `schema_version="1"` summary and publishes:
 
 - `edges.csv` and `routes.csv`: exact prepared input.
@@ -176,4 +185,4 @@ endpoint acquisition assumptions are declared models; they do not represent
 radio scheduling, uplink hardware, TCP behavior or measured network performance.
 
 For optional native integration tests, set `OPENLEO_NS3_NETWORK` to the compiled
-backend and run `pytest tests/test_network_replay.py`.
+backend and run `pytest tests/replay`.
