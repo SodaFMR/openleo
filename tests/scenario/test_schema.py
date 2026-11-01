@@ -11,6 +11,9 @@ import json
 import math
 import random
 import re
+import shutil
+import subprocess
+import textwrap
 import types
 import typing
 from pathlib import Path
@@ -140,7 +143,7 @@ def test_every_object_with_named_properties_forbids_additional_ones() -> None:
 def test_maps_constrain_their_keys_and_values() -> None:
     terminals = SCHEMA["properties"]["terminals"]
     assert terminals["type"] == "object"
-    assert terminals["propertyNames"] == {"type": "string", "minLength": 1, "pattern": "\\S"}
+    assert terminals["propertyNames"] == schema_module._NON_BLANK
     assert terminals["additionalProperties"]["required"] == [
         "receive_gain_dbi",
         "system_noise_temperature_k",
@@ -307,7 +310,8 @@ def test_description_lists_the_parser_only_rules() -> None:
         "of at least 5 deg",
         "every station has height_amsl_m",
         "propagation.hydrometeors requires itu_reference",
-        "the parser alone accepts IPv6-literal hosts, non-ASCII hosts",
+        "it enforces every rule of this schema, except the stricter limits listed in (11)",
+        "the parser alone accepts bracketed host literals of every kind (IPv6 and IPvFuture)",
     ):
         assert phrase in description, phrase
 
@@ -515,11 +519,15 @@ STRING_CASES = [
     # (pointer, strings both must accept, values both must reject)
     ("/name", ["x", "two words"], ["", " ", "\t\n", " ", 5, None]),
     ("/description", ["", "free text", " "], [5, None, [], {}]),
-    ("/space_segment/catalogs/0/path", ["a.csv", "../data/a.csv"], ["", "   ", 5, None]),
-    ("/ground_segment/stations/0/name", [], ["", "  ", 5, None]),
-    ("/ground_segment/stations/0/terminal", [], ["", "  ", 5, None]),
-    ("/network/pairs/0/source", [], ["", "  ", 5, None]),
-    ("/network/pairs/0/target", [], ["", "  ", 5, None]),
+    (
+        "/space_segment/catalogs/0/path",
+        ["a.csv", "../data/a.csv", "\ufeff"],
+        ["", "   ", "\x1c", "\x85", 5, None],
+    ),
+    ("/ground_segment/stations/0/name", [], ["", "  ", "\x1c", "\x85", 5, None]),
+    ("/ground_segment/stations/0/terminal", [], ["", "  ", "\x1c", "\x85", 5, None]),
+    ("/network/pairs/0/source", [], ["", "  ", "\x1c", "\x85", 5, None]),
+    ("/network/pairs/0/target", [], ["", "  ", "\x1c", "\x85", 5, None]),
     (
         "/space_segment/catalogs/0/sha256",
         ["a" * 64, "0123456789abcdef" * 4],
@@ -600,6 +608,8 @@ def test_both_catalog_urls_share_one_fragment() -> None:
     [
         "https://[::1]/x",  # an IPv6 literal
         "https://[2001:db8::1]:8080/gp.php",
+        "https://[v1.fe]/x",  # an IPvFuture literal
+        "https://[vF.a:b]:80/gp.php",
         "https://m\u00fcnchen.de/",  # a non-ASCII host name
         "https://example.org\u00e9/",
         "https://ex\x01ample.org/",  # a control character in the host
@@ -652,13 +662,121 @@ def test_the_url_whitespace_class_is_exactly_str_isspace() -> None:
         assert accepted == (not character.isspace()), hex(code)
 
 
-def test_terminal_names_must_be_non_blank_in_both() -> None:
+# --- patterns are portable ECMA-262 -----------------------------------------------------------
+
+
+def _patterns() -> list[str]:
+    return [node["pattern"] for node in _subschemas(SCHEMA) if "pattern" in node]
+
+
+# An unescaped regex shorthand class. ECMA-262 defines \s as including U+FEFF and leaving out
+# U+001C to U+001F and U+0085, and \d and \w as ASCII only, while the parser follows Python's
+# str.isspace and other Unicode rules. A pattern that names a character set says it explicitly.
+SHORTHAND = re.compile(r"(?<!\\)(?:\\\\)*\\[sSdDwWbB]")
+
+
+def test_patterns_name_their_character_sets_instead_of_using_regex_shorthands() -> None:
+    patterns = _patterns()
+    assert len(patterns) >= 5
+    assert schema_module._NON_BLANK["pattern"] in patterns
+    for pattern in patterns:
+        assert not SHORTHAND.search(pattern), pattern
+
+
+def test_the_non_blank_pattern_is_exactly_the_complement_of_str_isspace() -> None:
+    pattern = re.compile(schema_module._NON_BLANK["pattern"])
+    for code in range(0x110000):
+        character = chr(code)
+        assert (pattern.search(character) is not None) == (not character.isspace()), hex(code)
+
+
+CLASS = re.compile(r"(?<!\\)\[((?:\\.|[^\]\\])*)\]")  # the body of each [...]
+
+
+def test_no_character_class_holds_an_unescaped_syntax_character() -> None:
+    # Under the JavaScript v flag a class may not hold an unescaped / ( ) [ ] { } | (and - only
+    # as a range). The one slash in a class is the start of a URL path, written [\/?#].
+    assert "[\\/?#]" in URL_SCHEMA["pattern"]
+    classes = [body for pattern in _patterns() for body in CLASS.findall(pattern)]
+    assert len(classes) >= 10
+    for body in classes:
+        assert not re.search(r"[/()\[\]{}|]", re.sub(r"\\.", "", body)), body
+
+
+NODE_CHECK = textwrap.dedent(
+    """
+    const { patterns, whitespace, url_prefix } = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    try { new RegExp("a", "v"); } catch { console.log("NO_V_FLAG"); process.exit(0); }
+    const problems = [];
+    const compiled = {};
+    for (const pattern of patterns) {
+      for (const flags of ["u", "v"]) {
+        try { compiled[flags + pattern] = new RegExp(pattern, flags); } catch (error) {
+          problems.push(`/${pattern}/${flags}: ${error.message}`);
+        }
+      }
+    }
+    const space = new Set(whitespace);
+    const [nonBlank, url] = patterns.slice(0, 2).map((pattern) => compiled["v" + pattern]);
+    for (let code = 0; code < 0x110000; code++) {
+      const character = String.fromCodePoint(code);
+      const blank = space.has(code);
+      if (nonBlank && nonBlank.test(character) === blank) {
+        problems.push(`non-blank U+${code.toString(16)}`);
+      }
+      if (url && url.test(url_prefix + character) === blank) {
+        problems.push(`url U+${code.toString(16)}`);
+      }
+    }
+    console.log(JSON.stringify([...new Set(problems)].slice(0, 10)));
+    """
+)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_every_pattern_compiles_under_the_javascript_u_and_v_flags_and_agrees_on_whitespace() -> (
+    None
+):
+    # The ECMA-262 engines that validate a published schema are the ones the portability
+    # rules are for, so run a real one: compile under u and v, and compare every code point.
+    payload = {
+        "patterns": [schema_module._NON_BLANK["pattern"], URL_SCHEMA["pattern"], *_patterns()],
+        "whitespace": [code for code in range(0x110000) if chr(code).isspace()],
+        "url_prefix": "https://e/",
+    }
+    result = subprocess.run(
+        [shutil.which("node"), "-e", NODE_CHECK],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    if result.stdout.strip() == "NO_V_FLAG":
+        pytest.skip("this node has no RegExp v flag")
+    assert json.loads(result.stdout) == []
+
+
+def test_terminal_names_must_be_non_blank_in_both(tmp_path: Path) -> None:
     terminal = _spec_example()["terminals"]["default"]
-    for blank in ("", "   "):
+    for blank in ("", "   ", "\x1c", "\x85", "\x1f \x85"):
         document = _edit(_spec_example(), ("/terminals", {"default": terminal, blank: terminal}))
-        assert not schema_accepts(document)
-    document = _edit(_spec_example(), ("/terminals", {"default": terminal, "mobile": terminal}))
-    assert schema_accepts(document)
+        assert not schema_accepts(document), repr(blank)
+        assert not parser_accepts(document, tmp_path), repr(blank)
+    for name in ("mobile", "\ufeff", "\u200b"):  # none of them is whitespace to str.isspace
+        document = _edit(_spec_example(), ("/terminals", {"default": terminal, name: terminal}))
+        assert schema_accepts(document), repr(name)
+        assert parser_accepts(document, tmp_path), repr(name)
+
+
+def test_hydrometeor_station_names_must_be_non_blank_in_the_schema() -> None:
+    # The parser rejects any name that is not a ground station, so only the schema can tell.
+    station = _spec_example()["propagation"]["hydrometeors"]["stations"]["Madrid"]
+    for blank in ("", "\x1c", "\x85"):
+        document = _spec_example()
+        document["propagation"]["hydrometeors"]["stations"][blank] = station
+        assert not schema_accepts(document), repr(blank)
 
 
 def test_a_json_text_can_say_what_the_schema_cannot() -> None:

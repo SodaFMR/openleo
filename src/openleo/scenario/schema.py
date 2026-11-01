@@ -40,6 +40,8 @@ from openleo.scenario.model import (
 )
 from openleo.scenario.parse import (
     HYDROMETEOR_FREQUENCY_HZ,
+    HYDROMETEOR_MODEL,
+    HYDROMETEOR_STATE_BOUNDS,
     ITU_MINIMUM_ELEVATION_DEG,
     MAX_GRID_SAMPLES,
     MAX_WINDOW,
@@ -53,25 +55,28 @@ _SCALAR_KEYWORDS = ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"
 _ARRAY_KEYWORDS = ("minItems", "maxItems", "uniqueItems")
 _JSON_TYPES = {bool: "boolean", int: "integer", float: "number", str: "string"}
 
-# String fragments. Non-blank: the parser rejects "" and whitespace-only strings (\S matches a
-# character that is not whitespace). The others restate the rules of openleo._validation.
+# String fragments. Whitespace as str.isspace sees it, which is what the parser tests: \t-\r,
+# \x1c-\x1f, space, \x85, \xa0, \u1680, \u2000-\u200a, \u2028, \u2029, \u202f, \u205f, \u3000.
+# It is spelled out because ECMA-262's \s is another set (it has U+FEFF, and lacks U+001C to
+# U+001F and U+0085), so \S would make a JavaScript validator looser or stricter than the parser.
+_SPACE = r"\t-\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000"
+# Non-blank: the parser rejects "" and strings of whitespace only, so one non-space is required.
 _TEXT = {"type": "string"}
-_NON_BLANK = {"type": "string", "minLength": 1, "pattern": "\\S"}
+_NON_BLANK = {"type": "string", "minLength": 1, "pattern": rf"[^{_SPACE}]"}
 # A URL as openleo._validation._url reads it: scheme http or https in any case, a non-empty host,
 # no user information (@), no whitespace anywhere. The host stops at the first / ? or #, so
-# those and @ cannot occur in it. Escapes keep the pattern ECMA-262 portable and exact.
+# those and @ cannot occur in it. Escapes keep the pattern ECMA-262 portable and exact: a / in a
+# character class is escaped because the JavaScript v flag requires it.
 # _END: Python's re also lets $ match before a final newline, which the parser rejects.
 _END = r"$(?!\n)"
-# Whitespace as str.isspace sees it, which is what the parser tests: \t-\r, \x1c-\x1f, space,
-# \x85, \xa0, \u1680, \u2000-\u200a, \u2028, \u2029, \u202f, \u205f, \u3000.
-_SPACE = r"\t-\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000"
 # Printable ASCII except / ? # @ [ ]. The schema is stricter than the parser on hosts: it takes
-# no IPv6 literal (brackets), no non-ASCII name (write punycode, xn--) and no control character.
+# no bracketed host literal (IPv6 or IPvFuture), no non-ASCII name (write punycode, xn--) and no
+# control character.
 _HOST_CHARACTER = r"[\x21\x22\x24-\x2e\x30-\x3e\x41-\x5a\x5c\x5e-\x7e]"
 _URL = {
     "type": "string",
     "format": "uri",
-    "pattern": rf"^[hH][tT][tT][pP][sS]?://{_HOST_CHARACTER}+([/?#][^{_SPACE}]*)?{_END}",
+    "pattern": rf"^[hH][tT][tT][pP][sS]?://{_HOST_CHARACTER}+([\/?#][^{_SPACE}]*)?{_END}",
 }
 _SHA256 = {"type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$"}
 _TIMESTAMP = {
@@ -233,9 +238,10 @@ def _plain(value: Any) -> Any:
 
 
 def _hydrometeors() -> dict[str, Any]:
-    """``HydrometeorConfig``: bounds as in ``HydrometeorStation.__post_init__``."""
+    """``HydrometeorConfig``: the bounds are the parser's table, equal to the kernel's."""
 
-    def number(description: str, unit: str, **bounds: float) -> dict[str, Any]:
+    def number(key: str, description: str, unit: str) -> dict[str, Any]:
+        bounds = HYDROMETEOR_STATE_BOUNDS[key]
         return {"type": "number", **bounds, "description": f"{description} [{unit}]"}
 
     state = {
@@ -249,23 +255,21 @@ def _hydrometeors() -> dict[str, Any]:
         ],
         "properties": {
             "liquid_water_kg_m2": number(
+                "liquid_water_kg_m2",
                 "Integrated cloud liquid water of the column above the station.",
                 "kg/m^2",
-                minimum=0.0,
             ),
-            "rain_rate_mm_h": number("Rain rate at the station.", "mm/h", minimum=0.0),
+            "rain_rate_mm_h": number("rain_rate_mm_h", "Rain rate at the station.", "mm/h"),
             "rain_top_height_amsl_m": number(
+                "rain_top_height_amsl_m",
                 "Height of the top of the uniform rain layer above mean sea level, at least the "
                 "station's height_amsl_m.",
                 "m",
-                minimum=0.0,
-                maximum=20_000.0,
             ),
             "polarization_tilt_deg": number(
+                "polarization_tilt_deg",
                 "Polarisation tilt angle: 0 horizontal, 90 vertical.",
                 "deg",
-                minimum=0.0,
-                maximum=180.0,
             ),
         },
     }
@@ -276,7 +280,7 @@ def _hydrometeors() -> dict[str, Any]:
         "properties": {
             "model": {
                 "type": "string",
-                "const": "declared_uniform_layers",
+                "const": HYDROMETEOR_MODEL,
                 "description": "Hydrometeor model: declared uniform cloud and rain layers.",
             },
             "stations": {
@@ -359,9 +363,10 @@ def _description() -> str:
     return (
         f"OpenLEO scenario document, format {SCENARIO_SCHEMA_ID}. This schema checks structure, "
         "types, bounds and the cross-field rules JSON Schema can express. The OpenLEO parser "
-        "(openleo.scenario.parse) is authoritative: it enforces every rule of this schema and "
-        "the parser-only cross-field rules, which JSON Schema cannot express. "
-        "Parser-only rules: "
+        "(openleo.scenario.parse) is authoritative: it enforces every rule of this schema, except "
+        "the stricter limits listed in (11), and the parser-only rules, which JSON Schema cannot "
+        "express. "
+        "Parser-only rules, and in (11) the stricter limits of the schema: "
         "(1) radio.channel_bandwidth_hz >= adaptation.symbol_rate_baud * (1 + adaptation.rolloff); "
         "(2) adaptation.symbol_rate_baud × maximum MODCOD efficiency must be finite "
         "(overflow guard); "
@@ -380,10 +385,11 @@ def _description() -> str:
         "catalogs, and the catalogs stay within their size limits (checked when they are read); "
         "(10) a scenario file of at most 1 MB with no duplicate JSON object keys and no "
         "non-finite numbers (properties of the JSON text, not of a parsed instance); "
-        "(11) catalog URLs: the schema pattern needs an ASCII host without brackets or control "
-        "characters (write an internationalised host name as punycode, xn--) and no leading "
-        "control character, so the parser alone accepts IPv6-literal hosts, non-ASCII hosts and "
-        "those control characters. "
+        "(11) catalog URLs, where the schema refuses more than the parser: the schema "
+        "pattern needs an ASCII host without brackets or control characters (write an "
+        "internationalised host name as punycode, xn--) and no leading control character, so "
+        "the parser alone accepts bracketed host literals of every kind (IPv6 and IPvFuture), "
+        "non-ASCII hosts and those control characters. "
         "Also expressed by this schema with if/then/else, and listed because the parser "
         "is authoritative: "
         "(a) fixed_capacity_bps is present (not null) exactly when route_models lists "

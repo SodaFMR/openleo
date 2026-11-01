@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from openleo.physics.adaptation import AdaptationConfig
-from openleo.physics.hydrometeor_path import HydrometeorConfig
+from openleo.physics.hydrometeor_path import STATION_KEYS, HydrometeorConfig, HydrometeorStation
 from openleo.scenario import model
 from openleo.scenario.model import (
     Adaptation,
@@ -33,6 +33,7 @@ from openleo.scenario.model import (
     TimeConfig,
 )
 from openleo.scenario.parse import (
+    HYDROMETEOR_STATE_BOUNDS,
     SCENARIO_SCHEMA_ID,
     load_scenario,
     parse_scenario,
@@ -389,6 +390,155 @@ def test_load_scenario_rejects_non_finite_literals(tmp_path: Path) -> None:
 def test_parse_scenario_requires_a_sha256_for_the_source_bytes() -> None:
     with pytest.raises(ValueError, match="source_sha256"):
         parse_scenario(_spec_example(), "s.json", "not-a-digest")
+
+
+# --- an unusable catalog path ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("index", [0, 1])
+@pytest.mark.parametrize("bad", ["a\x00b", "\x00", "data/\x00.csv", "caf\ud800.csv"])
+def test_a_catalog_path_the_system_cannot_resolve_is_a_pointer_prefixed_value_error(
+    index: int, bad: str, tmp_path: Path
+) -> None:
+    # Path.resolve raises a bare ValueError for a NUL and UnicodeEncodeError for a lone surrogate.
+    document = json.loads(
+        (FIXTURES / "valid" / "two_catalogs_terminals_and_masks.json").read_text()
+    )
+    document["space_segment"]["catalogs"][index]["path"] = bad
+    pointer = f"/space_segment/catalogs/{index}/path"
+    with pytest.raises(ValueError) as caught:
+        parse_scenario(document, tmp_path / "s.json", SHA)
+    assert type(caught.value) is ValueError
+    message = str(caught.value)
+    assert message.startswith(f"{pointer}="), message
+    assert repr(bad)[:20] in message  # the value is shown, escaped by repr
+
+
+# --- hydrometeor errors name their station ------------------------------------------------------
+
+AWKWARD = "Tromsø/N~1"  # a station name whose pointer token needs both RFC 6901 escapes
+AWKWARD_POINTER = "/propagation/hydrometeors/stations/Tromsø~1N~01"
+
+
+def _awkward_document() -> dict:
+    document = _spec_example()
+    document["ground_segment"]["stations"][1]["name"] = AWKWARD
+    document["network"]["pairs"][0]["target"] = AWKWARD
+    stations = document["propagation"]["hydrometeors"]["stations"]
+    stations[AWKWARD] = stations.pop("Tromso")
+    return document
+
+
+@pytest.mark.parametrize(
+    ("edit", "pointer", "tail"),
+    [
+        ({"rain_rate_mm_h": -1.0}, "rain_rate_mm_h", "=-1.0 must be non-negative"),
+        ({"liquid_water_kg_m2": -0.5}, "liquid_water_kg_m2", "=-0.5 must be non-negative"),
+        ({"rain_rate_mm_h": "x"}, "rain_rate_mm_h", "='x' must be finite"),
+        ({"rain_rate_mm_h": True}, "rain_rate_mm_h", "=True must be finite"),
+        ({"liquid_water_kg_m2": None}, "liquid_water_kg_m2", "=None must be finite"),
+        ({"rain_top_height_amsl_m": 20_000.5}, "rain_top_height_amsl_m", "=20000.5 must be in"),
+        ({"rain_top_height_amsl_m": -1.0}, "rain_top_height_amsl_m", "=-1.0 must be in"),
+        ({"polarization_tilt_deg": 180.5}, "polarization_tilt_deg", "=180.5 must be in"),
+        ({"polarization_tilt_deg": -0.5}, "polarization_tilt_deg", "=-0.5 must be in"),
+        ({"polarization_tilt_deg": 10**400}, "polarization_tilt_deg", "must be finite"),
+    ],
+)
+def test_a_bad_hydrometeor_field_names_the_station_and_the_field(edit, pointer, tail) -> None:
+    for name, station_pointer in (
+        ("Madrid", "/propagation/hydrometeors/stations/Madrid"),
+        (AWKWARD, AWKWARD_POINTER),
+    ):
+        document = _awkward_document()
+        document["propagation"]["hydrometeors"]["stations"][name].update(edit)
+        with pytest.raises(ValueError) as caught:
+            parse_scenario(document, "s.json", SHA)
+        assert type(caught.value) is ValueError
+        message = str(caught.value)
+        assert message.startswith(f"{station_pointer}/{pointer}"), message
+        assert tail in message, message
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected"),
+    [
+        (lambda s: s.pop("rain_rate_mm_h"), "/rain_rate_mm_h is required"),
+        (lambda s: s.update(snow_rate_mm_h=1.0), "/snow_rate_mm_h is not allowed"),
+    ],
+)
+def test_a_hydrometeor_station_with_the_wrong_keys_names_the_station(mutate, expected) -> None:
+    document = _awkward_document()
+    mutate(document["propagation"]["hydrometeors"]["stations"][AWKWARD])
+    with pytest.raises(ValueError) as caught:
+        parse_scenario(document, "s.json", SHA)
+    assert str(caught.value) == f"{AWKWARD_POINTER}{expected}"
+
+
+def test_a_hydrometeor_station_that_is_not_an_object_names_the_station() -> None:
+    document = _awkward_document()
+    document["propagation"]["hydrometeors"]["stations"][AWKWARD] = [1, 2]
+    with pytest.raises(ValueError) as caught:
+        parse_scenario(document, "s.json", SHA)
+    assert str(caught.value) == f"{AWKWARD_POINTER} must be a JSON object"
+
+
+@pytest.mark.parametrize(
+    ("mutate", "start"),
+    [
+        (lambda h: h.update(model="uniform"), "/propagation/hydrometeors/model='uniform'"),
+        (lambda h: h.pop("model"), "/propagation/hydrometeors/model is required"),
+        (lambda h: h.pop("stations"), "/propagation/hydrometeors/stations is required"),
+        (lambda h: h.update(extra=1), "/propagation/hydrometeors/extra is not allowed"),
+        (lambda h: h.update(stations=[]), "/propagation/hydrometeors/stations must be"),
+        (lambda h: h.update(stations={}), "/propagation/hydrometeors/stations must name every"),
+        (
+            lambda h: h["stations"].pop("Madrid"),
+            "/propagation/hydrometeors/stations must name every ground station exactly once",
+        ),
+        (
+            lambda h: h["stations"].update(Oslo=h["stations"]["Madrid"]),
+            "/propagation/hydrometeors/stations must name every ground station exactly once",
+        ),
+    ],
+)
+def test_hydrometeor_structure_errors_carry_their_own_pointer(mutate, start) -> None:
+    document = _spec_example()
+    mutate(document["propagation"]["hydrometeors"])
+    with pytest.raises(ValueError) as caught:
+        parse_scenario(document, "s.json", SHA)
+    assert type(caught.value) is ValueError
+    assert str(caught.value).startswith(start), str(caught.value)
+
+
+def test_the_hydrometeor_bounds_table_is_exactly_the_physics_kernels() -> None:
+    assert set(HYDROMETEOR_STATE_BOUNDS) == STATION_KEYS
+    valid = {
+        "liquid_water_kg_m2": 0.5,
+        "rain_rate_mm_h": 25.0,
+        "rain_top_height_amsl_m": 5000.0,
+        "polarization_tilt_deg": 45.0,
+    }
+    for key, bounds in HYDROMETEOR_STATE_BOUNDS.items():
+        lower, upper = bounds["minimum"], bounds.get("maximum", math.inf)
+        probes = [lower, math.nextafter(lower, -math.inf), 1e300, -1e300]
+        if upper != math.inf:
+            probes += [upper, math.nextafter(upper, math.inf), upper / 2]
+        for value in probes:
+            try:
+                HydrometeorStation(**{**valid, key: value})
+                kernel = True
+            except ValueError:
+                kernel = False
+            assert kernel == (lower <= value <= upper), (key, value)
+
+
+def test_hydrometeor_states_follow_the_ground_station_order_not_the_document_order() -> None:
+    document = _spec_example()
+    stations = document["propagation"]["hydrometeors"]["stations"]
+    document["propagation"]["hydrometeors"]["stations"] = dict(reversed(stations.items()))
+    scenario = parse_scenario(document, "s.json", SHA)
+    names = [station.name for station in scenario.ground_segment.stations]
+    assert [name for name, _ in scenario.propagation.hydrometeors.stations] == names
 
 
 # --- field metadata: the contract with the JSON Schema generator -----------------------------

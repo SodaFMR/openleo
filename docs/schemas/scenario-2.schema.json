@@ -130,7 +130,7 @@
       }
     }
   ],
-  "description": "OpenLEO scenario document, format openleo.scenario/2. This schema checks structure, types, bounds and the cross-field rules JSON Schema can express. The OpenLEO parser (openleo.scenario.parse) is authoritative: it enforces every rule of this schema and the parser-only cross-field rules, which JSON Schema cannot express. Parser-only rules: (1) radio.channel_bandwidth_hz >= adaptation.symbol_rate_baud * (1 + adaptation.rolloff); (2) adaptation.symbol_rate_baud \u00d7 maximum MODCOD efficiency must be finite (overflow guard); (3) a station's terminal must name an entry of terminals ('default' when omitted); (4) station names must be unique; (5) pairs name ground stations, and the source and target of a pair differ; (6) hydrometeors.stations names every ground station exactly once, and each rain_top_height_amsl_m is at least that station's height_amsl_m; (7) time.stop_utc after start_utc, a window of at most 31 days, step_s at most the window and a whole number of microseconds, at most 1,000,000 samples including the stop point, and every timestamp a real calendar date; (8) step_s is at most one eighth of the shortest orbital period in the catalogs, which needs the catalogs and is checked when they are loaded; (9) the catalog sha256 matches the catalog file, there are no duplicate NORAD ids across catalogs, and the catalogs stay within their size limits (checked when they are read); (10) a scenario file of at most 1 MB with no duplicate JSON object keys and no non-finite numbers (properties of the JSON text, not of a parsed instance); (11) catalog URLs: the schema pattern needs an ASCII host without brackets or control characters (write an internationalised host name as punycode, xn--) and no leading control character, so the parser alone accepts IPv6-literal hosts, non-ASCII hosts and those control characters. Also expressed by this schema with if/then/else, and listed because the parser is authoritative: (a) fixed_capacity_bps is present (not null) exactly when route_models lists fixed_capacity; (b) with propagation.model itu_reference, every station has height_amsl_m and an elevation mask, its own or the default, of at least 5 deg, and radio.carrier_frequency_hz lies in [1, 1000] GHz; (c) propagation.hydrometeors requires itu_reference and radio.carrier_frequency_hz in [1, 200] GHz.",
+  "description": "OpenLEO scenario document, format openleo.scenario/2. This schema checks structure, types, bounds and the cross-field rules JSON Schema can express. The OpenLEO parser (openleo.scenario.parse) is authoritative: it enforces every rule of this schema, except the stricter limits listed in (11), and the parser-only rules, which JSON Schema cannot express. Parser-only rules, and in (11) the stricter limits of the schema: (1) radio.channel_bandwidth_hz >= adaptation.symbol_rate_baud * (1 + adaptation.rolloff); (2) adaptation.symbol_rate_baud \u00d7 maximum MODCOD efficiency must be finite (overflow guard); (3) a station's terminal must name an entry of terminals ('default' when omitted); (4) station names must be unique; (5) pairs name ground stations, and the source and target of a pair differ; (6) hydrometeors.stations names every ground station exactly once, and each rain_top_height_amsl_m is at least that station's height_amsl_m; (7) time.stop_utc after start_utc, a window of at most 31 days, step_s at most the window and a whole number of microseconds, at most 1,000,000 samples including the stop point, and every timestamp a real calendar date; (8) step_s is at most one eighth of the shortest orbital period in the catalogs, which needs the catalogs and is checked when they are loaded; (9) the catalog sha256 matches the catalog file, there are no duplicate NORAD ids across catalogs, and the catalogs stay within their size limits (checked when they are read); (10) a scenario file of at most 1 MB with no duplicate JSON object keys and no non-finite numbers (properties of the JSON text, not of a parsed instance); (11) catalog URLs, where the schema refuses more than the parser: the schema pattern needs an ASCII host without brackets or control characters (write an internationalised host name as punycode, xn--) and no leading control character, so the parser alone accepts bracketed host literals of every kind (IPv6 and IPvFuture), non-ASCII hosts and those control characters. Also expressed by this schema with if/then/else, and listed because the parser is authoritative: (a) fixed_capacity_bps is present (not null) exactly when route_models lists fixed_capacity; (b) with propagation.model itu_reference, every station has height_amsl_m and an elevation mask, its own or the default, of at least 5 deg, and radio.carrier_frequency_hz lies in [1, 1000] GHz; (c) propagation.hydrometeors requires itu_reference and radio.carrier_frequency_hz in [1, 200] GHz.",
   "properties": {
     "adaptation": {
       "additionalProperties": false,
@@ -256,14 +256,14 @@
               "name": {
                 "description": "Unique station name; routes and hydrometeor states refer to it.",
                 "minLength": 1,
-                "pattern": "\\S",
+                "pattern": "[^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]",
                 "type": "string"
               },
               "terminal": {
                 "default": "default",
                 "description": "Name of an entry of the scenario's terminals.",
                 "minLength": 1,
-                "pattern": "\\S",
+                "pattern": "[^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]",
                 "type": "string"
               }
             },
@@ -289,7 +289,7 @@
     "name": {
       "description": "Scenario title.",
       "minLength": 1,
-      "pattern": "\\S",
+      "pattern": "[^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]",
       "type": "string"
     },
     "network": {
@@ -366,13 +366,13 @@
                   "source": {
                     "description": "Name of the source station.",
                     "minLength": 1,
-                    "pattern": "\\S",
+                    "pattern": "[^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]",
                     "type": "string"
                   },
                   "target": {
                     "description": "Name of the target station, different from the source.",
                     "minLength": 1,
-                    "pattern": "\\S",
+                    "pattern": "[^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]",
                     "type": "string"
                   }
                 },
@@ -534,7 +534,7 @@
                   "minProperties": 1,
                   "propertyNames": {
                     "minLength": 1,
-                    "pattern": "\\S",
+                    "pattern": "[^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]",
                     "type": "string"
                   },
                   "type": "object"
@@ -627,7 +627,7 @@
               "path": {
                 "description": "Catalog file. Relative paths resolve against the directory of the scenario file.",
                 "minLength": 1,
-                "pattern": "\\S",
+                "pattern": "[^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]",
                 "type": "string"
               },
               "retrieved_at_utc": {
@@ -646,13 +646,13 @@
               "source_url": {
                 "description": "Absolute HTTP(S) URL the catalog was retrieved from.",
                 "format": "uri",
-                "pattern": "^[hH][tT][tT][pP][sS]?://[\\x21\\x22\\x24-\\x2e\\x30-\\x3e\\x41-\\x5a\\x5c\\x5e-\\x7e]+([/?#][^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$(?!\\n)",
+                "pattern": "^[hH][tT][tT][pP][sS]?://[\\x21\\x22\\x24-\\x2e\\x30-\\x3e\\x41-\\x5a\\x5c\\x5e-\\x7e]+([\\/?#][^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$(?!\\n)",
                 "type": "string"
               },
               "terms_url": {
                 "description": "Absolute HTTP(S) URL of the data provider's terms of use.",
                 "format": "uri",
-                "pattern": "^[hH][tT][tT][pP][sS]?://[\\x21\\x22\\x24-\\x2e\\x30-\\x3e\\x41-\\x5a\\x5c\\x5e-\\x7e]+([/?#][^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$(?!\\n)",
+                "pattern": "^[hH][tT][tT][pP][sS]?://[\\x21\\x22\\x24-\\x2e\\x30-\\x3e\\x41-\\x5a\\x5c\\x5e-\\x7e]+([\\/?#][^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]*)?$(?!\\n)",
                 "type": "string"
               }
             },
@@ -728,7 +728,7 @@
       "description": "Named receive terminals. A station's terminal defaults to 'default'.",
       "propertyNames": {
         "minLength": 1,
-        "pattern": "\\S",
+        "pattern": "[^\\t-\\r\\x1c-\\x20\\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]",
         "type": "string"
       },
       "type": "object"

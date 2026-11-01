@@ -1,5 +1,5 @@
 {
-  "error_startswith": "/propagation/hydrometeors",
+  "error_startswith": "/propagation/hydrometeors/stations",
   "schema_expressible": false,
   "parser_only_rule": "hydrometeors.stations must name every ground station exactly once: the key set must equal the station names of ground_segment",
   "scenario": {

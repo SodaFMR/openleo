@@ -1,5 +1,5 @@
 {
-  "error_startswith": "/propagation/hydrometeors",
+  "error_startswith": "/propagation/hydrometeors/stations/Madrid/rain_rate_mm_h",
   "schema_expressible": true,
   "scenario": {
     "schema": "openleo.scenario/2",

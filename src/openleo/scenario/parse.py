@@ -40,8 +40,8 @@ from openleo._validation import (
 from openleo.physics.gases import MAX_FREQUENCY_HZ, MIN_FREQUENCY_HZ
 from openleo.physics.hydrometeor_path import (
     HydrometeorConfig,
+    HydrometeorStation,
     hydrometeor_document,
-    parse_hydrometeors,
 )
 from openleo.scenario.model import (
     NOT_DOCUMENT_FIELDS,
@@ -68,6 +68,16 @@ MAX_WINDOW = timedelta(days=31)
 MAX_GRID_SAMPLES = 1_000_000
 ITU_MINIMUM_ELEVATION_DEG = 5.0
 HYDROMETEOR_FREQUENCY_HZ = (1e9, 200e9)
+HYDROMETEOR_MODEL = "declared_uniform_layers"
+# Bounds of the declared state of one station: those of HydrometeorStation, restated here so the
+# parser can name the offending field (the physics messages carry no pointer). A test holds this
+# table to the kernel, and the JSON Schema generator reads it too.
+HYDROMETEOR_STATE_BOUNDS: dict[str, dict[str, float]] = {
+    "liquid_water_kg_m2": {"minimum": 0.0},
+    "rain_rate_mm_h": {"minimum": 0.0},
+    "rain_top_height_amsl_m": {"minimum": 0.0, "maximum": 20_000.0},
+    "polarization_tilt_deg": {"minimum": 0.0, "maximum": 180.0},
+}
 # Top-level keys of a v1 scenario or constellation file (v1 files carry no schema key).
 _V1_KEYS = frozenset(("orbit", "ground_station", "stations", "time_window", "radio_link"))
 
@@ -306,13 +316,22 @@ def _space_segment(section: "_Section", directory: Path) -> SpaceSegment:
 def _catalog(raw: Any, pointer: str, directory: Path) -> CatalogSource:
     section = _Section(raw, pointer, CatalogSource)
     return CatalogSource(
-        path=(directory / section.string("path")).resolve(),
+        path=_resolve_catalog_path(directory, section.string("path"), section.pointer_of("path")),
         format=section.choice("format"),
         source_url=section.url("source_url"),
         retrieved_at_utc=section.timestamp("retrieved_at_utc"),
         terms_url=section.url("terms_url"),
         sha256=section.sha256("sha256"),
     )
+
+
+def _resolve_catalog_path(directory: Path, value: str, pointer: str) -> Path:
+    try:
+        return (directory / value).resolve()
+    except (OSError, RuntimeError, ValueError) as exc:  # a NUL, a lone surrogate, a symlink loop
+        raise ValueError(
+            f"{pointer}={_safe_repr(value)} cannot be resolved as a file path: {exc}"
+        ) from exc
 
 
 def _terminals(root: "_Section") -> tuple[tuple[str, Terminal], ...]:
@@ -432,19 +451,44 @@ def _hydrometeors(
         raise ValueError(f"{pointer} requires propagation.model itu_reference")
     if not isinstance(raw, Mapping):
         raise ValueError(f"{pointer} must be a JSON object")
-    try:
-        config = parse_hydrometeors(raw, tuple(stations))
-    except (TypeError, ValueError, OverflowError) as exc:
-        raise ValueError(f"{pointer}: {exc}") from exc
-    for name, state in config.stations:
-        height = stations[name].height_amsl_m
-        if state.rain_top_height_amsl_m < height:
-            entry = _field(_field(_field(pointer, "stations"), name), "rain_top_height_amsl_m")
+    _object(raw, frozenset(("model", "stations")), pointer)
+    _choice(raw["model"], _field(pointer, "model"), (HYDROMETEOR_MODEL,))
+    states_pointer = _field(pointer, "stations")
+    declared = raw["stations"]
+    if not isinstance(declared, Mapping):
+        raise ValueError(f"{states_pointer} must be a JSON object")
+    missing = [name for name in stations if name not in declared]
+    unknown = [name for name in declared if name not in stations]
+    if missing or unknown:
+        raise ValueError(
+            f"{states_pointer} must name every ground station exactly once "
+            f"(missing: {_safe_repr(missing)}, not a ground station: {_safe_repr(unknown)})"
+        )
+    states = []
+    for name, station in stations.items():  # in ground-station order, as v1 stores them
+        state_pointer = _field(states_pointer, name)
+        state = _hydrometeor_state(declared[name], state_pointer)
+        if state.rain_top_height_amsl_m < station.height_amsl_m:
             raise ValueError(
-                f"{entry}={_safe_repr(state.rain_top_height_amsl_m)} must be at least the "
-                f"station's height_amsl_m {height!r}"
+                f"{_field(state_pointer, 'rain_top_height_amsl_m')}="
+                f"{_safe_repr(state.rain_top_height_amsl_m)} must be at least the "
+                f"station's height_amsl_m {station.height_amsl_m!r}"
             )
-    return config
+        states.append((name, state))
+    return HydrometeorConfig(HYDROMETEOR_MODEL, tuple(states))
+
+
+def _hydrometeor_state(raw: Any, pointer: str) -> HydrometeorStation:
+    """One station's declared state, every error carrying the station's pointer."""
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"{pointer} must be a JSON object")
+    _object(raw, frozenset(HYDROMETEOR_STATE_BOUNDS), pointer)
+    return HydrometeorStation(
+        **{
+            key: _number(raw[key], _field(pointer, key), bounds)
+            for key, bounds in HYDROMETEOR_STATE_BOUNDS.items()
+        }
+    )
 
 
 def _network(section: "_Section | None", stations: Mapping[str, Station]) -> NetworkConfig | None:
