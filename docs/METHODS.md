@@ -269,8 +269,18 @@ connected time. These are graph snapshots without traffic, contention, queues or
 ## Convergence gate
 
 After the primary run the engine recomputes every exported integrated metric on the grid refined
-by `time.convergence.refinement_factor` (default 4), with the same events and evaluator, and
-compares. A metric passes when
+by `time.convergence.refinement_factor` (default 4), with the same evaluator, and compares.
+Nothing of the primary run is reused. With events on, every station-satellite pair's passes
+(AOS, LOS and culminations root-found from the refined grid), its MODCOD segments (the
+continuous-time state machine on the refined breakpoints) and its Shannon quadrature (nodes on
+the refined grid) are found again; the pair, station and route metrics are then computed from
+those refined passes and segments, and routes from refined route breakpoints. With events off,
+visibility, MODCOD selection and the left-held integrals are resampled on the refined grid. Each
+row of the `convergence` table carries `recomputed` (1 when its refined value was computed this
+way, 0 if it were reused from the primary run) and `results.json` counts them in
+`convergence.summary.recomputed`; every row is recomputed in S1. `min_range_m` and
+`max_elevation_deg` are extremes, reported in `pair_metrics` but not compared. A metric passes
+when
 
 $$
 |M_{ref}-M|\le\max(r\,|M_{ref}|,\ a),
@@ -284,8 +294,10 @@ Link (`pair/...`) and station metrics are gated: `mode = "error"` aborts publica
 the failing metrics and a suggested step; `warn` publishes with one warning per failure; `off`
 skips the gate and records that it did. **Route metrics are reported in the `convergence` table
 (class `route`) but not gated in S1**: because of the route-breakpoint limitation above, a route
-failure is always a warning. With events on, only route metrics and the Shannon integral (through
-node placement) can still depend on the grid step.
+failure is always a warning. With events on, the event times depend on the grid step only within
+`time.events.tolerance_s` (the root-finding brackets differ), so pair and station metrics agree
+closely on both grids; the Shannon integral also depends on node placement, and route metrics on
+the route breakpoints.
 
 ## Memory budget
 

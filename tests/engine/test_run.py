@@ -315,6 +315,9 @@ def test_convergence_passes_on_hydrometeor_example():
     assert [(f["metric"], f["class"], f["fatal"]) for f in block["failures"]] == [
         ("route/Madrid->Tromso/fixed_capacity/route_changes", "route", False)
     ]
+    # Every refined value, passes and MODCOD segments included, was recomputed on the 15 s grid.
+    assert convergence["recomputed"].astype(bool).all()
+    assert block["summary"]["recomputed"] == block["summary"]["metrics"] == convergence.rows
 
 
 def test_hydrometeor_convergence_fails_only_on_route_changes_between_breakpoints():
@@ -336,14 +339,21 @@ def test_hydrometeor_convergence_fails_only_on_route_changes_between_breakpoints
     assert block["summary"]["failed"] == 1
     assert block["summary"]["classes"]["route"] == {"gated": False, "metrics": 12, "failed": 1}
     assert block["summary"]["max_relative_difference"] < 0.02
-    # With events on only quadrature nodes and route breakpoints depend on the grid: pair and
-    # station metrics agree to 1e-9 relative (the Shannon integrals), or exactly.
+    # With events on, the refined run root-finds its own passes and MODCOD switches from the
+    # refined grid, so event times differ by up to tolerance_s (1 ms): pair and station metrics
+    # agree to about 1e-5 relative, not exactly. That they differ at all shows the refined values
+    # were not copied from the primary run.
     link_metrics = [
         abs(r - p) / abs(r)
         for metric, (p, r, _) in rows.items()
         if not metric.startswith("route/") and r and math.isfinite(r)
     ]
-    assert max(link_metrics) < 1e-9
+    assert max(link_metrics) < 1e-4
+    durations = [
+        (p, r) for metric, (p, r, _) in rows.items() if metric.endswith("/visible_duration_s")
+    ]
+    assert any(p != r for p, r in durations)
+    assert all(abs(r - p) < 2e-2 for p, r in durations)  # a few passes, each ends within 1 ms
     # Mean route delays are held to 1 us absolute, so the 1 % relative tolerance decides them.
     delay = rows["route/Madrid->Tromso/fixed_capacity/mean_delay_connected_s"]
     assert delay[2] and abs(delay[1] - delay[0]) > 1e-4
@@ -606,6 +616,36 @@ def test_refined_shannon_errors_name_the_pair(monkeypatch):
     monkeypatch.setattr(run_module, "integrate_smooth", failing_when_refined)
     with pytest.raises(ValueError, match=r"station 'Cartagena', NORAD 25544: refined quadrature"):
         run(_example("iss_cartagena"))
+
+
+def test_the_refined_run_finds_its_own_events_on_the_refined_grid(monkeypatch):
+    """Convergence with events on recomputes every pair's passes and MODCOD segments."""
+    scenario = _window(_small(_example("iridium_global"), 3), START, 30)
+    grids = {"passes": [], "segments": []}
+    find, segments = run_module.find_passes, run_module.acm_segments
+
+    def recorded_find(elevation, grid_s, *args):
+        grids["passes"].append(len(grid_s))
+        return find(elevation, grid_s, *args)
+
+    def recorded_segments(available, passes, breakpoints, *args):
+        grids["segments"].append(len(breakpoints))
+        return segments(available, passes, breakpoints, *args)
+
+    monkeypatch.setattr(run_module, "find_passes", recorded_find)
+    monkeypatch.setattr(run_module, "acm_segments", recorded_segments)
+    results = run(scenario)
+    samples = results.metadata["summary"]["grid_sample_count"]
+    factor = scenario.time.convergence.refinement_factor
+    refined = (samples - 1) * factor + 1
+    pairs = 3 * len(scenario.ground_segment.stations)
+    assert grids["passes"] == [samples] * pairs + [refined] * pairs
+    assert len(grids["segments"]) == 2 * pairs
+    assert all(n >= refined for n in grids["segments"][pairs:])
+    assert results.tables["convergence"]["recomputed"].astype(bool).all()
+    assert results.metadata["convergence"]["summary"]["recomputed"] == (
+        results.tables["convergence"].rows
+    )
 
 
 def test_feedback_delay_shifts_modcod_effects():

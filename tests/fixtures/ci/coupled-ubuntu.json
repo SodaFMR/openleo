@@ -22,17 +22,18 @@
     "absolute_difference",
     "relative_difference",
     "passed",
-    "gated"
+    "gated",
+    "recomputed"
    ],
    "columns": {
     "absolute_difference": {
-     "abs_sum": 1.771611811653151,
+     "abs_sum": 19742.909826411782,
      "dtype": "f64",
      "finite": 3341,
-     "max": 1.0,
+     "max": 2832.525077819824,
      "min": 0.0,
      "nan": 215,
-     "sum": 1.771611811653151,
+     "sum": 19742.909826411782,
      "unit": "metric unit"
     },
     "class": {
@@ -75,24 +76,34 @@
      "sum": 120450241149.83879,
      "unit": "metric unit"
     },
+    "recomputed": {
+     "abs_sum": 3556.0,
+     "dtype": "u8",
+     "finite": 3556,
+     "max": 1.0,
+     "min": 1.0,
+     "nan": 0,
+     "sum": 3556.0,
+     "unit": "bool"
+    },
     "refined": {
-     "abs_sum": 120450241150.85497,
+     "abs_sum": 120450231160.98448,
      "dtype": "f64",
      "finite": 3341,
      "max": 16042492800.0,
      "min": 0.0,
      "nan": 215,
-     "sum": 120450241150.85497,
+     "sum": 120450231160.98448,
      "unit": "metric unit"
     },
     "relative_difference": {
-     "abs_sum": 0.025931910275777435,
+     "abs_sum": 0.026478453470744432,
      "dtype": "f64",
      "finite": 3341,
      "max": 0.018518518518518517,
      "min": 0.0,
      "nan": 215,
-     "sum": 0.025931910275777435,
+     "sum": 0.026478453470744432,
      "unit": "1"
     }
    },

@@ -105,7 +105,7 @@ RUN/
 | `provenance` | catalogs (source, retrieval time, terms, SHA-256, record and selected counts, archived path), element epochs and ages, leap-second table source and SHA-256 |
 | `models` | one entry per kernel: standard, version, method; e.g. ETSI EN 302 307-1 V1.4.1 Table 13 subset, P.676-13, P.835-7, P.453-14, P.838-3, P.840-9, P.525-5, the time and integration conventions and the gas-table bounds |
 | `events` | `enabled`, `tolerance_s`, `integration` (`event_segments` or `grid_left_hold`), counts by type |
-| `convergence` | settings, summary by class (link, station, route), failures, `skipped` |
+| `convergence` | settings, summary (metrics, passed, failed, `recomputed`: rows whose refined value was recomputed independently on the refined grid, by class: link, station, route), failures, `skipped` |
 | `warnings` | element age above 14 days, convergence warnings, the `synthetic_rf` notice |
 | `limitations` | the v1 limitation lines plus the S1 additions (route breakpoints, fixed-capacity threshold waiver, route convergence not gated, event-time accuracy), each under the condition listed in [Scope](SCOPE.md#openleo-20-s1-limitations) |
 | `summary` | headline metrics with units in their key names, per station and per route |
@@ -134,7 +134,7 @@ Column names carry units (`_s`, `_m`, `_deg`, `_mps`, `_hz`, `_db`, `_db_hz`, `_
 | `station_metrics` | station | station_index, name, visible_fraction, rf_usable_fraction, best_link_integrated_bits, best_link_handovers, best_link_mean_rate_bps, fixed_capacity_integrated_bits |
 | `routes` | (pair, model, route interval) | pair_index, model_index, source, target, model, start/end_offset_s, connected, nodes (space-separated node indices), delay_s, bottleneck_bps |
 | `route_metrics` | (pair, model) | pair_index, model_index, source, target, model, connected_fraction, integrated_bottleneck_bits, route_changes, mean_delay_connected_s |
-| `convergence` | metric | metric, class, primary, refined, absolute_difference, relative_difference, passed, gated |
+| `convergence` | metric | metric, class, primary, refined, absolute_difference, relative_difference, passed, gated, recomputed (1: the refined value was recomputed on the refined grid, passes and MODCOD segments included; 0: reused from the primary run) |
 
 `routes` and `route_metrics` exist only with a `network`; `positions` only with
 `satellite_positions: "grid"`. Satellites and stations are numbered in catalog and scenario

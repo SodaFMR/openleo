@@ -96,7 +96,7 @@ git diff --check
 `uv run pytest` deselects tests marked `slow` (the 10,000-sample kernel and gas-table sweeps,
 the full propagation-cases sweep); run them with `uv run pytest -m slow` after changing a kernel,
 the event finder or the integration. The 1000-satellite 24-hour performance benchmark is marked
-`benchmark` as well (`uv run pytest -m benchmark`, about 3 minutes on the development machine);
+`benchmark` as well (`uv run pytest -m benchmark`, about 5 minutes on the development machine);
 run it after performance-relevant changes. CI runs `-m "slow and not benchmark"`.
 
 `scripts/migration_table.py --check` reruns the shipped examples and fails when the table in

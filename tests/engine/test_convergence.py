@@ -136,6 +136,7 @@ def test_passing_gate_and_off_mode():
         "metrics": 1,
         "passed": 1,
         "failed": 0,
+        "recomputed": 1,
         "max_relative_difference": 0.0,
         "refined_step_s": 15.0,
         "fatal": 0,
@@ -165,8 +166,10 @@ def test_convergence_table_has_units_and_flags():
         "relative_difference",
         "passed",
         "gated",
+        "recomputed",
     ]
     assert table["passed"].tolist() == [0, 1]
+    assert table["recomputed"].tolist() == [1, 1]
     assert table["class"] == ("link", "link")
     assert table["gated"].tolist() == [1, 1]
     assert table["metric"] == tuple(row.metric for row in rows)
@@ -232,3 +235,19 @@ def test_error_mode_lists_only_fatal_failures():
     block, warnings = gate(rows, settings, step_s=60.0)
     assert [entry["fatal"] for entry in block["failures"]] == [False, True]
     assert len(warnings) == 2
+
+
+def test_reused_metrics_are_flagged_and_counted_apart():
+    primary = {"pair/A/1/pass_count": 1.0, "pair/A/2/pass_count": 0.0}
+    rows = compare_metrics(primary, dict(primary), SETTINGS, reused=["pair/A/2/pass_count"])
+    assert [row.recomputed for row in rows] == [True, False]
+    assert all(row.passed for row in rows)
+    assert compare_metrics(primary, dict(primary), SETTINGS)[1].recomputed is True
+    assert convergence_table(rows)["recomputed"].tolist() == [1, 0]
+    block, _ = gate(rows, SETTINGS, step_s=60.0)
+    assert block["summary"]["metrics"] == 2
+    assert block["summary"]["recomputed"] == 1
+    failing = (ConvergenceRow("pair/A/3/pass_count", 1.0, 2.0, 1.0, 0.5, False, False),)
+    block, _ = gate(failing, ConvergenceSettings("warn", 4, 0.01, 2.0), step_s=60.0)
+    assert block["failures"][0]["recomputed"] is False
+    assert block["summary"]["recomputed"] == 0

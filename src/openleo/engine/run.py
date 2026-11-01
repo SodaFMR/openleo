@@ -280,23 +280,30 @@ def _pair_links(ctx: _Context, station: int, satellite: int, elevation, pair: _P
     return _PairLinks(samples, shannon, highest, minimum_range)
 
 
-def _refined_stage(ctx: _Context, satellite: int, pairs) -> list:
-    """Convergence: per pair, the refined-grid Shannon of each pass (events on) or the whole
-    pair recomputed on the refined grid (events off)."""
+def _refined_stage(ctx: _Context, satellite: int) -> list[PairResult]:
+    """Convergence: every pair recomputed independently on the refined grid.
+
+    With events on, the passes (``find_passes``), the MODCOD segments (``acm_segments``) and
+    the Shannon quadrature are all redone on the refined grid; nothing of the primary run is
+    reused. With events off, visibility, MODCOD selection and the left-held integrals are
+    resampled on it. ``min_range_m`` is not gated, so it is not recomputed (NaN).
+    """
     offsets = ctx.refined.offsets_s
     result = []
     for station in range(ctx.station_count):
-        if ctx.events_on:
-            try:
-                result.append(_shannon_on_events(ctx, station, satellite, pairs[station], offsets))
-            except ValueError as exc:
-                raise ValueError(f"{ctx.label(station, satellite)}: {exc}") from exc
-            continue
-        elevation = ctx.geometry.elevation_deg(station, satellite, offsets)
+        elevation = (
+            None if ctx.events_on else ctx.geometry.elevation_deg(station, satellite, offsets)
+        )
         events = _pair_events(ctx, station, satellite, elevation, offsets)
-        visible = np.flatnonzero(elevation >= ctx.masks[station])
-        link = events.link or {"shannon_upper_bound_bps": np.empty(0)}
-        shannon = _shannon_on_grid(events.passes, offsets, visible, link)
+        try:
+            if ctx.events_on:
+                shannon = _shannon_on_events(ctx, station, satellite, events, offsets)
+            else:
+                visible = np.flatnonzero(elevation >= ctx.masks[station])
+                link = events.link or {"shannon_upper_bound_bps": np.empty(0)}
+                shannon = _shannon_on_grid(events.passes, offsets, visible, link)
+        except ValueError as exc:
+            raise ValueError(f"{ctx.label(station, satellite)}: {exc}") from exc
         result.append(
             PairResult(
                 station,
@@ -305,7 +312,7 @@ def _refined_stage(ctx: _Context, satellite: int, pairs) -> list:
                 events.segments,
                 events.modcod_events,
                 math.fsum(shannon),
-                math.nan,
+                max((p.max_elevation_deg for p in events.passes), default=math.nan),
                 math.nan,
             )
         )
@@ -753,18 +760,10 @@ def run(
         primary = _metrics(ctx, pairs, intervals, window_s)
         rows = ()
         if settings.mode != "off":
-            refined_parts = executor.map("refined", [(s, events[s]) for s in satellites])
-            if ctx.events_on:
-                refined_pairs = {
-                    (i, s): replace(pair, shannon_bits=math.fsum(refined_parts[s][i]))
-                    for (i, s), pair in pairs.items()
-                }
-            else:
-                refined_pairs = {
-                    (i, s): refined_parts[s][i]
-                    for s in satellites
-                    for i in range(ctx.station_count)
-                }
+            refined_parts = executor.map("refined", [(s,) for s in satellites])
+            refined_pairs = {
+                (i, s): refined_parts[s][i] for s in satellites for i in range(ctx.station_count)
+            }
             refined_intervals = (
                 _route_intervals(ctx, refined_pairs, ctx.refined.offsets_s)
                 if scenario.network is not None

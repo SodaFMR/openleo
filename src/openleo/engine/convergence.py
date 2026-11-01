@@ -1,8 +1,14 @@
 """The grid-convergence gate (design spec section 6.6).
 
 After the primary run the engine recomputes every exported integrated metric on the grid refined
-by ``refinement_factor`` (``openleo.engine.timegrid.refine``), with the same events and the same
-evaluator, and ``compare_metrics`` compares the two values of each metric.
+by ``refinement_factor`` (``openleo.engine.timegrid.refine``) with the same evaluator, and
+``compare_metrics`` compares the two values of each metric. Nothing of the primary run is
+reused (``openleo.engine.run``): with events on, every pair's passes (``find_passes``), MODCOD
+segments (``acm_segments``) and Shannon quadrature are found again from the refined grid, and the
+pair, station and route metrics are computed from them; with events off, visibility, MODCOD
+selection and the left-held integrals are resampled on it. Each row records whether its refined
+value was so recomputed (``recomputed``); a reused value would be flagged 0 and counted apart in
+``summary.recomputed``.
 
 Metric ids name what they measure: ``pair/<station>/<norad>/<metric>``,
 ``station/<station>/<metric>`` and ``route/<source>-><target>/<model>/<metric>``. The absolute
@@ -45,7 +51,7 @@ import numpy as np
 from openleo.results.model import BOOL_UNIT, Column, Table
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Collection, Mapping, Sequence
 
     from openleo.scenario.model import ConvergenceSettings
 
@@ -71,6 +77,9 @@ class ConvergenceRow:
     absolute_difference: float
     relative_difference: float
     passed: bool
+    # Whether the refined value was computed independently on the refined grid (module
+    # docstring), or reused from the primary run.
+    recomputed: bool = True
 
 
 def _is_count(metric: str) -> bool:
@@ -108,8 +117,14 @@ def compare_metrics(
     primary: Mapping[str, float],
     refined: Mapping[str, float],
     settings: ConvergenceSettings,
+    reused: Collection[str] = (),
 ) -> tuple[ConvergenceRow, ...]:
-    """One row per metric, in the order of ``primary``; both must hold the same metric ids."""
+    """One row per metric, in the order of ``primary``; both must hold the same metric ids.
+
+    ``reused`` names the metrics whose refined value was taken from the primary run rather than
+    recomputed; their rows have ``recomputed`` False.
+    """
+    reused = frozenset(reused)
     if set(primary) != set(refined):
         only_primary = sorted(set(primary) - set(refined))[:3]
         only_refined = sorted(set(refined) - set(primary))[:3]
@@ -123,9 +138,10 @@ def compare_metrics(
         p, r = float(p), float(refined[metric])
         absolute = absolute_tolerance(metric, settings)
         rel = 0.0 if _is_count(metric) else relative
+        recomputed = metric not in reused
         if math.isnan(p) or math.isnan(r):
             both = math.isnan(p) and math.isnan(r)
-            rows.append(ConvergenceRow(metric, p, r, math.nan, math.nan, both))
+            rows.append(ConvergenceRow(metric, p, r, math.nan, math.nan, both, recomputed))
             continue
         difference = abs(r - p)
         if difference == 0.0:
@@ -135,7 +151,9 @@ def compare_metrics(
         else:
             relative_difference = difference / abs(r)
         passed = difference <= max(rel * abs(r), absolute)
-        rows.append(ConvergenceRow(metric, p, r, difference, relative_difference, passed))
+        rows.append(
+            ConvergenceRow(metric, p, r, difference, relative_difference, passed, recomputed)
+        )
     return tuple(rows)
 
 
@@ -173,6 +191,8 @@ def gate(
         "metrics": len(rows),
         "passed": len(rows) - len(failures),
         "failed": len(failures),
+        # Rows whose refined value was recomputed on the refined grid, not reused.
+        "recomputed": sum(row.recomputed for row in rows),
         # None (JSON null) when some refined value is 0 and its primary is not.
         "max_relative_difference": None if infinite else max(finite, default=0.0),
         "refined_step_s": refined_step_s,
@@ -225,6 +245,7 @@ def _json_row(row: ConvergenceRow) -> dict[str, Any]:
         "refined": _json_number(row.refined),
         "absolute_difference": _json_number(row.absolute_difference),
         "relative_difference": _json_number(row.relative_difference),
+        "recomputed": row.recomputed,
     }
 
 
@@ -243,6 +264,13 @@ _COLUMNS = (
     Column("relative_difference", "f64", "1", "|refined - primary| / |refined|."),
     Column("passed", "u8", BOOL_UNIT, "Whether the metric is within its tolerance."),
     Column("gated", "u8", BOOL_UNIT, "Whether a failure stops a run in mode error (not routes)."),
+    Column(
+        "recomputed",
+        "u8",
+        BOOL_UNIT,
+        "Whether the refined value was recomputed independently on the refined grid (1) or "
+        "reused from the primary run (0).",
+    ),
 )
 
 
@@ -261,5 +289,6 @@ def convergence_table(rows: Sequence[ConvergenceRow]) -> Table:
         ),
         "passed": np.array([row.passed for row in rows], dtype=np.uint8),
         "gated": np.array([is_gated(row.metric) for row in rows], dtype=np.uint8),
+        "recomputed": np.array([row.recomputed for row in rows], dtype=np.uint8),
     }
     return Table("convergence", _COLUMNS, data)

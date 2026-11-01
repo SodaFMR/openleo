@@ -85,7 +85,10 @@ thresholds (`test_integrate.py`, `test_statistics.py`, `test_routing.py`).
 ### Convergence gate
 
 On the hydrometeor example (60 s grid, 4× refinement, 1 % relative tolerance), every gated link
-and station metric passes; the one failing metric is a route-change count, reported and not
+and station metric passes with every refined value recomputed on the 15 s grid (passes, MODCOD
+segments and Shannon quadrature found again, `recomputed` = 1 on all 3,556 rows; the largest
+relative difference of a link or station metric is about 1.4e-5, from event times that differ
+within the 1 ms tolerance); the one failing metric is a route-change count, reported and not
 gated (`test_run.py::test_convergence_passes_on_hydrometeor_example`,
 `test_hydrometeor_convergence_fails_only_on_route_changes_between_breakpoints`). A deliberately
 coarse case fails in `error` mode and publishes with warnings in `warn` mode. In S1 route metrics
@@ -108,8 +111,9 @@ Acceptance requires a bound of at most 2.5e-11 dB, a quarter of the 1e-10 dB lim
 `tests/test_performance.py` (markers `slow` and `benchmark`) runs the pinned 1,000-satellite
 Starlink catalog with 4 stations for 24 h at 30 s, events on, `itu_reference`, no network, one
 worker, with the convergence gate passing, and requires it to finish in under 5 minutes on the
-development machine (measured 174.5 s with one worker and 30.4 s with 16 when the engine was
-accepted). CI runs a 100-satellite, 2-hour variant with a 60 s bound in every job
+development machine (measured 284.3 s with one worker since the convergence gate recomputes
+every pair's passes and MODCOD segments on the 7.5 s refined grid; 174.5 s before that, when it
+reused the primary events). CI runs a 100-satellite, 2-hour variant with a 60 s bound in every job
 (`tests/test_performance_ci.py`); the 24-hour benchmark is run locally because its bound is set
 for the development machine.
 
