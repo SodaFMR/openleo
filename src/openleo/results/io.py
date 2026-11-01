@@ -131,14 +131,18 @@ def _csv_layout(columns: Sequence[Column]) -> list[tuple[Column, str | None]]:
 
 
 def _start_utc(metadata: dict, table: str) -> datetime:
-    start = (
-        metadata.get("time", {}).get("start_utc")
-        if isinstance(metadata.get("time"), dict)
-        else None
-    )
+    """``scenario.time.start_utc`` (results.json), else ``time.start_utc``, as a UTC datetime."""
+    start = None
+    for path in (("scenario", "time"), ("time",)):
+        node: Any = metadata
+        for key in path:
+            node = node.get(key) if isinstance(node, dict) else None
+        if isinstance(node, dict) and "start_utc" in node:
+            start = node["start_utc"]
+            break
     message = (
-        f"metadata time.start_utc must be an ISO 8601 UTC timestamp "
-        f"(needed for the *_utc columns of table {table!r})"
+        f"metadata scenario.time.start_utc (or time.start_utc) must be an ISO 8601 UTC "
+        f"timestamp (needed for the *_utc columns of table {table!r})"
     )
     if not isinstance(start, str):
         raise ValueError(message)  # noqa: TRY004
@@ -233,6 +237,22 @@ def _parse_column(column: Column, texts: list[str]) -> Any:
     return _parse_ints(name, column.dtype, texts)
 
 
+_CSV_FIELD_LIMIT = 1 << 28  # characters per cell; Python's default of 131072 is too small
+
+
+def _csv_rows(text: str, name: str) -> list[list[str]]:
+    previous = csv.field_size_limit(_CSV_FIELD_LIMIT)
+    try:
+        return list(csv.reader(io.StringIO(text, newline="")))
+    except csv.Error as exc:
+        raise ValueError(
+            f"CSV table {name!r} cannot be parsed (a field may exceed {_CSV_FIELD_LIMIT} "
+            f"characters): {exc}"
+        ) from exc
+    finally:
+        csv.field_size_limit(previous)
+
+
 def read_csv(data: bytes, name: str, columns: Sequence[Column]) -> Table:
     """Parse CSV written by ``csv_bytes`` back into a table with the given schema."""
     layout = _csv_layout(columns)
@@ -241,7 +261,7 @@ def read_csv(data: bytes, name: str, columns: Sequence[Column]) -> Table:
         text = data.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ValueError(f"CSV table {name!r} is not valid UTF-8: {exc}") from exc
-    rows = list(csv.reader(io.StringIO(text, newline="")))
+    rows = _csv_rows(text, name)
     if not rows or rows[0] != expected:
         raise ValueError(f"CSV table {name!r}: header does not match the columns {expected}")
     body = rows[1:]

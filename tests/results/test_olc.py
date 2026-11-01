@@ -309,3 +309,10 @@ def test_olc_accepts_a_spec_exact_header_without_description() -> None:
     table = decode_table(_raw({"table": "t", "rows": 0, "columns": [_entry()]}))
     assert table.columns[0].description == ""
     assert table.rows == 0
+
+
+def test_olc_deeply_nested_header_is_a_value_error() -> None:
+    body = b"[" * 100_000 + b"]" * 100_000
+    padded = body + b" " * (-(8 + len(body)) % 8)
+    with pytest.raises(ValueError, match="JSON"):
+        decode_table(b"OLC1" + struct.pack("<I", len(padded)) + padded)

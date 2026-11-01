@@ -496,3 +496,51 @@ def test_parquet_requires_the_optional_extra(
 
     with pytest.raises(ValueError, match=r"openleo\[parquet\]"):
         read_parquet(tmp_path / "x.parquet")
+
+
+def test_start_time_is_read_from_the_normalised_scenario(events: Table, tmp_path: Path) -> None:
+    results = Results(
+        {"scenario": {"time": {"start_utc": "2026-09-10T12:00:00Z"}}}, {"events": events}
+    )
+    _write(results, tmp_path / "run")
+    lines = (tmp_path / "run/tables/events.csv").read_text(encoding="utf-8").split("\n")
+    assert lines[1].split(",")[3] == "2026-09-10T12:01:30.250000Z"
+    # scenario.time wins over a top-level time
+    both = Results(
+        {
+            "scenario": {"time": {"start_utc": "2026-09-10T12:00:00Z"}},
+            "time": {"start_utc": "2000-01-01T00:00:00Z"},
+        },
+        {"events": events},
+    )
+    _write(both, tmp_path / "both")
+    assert (tmp_path / "both/tables/events.csv").read_bytes() == (
+        tmp_path / "run/tables/events.csv"
+    ).read_bytes()
+
+
+def test_huge_csv_field_round_trips(tmp_path: Path) -> None:
+    import csv
+
+    text = ("x" * 200_000, "y")
+    table = Table("big", (Column("v", "str", "", ""),), {"v": text})
+    _write(Results({}, {"big": table}), tmp_path / "run", formats=("csv",))
+    assert load_results(tmp_path / "run").tables["big"].data["v"] == text
+    assert csv.field_size_limit() == 131072  # the global limit is restored
+
+
+def test_csv_parse_errors_are_value_errors(
+    sample_results: Results, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import csv
+
+    from openleo.results import io as results_io
+
+    _write(sample_results, tmp_path / "run", formats=("csv",))
+
+    def broken(*args: object, **kwargs: object) -> None:
+        raise csv.Error("field larger than field limit (131072)")
+
+    monkeypatch.setattr(results_io.csv, "reader", broken)
+    with pytest.raises(ValueError, match="cannot be parsed"):
+        load_results(tmp_path / "run")

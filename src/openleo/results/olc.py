@@ -115,8 +115,10 @@ def decode_table(data: bytes) -> Table:
         raise ValueError("OLC header length exceeds the data (truncated or corrupt header)")
     try:
         header = json.loads(data[8:header_end].decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as exc:
-        raise ValueError(f"OLC header is not valid UTF-8 JSON: {exc}") from exc
+    except (UnicodeDecodeError, ValueError, RecursionError) as exc:
+        raise ValueError(
+            f"OLC header is not valid UTF-8 JSON: {type(exc).__name__}: {exc}"
+        ) from exc
     if not isinstance(header, dict) or not isinstance(header.get("columns"), list):
         raise ValueError("OLC header must be an object with a columns list")  # noqa: TRY004
     name, rows = header.get("table"), header.get("rows")
