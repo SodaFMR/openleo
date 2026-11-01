@@ -8,7 +8,7 @@ import pytest
 
 
 def path(*, liquid=0.0, rain=25.0, top=5000.0, height=1000.0, elevation=90.0, frequency=28e9):
-    api = import_module("openleo.hydrometeor_path")
+    api = import_module("openleo.physics.hydrometeor_path")
     station = api.HydrometeorStation(liquid, rain, top, 0.0)
     return api.evaluate_hydrometeor_path(frequency, elevation, height, station)
 
@@ -61,13 +61,13 @@ def test_thin_layer_does_not_lose_the_path_to_subtractive_cancellation():
 
 @pytest.mark.parametrize("stations", [[], (), (("A", {}),), (("A",),), (("", None),)])
 def test_public_config_rejects_mutable_or_malformed_stations(stations):
-    api = import_module("openleo.hydrometeor_path")
+    api = import_module("openleo.physics.hydrometeor_path")
     with pytest.raises(ValueError):
         api.HydrometeorConfig("declared_uniform_layers", stations)
 
 
 def test_public_config_rejects_duplicate_names_and_invalid_tilt():
-    api = import_module("openleo.hydrometeor_path")
+    api = import_module("openleo.physics.hydrometeor_path")
     station = api.HydrometeorStation(0.0, 0.0, 0.0, 180.0)
     with pytest.raises(ValueError):
         api.HydrometeorConfig("declared_uniform_layers", (("A", station), ("A", station)))
@@ -89,7 +89,7 @@ def test_public_config_rejects_duplicate_names_and_invalid_tilt():
     ],
 )
 def test_geometry_function_rejects_invalid_public_inputs(arguments):
-    api = import_module("openleo.hydrometeor_path")
+    api = import_module("openleo.physics.hydrometeor_path")
     with pytest.raises(ValueError):
         api.rain_layer_path_length_m(*arguments)
 

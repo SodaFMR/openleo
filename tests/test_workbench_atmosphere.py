@@ -58,7 +58,7 @@ def test_atmospheric_bundle_round_trip_requires_no_orbit_or_atmosphere_recomputa
     monkeypatch.setattr("openleo.constellation.load_catalog", forbidden)
     monkeypatch.setattr("openleo.constellation.simulate_constellation", forbidden)
     monkeypatch.setattr("openleo.constellation.build_reference_column", forbidden)
-    monkeypatch.setattr("openleo.atmospheric_path.build_reference_column", forbidden)
+    monkeypatch.setattr("openleo.physics.atmospheric_path.build_reference_column", forbidden)
     write_workbench(source, tmp_path / "reference")
     assert load_experiment(tmp_path / "reference") == source
     rows = csv.DictReader(StringIO((tmp_path / "reference/links.csv").read_text()))

@@ -144,7 +144,7 @@ def test_supported_profile_domain_endpoints_and_refinements(refinement):
 
 
 def test_atmosphere_corrects_rf_adaptation_and_delay_without_changing_geometry(monkeypatch):
-    from openleo.atmospheric_path import build_reference_column
+    from openleo.physics.atmospheric_path import build_reference_column
     from openleo.propagation import PROPAGATION_LINK_FIELDS
 
     scenario = reference_scenario()

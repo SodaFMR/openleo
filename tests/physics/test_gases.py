@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from openleo.gases import (
+from openleo.physics.gases import (
     GasesBenchmark,
     load_gases_benchmark,
     run_gases_benchmark,

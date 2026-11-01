@@ -4,7 +4,7 @@ from math import exp, isfinite
 
 import pytest
 
-from openleo.reference_atmosphere import reference_atmosphere
+from openleo.physics.reference_atmosphere import reference_atmosphere
 
 
 # Literal cached values from ITU's P.676-13 validation workbook, sheet

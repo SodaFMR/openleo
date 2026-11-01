@@ -5,8 +5,8 @@ from dataclasses import asdict, dataclass
 from math import radians, sin, sqrt
 from typing import Any
 
-from openleo.hydrometeors import cloud_slant_attenuation, rain_specific_attenuation
 from openleo.input import _non_negative_number, _object, _range, _string
+from openleo.physics.hydrometeors import cloud_slant_attenuation, rain_specific_attenuation
 
 EARTH_RADIUS_M = 6_371_000.0
 STATION_KEYS = frozenset(

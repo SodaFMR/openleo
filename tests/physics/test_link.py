@@ -2,7 +2,7 @@ from math import isfinite
 
 import pytest
 
-from openleo.physics import (
+from openleo.physics.link import (
     carrier_to_noise_density_db_hz,
     doppler_shift_hz,
     free_space_path_loss_db,

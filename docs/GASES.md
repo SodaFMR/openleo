@@ -43,8 +43,8 @@ $$
 where every $\gamma$ is in dB/km. The implementation evaluates the full Annex 1 line
 strengths, widths, line shapes, oxygen line mixing, and dry continuum with
 $\theta=300/T$. See
-[`src/openleo/gases.py`](../src/openleo/gases.py) and the fixed coefficient tuples in
-[`src/openleo/_p676_coefficients.py`](../src/openleo/_p676_coefficients.py).
+[`src/openleo/physics/gases.py`](../src/openleo/physics/gases.py) and the fixed coefficient tuples in
+[`src/openleo/physics/_p676_coefficients.py`](../src/openleo/physics/_p676_coefficients.py).
 
 ## Official Validation Benchmark
 

@@ -4,7 +4,7 @@ import pytest
 
 
 def _config(**changes):
-    from openleo.adaptation import AdaptationConfig
+    from openleo.physics.adaptation import AdaptationConfig
 
     return AdaptationConfig(
         **{
@@ -31,7 +31,7 @@ def _config(**changes):
     ],
 )
 def test_selects_etsi_normal_frame_thresholds(esn0, name, efficiency):
-    from openleo.adaptation import select_modcod
+    from openleo.physics.adaptation import select_modcod
 
     selected = select_modcod(esn0, _config())
 
@@ -40,7 +40,7 @@ def test_selects_etsi_normal_frame_thresholds(esn0, name, efficiency):
 
 
 def test_hysteresis_only_delays_upgrades_and_downgrades_immediately():
-    from openleo.adaptation import select_modcod
+    from openleo.physics.adaptation import select_modcod
 
     config = _config()
     quarter = select_modcod(0.0, config)
@@ -53,7 +53,7 @@ def test_hysteresis_only_delays_upgrades_and_downgrades_immediately():
 
 
 def test_implementation_margin_shifts_lock_and_rate_thresholds():
-    from openleo.adaptation import select_modcod
+    from openleo.physics.adaptation import select_modcod
 
     config = _config(implementation_margin_db=2.0)
     assert select_modcod(-0.351, config) is None
@@ -81,7 +81,7 @@ def test_rejects_invalid_programmatic_adaptation(field, value):
 
 
 def test_selection_and_config_reject_unsafe_state():
-    from openleo.adaptation import Modcod, select_modcod
+    from openleo.physics.adaptation import Modcod, select_modcod
 
     config = _config()
     with pytest.raises(FrozenInstanceError):

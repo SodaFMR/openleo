@@ -4,11 +4,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from openleo.gases import MAX_FREQUENCY_HZ, MIN_FREQUENCY_HZ
-from openleo.hydrometeor_path import HydrometeorConfig, hydrometeor_document, parse_hydrometeors
-from openleo.hydrometeors import CLOUD_SOURCE, RAIN_SOURCE
 from openleo.input import _object, _range, _string
-from openleo.reference_atmosphere import PROFILE_SOURCE
+from openleo.physics.gases import MAX_FREQUENCY_HZ, MIN_FREQUENCY_HZ
+from openleo.physics.hydrometeor_path import (
+    HydrometeorConfig,
+    hydrometeor_document,
+    parse_hydrometeors,
+)
+from openleo.physics.hydrometeors import CLOUD_SOURCE, RAIN_SOURCE
+from openleo.physics.reference_atmosphere import PROFILE_SOURCE
 
 PROPAGATION_KEYS = frozenset(("model", "station_heights_amsl_m", "refinement"))
 PROPAGATION_LINK_FIELDS = (

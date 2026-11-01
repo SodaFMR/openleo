@@ -5,9 +5,9 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from openleo import atmospheric_path
-from openleo.atmospheric_path import build_reference_column
-from openleo.gases import SpecificGaseousAttenuation
+from openleo.physics import atmospheric_path
+from openleo.physics.atmospheric_path import build_reference_column
+from openleo.physics.gases import SpecificGaseousAttenuation
 
 
 @pytest.mark.parametrize(

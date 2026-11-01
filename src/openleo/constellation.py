@@ -18,10 +18,7 @@ import numpy as np
 from skyfield.api import load, wgs84
 from skyfield.framelib import itrs
 
-from openleo.adaptation import ETSI_SOURCE_URL, MODCODS, AdaptationConfig, select_modcod
-from openleo.atmospheric_path import GroundPathResult, build_reference_column
 from openleo.catalog import load_catalog
-from openleo.hydrometeor_path import HydrometeorPathResult, evaluate_hydrometeor_path
 from openleo.input import (
     _finite_number,
     _ground_station,
@@ -35,7 +32,10 @@ from openleo.input import (
 )
 from openleo.model import GroundStation, OrbitSource, RadioLink, TimeWindow
 from openleo.network import NetworkConfig, parse_network
-from openleo.physics import (
+from openleo.physics.adaptation import ETSI_SOURCE_URL, MODCODS, AdaptationConfig, select_modcod
+from openleo.physics.atmospheric_path import GroundPathResult, build_reference_column
+from openleo.physics.hydrometeor_path import HydrometeorPathResult, evaluate_hydrometeor_path
+from openleo.physics.link import (
     carrier_to_noise_density_db_hz,
     doppler_shift_hz,
     free_space_path_loss_db,

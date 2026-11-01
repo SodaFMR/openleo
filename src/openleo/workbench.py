@@ -14,9 +14,7 @@ from math import isclose, log10
 from pathlib import Path
 from string import Template
 
-from openleo.adaptation import MODCODS
 from openleo.constellation import parse_constellation
-from openleo.hydrometeor_path import HYDROMETEOR_LINK_FIELDS, rain_layer_path_length_m
 from openleo.input import (
     GROUND_STATION_KEYS,
     _finite_number,
@@ -31,7 +29,9 @@ from openleo.input import (
     _utc,
 )
 from openleo.network import ROUTE_MODELS, _ground_edges, _list, _position
-from openleo.physics import SPEED_OF_LIGHT_MPS
+from openleo.physics.adaptation import MODCODS
+from openleo.physics.hydrometeor_path import HYDROMETEOR_LINK_FIELDS, rain_layer_path_length_m
+from openleo.physics.link import SPEED_OF_LIGHT_MPS
 from openleo.propagation import PROPAGATION_LINK_FIELDS, propagation_metadata
 
 MAX_ARTIFACT_BYTES = 64_000_000

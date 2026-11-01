@@ -13,13 +13,13 @@ from math import asin, atan2, ceil, cos, expm1, floor, hypot, log1p, radians, si
 import numpy as np
 from numpy.typing import NDArray
 
-from openleo.gases import (
+from openleo.physics.gases import (
     MAX_FREQUENCY_HZ,
     MIN_FREQUENCY_HZ,
     _validate_finite,
     specific_gaseous_attenuation,
 )
-from openleo.reference_atmosphere import reference_atmosphere
+from openleo.physics.reference_atmosphere import reference_atmosphere
 
 EARTH_RADIUS_KM = 6_371.0
 SPEED_OF_LIGHT_M_S = 299_792_458.0

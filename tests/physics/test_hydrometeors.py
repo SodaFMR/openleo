@@ -10,7 +10,7 @@ REFERENCE_CASES = Path("examples/atmosphere/hydrometeors_reference.json")
 
 
 def _api():
-    return import_module("openleo.hydrometeors")
+    return import_module("openleo.physics.hydrometeors")
 
 
 def test_source_metadata_identifies_the_verified_official_pdfs() -> None:

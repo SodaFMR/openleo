@@ -14,7 +14,7 @@ from skyfield.api import load, wgs84
 from openleo.input import MAX_TIME_GRID_SAMPLES
 from openleo.model import RadioLink, Scenario
 from openleo.orbit import load_orbit
-from openleo.physics import (
+from openleo.physics.link import (
     carrier_to_noise_density_db_hz,
     doppler_shift_hz,
     free_space_path_loss_db,

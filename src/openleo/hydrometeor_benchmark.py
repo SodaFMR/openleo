@@ -11,13 +11,13 @@ from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from openleo.hydrometeors import (
+from openleo.input import _object, _string
+from openleo.physics.hydrometeors import (
     CLOUD_SOURCE,
     RAIN_SOURCE,
     cloud_slant_attenuation,
     rain_specific_attenuation,
 )
-from openleo.input import _object, _string
 from openleo.workbench import _csv, _json, _read, _unique_object
 
 _RAIN_INPUTS = ("frequency_hz", "rain_rate_mm_h", "elevation_deg", "polarization_tilt_deg")

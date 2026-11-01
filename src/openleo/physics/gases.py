@@ -20,8 +20,8 @@ from numbers import Real
 from pathlib import Path
 from typing import Any
 
-from openleo._p676_coefficients import OXYGEN_LINES, WATER_VAPOUR_LINES
 from openleo.output import _float, _json_dumps
+from openleo.physics._p676_coefficients import OXYGEN_LINES, WATER_VAPOUR_LINES
 
 MAX_BENCHMARK_BYTES = 1_000_000
 MIN_FREQUENCY_HZ = 1e9

@@ -18,7 +18,7 @@ the scenario file and archived bytes must match their declared SHA-256.
 [`constellation.py`](../src/openleo/constellation.py) validate inputs.
 [`input.py`](../src/openleo/input.py) provides common station, RF, UTC, units,
 and finite-domain validation; [`propagation.py`](../src/openleo/propagation.py)
-and [`hydrometeor_path.py`](../src/openleo/hydrometeor_path.py) validate
+and [`physics/hydrometeor_path.py`](../src/openleo/physics/hydrometeor_path.py) validate
 atmospheric declarations. Dataclasses in [`model.py`](../src/openleo/model.py)
 and the model modules represent immutable declared values.
 
@@ -77,7 +77,7 @@ See [Workbench](WORKBENCH.md), [Methods](METHODS.md),
 Single-pass, sensitivity, and homogeneous-gas summaries also use schema `1`;
 their existing summary format does not require a `kind`. They retain their
 respective [output](../src/openleo/output.py),
-[sensitivity](../src/openleo/sensitivity.py), and [gases](../src/openleo/gases.py)
+[sensitivity](../src/openleo/sensitivity.py), and [gases](../src/openleo/physics/gases.py)
 contracts, described in [Methods](METHODS.md), [Sensitivity](SENSITIVITY.md),
 and [Gases](GASES.md). Study and packet manifests have their own schema-1
 kinds; they fingerprint files rather than changing the embedded result version.

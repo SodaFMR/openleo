@@ -25,7 +25,7 @@ from openleo.input import (
     _string,
     _utc,
 )
-from openleo.physics import propagation_delay_s
+from openleo.physics.link import propagation_delay_s
 
 NETWORK_KEYS = frozenset(
     (

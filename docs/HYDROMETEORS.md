@@ -47,7 +47,7 @@ expected-result fields. All numerical inputs must satisfy the model domains belo
 ## Public API And Units
 
 ```python
-from openleo.hydrometeors import (
+from openleo.physics.hydrometeors import (
     cloud_slant_attenuation,
     rain_specific_attenuation,
 )
