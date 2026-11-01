@@ -93,6 +93,8 @@ def load_gases_benchmark(path: str | Path) -> GasesBenchmark:
         raise ValueError(f"{benchmark_path}: benchmark JSON must be UTF-8") from exc
     except JSONDecodeError as exc:
         raise ValueError(f"{benchmark_path}: invalid JSON: {exc.msg}") from exc
+    except RecursionError as exc:
+        raise ValueError(f"{benchmark_path}: invalid JSON: nested too deeply") from exc
     except OSError as exc:
         raise ValueError(f"{benchmark_path}: could not load benchmark: {exc}") from exc
     except (KeyError, TypeError) as exc:

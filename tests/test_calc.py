@@ -64,3 +64,16 @@ def test_calculate_gases_returns_the_written_paths(tmp_path):
     assert csv_path.name == "gaseous-specific-attenuation.csv"
     assert summary_path.name == "gaseous-specific-attenuation-summary.json"
     assert len(result.cases) == 5
+
+
+def test_deeply_nested_gases_config_is_a_value_error(tmp_path, monkeypatch):
+    # The JSON decoder raises RecursionError on deeply nested input. It is simulated: real deep
+    # recursion can also overflow inside the coverage tracer, which then stops measuring.
+    def too_deep(*args, **kwargs):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    path = tmp_path / "deep.json"
+    path.write_text("[[[]]]", encoding="utf-8")
+    monkeypatch.setattr(gases.json, "loads", too_deep)
+    with pytest.raises(ValueError, match=r"deep\.json: invalid JSON: nested too deeply$"):
+        gases.load_gases_benchmark(path)
