@@ -275,7 +275,9 @@ implementation agreement, not local meteorological accuracy or measured RF perfo
 spherical-shell paths, zero rain, supported domains, finite arithmetic, and conversion from dB/km
 to dB. The engine applies the declared layers through the same evaluator as every other loss,
 and the v1 equivalence fixtures of the hydrometeor example cover the cloud, rain and total
-atmospheric fields of every sample. These establish implementation consistency for declared
+atmospheric fields of every visible sample of stations 0-2 and satellites 0-9 (3 stations × 10
+satellites, at every grid time); other pairs enter only through the station statistics compared
+with v1. These establish implementation consistency for declared
 uniform layers. They do not establish local weather, P.618 effective paths or exceedance
 statistics, atmospheric emission, or physical RF accuracy. See
 [Coupled propagation](COUPLED_PROPAGATION.md).

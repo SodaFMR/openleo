@@ -278,8 +278,8 @@ relative tolerance `5e-13`; temperature and total/dry pressure also allow an
 absolute floor of `1e-12` in their respective units. Density and vapour pressure
 have no absolute tolerance floor, and refractive index uses absolute tolerance
 `3e-16`. The executable references are
-[`test_reference_atmosphere.py`](../tests/test_reference_atmosphere.py) and
-[`test_atmospheric_path.py`](../tests/test_atmospheric_path.py).
+[`test_reference_atmosphere.py`](../tests/physics/test_reference_atmosphere.py) and
+[`test_atmospheric_path.py`](../tests/physics/test_atmospheric_path.py).
 
 The official workbook is
 [`CG-3M3J-13-ValEx-Rev8.3.0.xlsx`](https://www.itu.int/en/ITU-R/study-groups/rsg3/rwp3m/Validation%20Example/CG-3M3J-13-ValEx-Rev8.3.0.xlsx),
