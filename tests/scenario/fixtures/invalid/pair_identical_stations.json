@@ -1,5 +1,7 @@
 {
   "error_startswith": "/network/pairs/0/target",
+  "schema_expressible": false,
+  "parser_only_rule": "source and target of a pair differ: a comparison between two values",
   "scenario": {
     "schema": "openleo.scenario/2",
     "name": "Global LEO declared hydrometeor sensitivity experiment",

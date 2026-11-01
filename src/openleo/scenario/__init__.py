@@ -7,6 +7,7 @@ from openleo.scenario.parse import (
     parse_scenario,
     scenario_document,
 )
+from openleo.scenario.schema import scenario_json_schema
 
 __all__ = [
     "SCENARIO_SCHEMA_ID",
@@ -14,4 +15,5 @@ __all__ = [
     "load_scenario",
     "parse_scenario",
     "scenario_document",
+    "scenario_json_schema",
 ]

@@ -1,5 +1,7 @@
 {
   "error_startswith": "/time/step_s",
+  "schema_expressible": false,
+  "parser_only_rule": "step_s <= stop_utc - start_utc: date arithmetic",
   "scenario": {
     "schema": "openleo.scenario/2",
     "name": "Global LEO declared hydrometeor sensitivity experiment",

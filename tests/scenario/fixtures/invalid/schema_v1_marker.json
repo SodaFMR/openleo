@@ -1,6 +1,7 @@
 {
   "error_startswith": "/schema",
   "error_contains": "openleo scenario upgrade",
+  "schema_expressible": true,
   "scenario": {
     "schema": "openleo.scenario/1",
     "name": "Global LEO declared hydrometeor sensitivity experiment",

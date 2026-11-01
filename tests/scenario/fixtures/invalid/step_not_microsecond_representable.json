@@ -1,5 +1,7 @@
 {
   "error_startswith": "/time/step_s",
+  "schema_expressible": false,
+  "parser_only_rule": "step_s a whole number of microseconds within the parser's tolerance: multipleOf on binary floats is not equivalent",
   "scenario": {
     "schema": "openleo.scenario/2",
     "name": "Global LEO declared hydrometeor sensitivity experiment",

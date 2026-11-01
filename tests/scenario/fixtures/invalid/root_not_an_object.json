@@ -1,5 +1,6 @@
 {
   "error_startswith": "/",
+  "schema_expressible": true,
   "scenario": [
     {
       "schema": "openleo.scenario/2",

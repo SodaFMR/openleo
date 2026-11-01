@@ -1,5 +1,7 @@
 {
   "error_startswith": "/radio/channel_bandwidth_hz",
+  "schema_expressible": false,
+  "parser_only_rule": "channel_bandwidth_hz >= symbol_rate_baud * (1 + rolloff): arithmetic across three fields",
   "scenario": {
     "schema": "openleo.scenario/2",
     "name": "Global LEO declared hydrometeor sensitivity experiment",

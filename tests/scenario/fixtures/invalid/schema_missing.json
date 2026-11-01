@@ -1,5 +1,6 @@
 {
   "error_startswith": "/schema",
+  "schema_expressible": true,
   "scenario": {
     "name": "Global LEO declared hydrometeor sensitivity experiment",
     "description": "optional free text",

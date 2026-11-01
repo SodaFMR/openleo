@@ -1,6 +1,7 @@
 {
   "error_startswith": "/schema",
   "error_contains": "openleo scenario upgrade",
+  "schema_expressible": true,
   "scenario": {
     "name": "reference-pass",
     "orbit": {

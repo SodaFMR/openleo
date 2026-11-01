@@ -1,5 +1,7 @@
 {
   "error_startswith": "/propagation/hydrometeors/stations/Madrid/rain_top_height_amsl_m",
+  "schema_expressible": false,
+  "parser_only_rule": "rain_top_height_amsl_m >= the station's height_amsl_m: a join on the station name between two objects",
   "scenario": {
     "schema": "openleo.scenario/2",
     "name": "Global LEO declared hydrometeor sensitivity experiment",

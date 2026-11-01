@@ -27,6 +27,8 @@ from openleo.physics.hydrometeor_path import HydrometeorConfig
 
 ROUTE_MODELS = ("minimum_delay", "maximum_rate", "fixed_capacity")
 MAX_NORAD_ID = 2_147_483_647
+# Dataclass fields of Scenario that are not keys of the document.
+NOT_DOCUMENT_FIELDS = frozenset(("source_path", "source_sha256"))
 
 
 def _meta(description: str, unit: str | None = None, **schema: Any) -> dict[str, Any]:

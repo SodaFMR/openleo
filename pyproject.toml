@@ -24,6 +24,7 @@ openleo = "openleo.cli:main"
 [dependency-groups]
 dev = [
     "build>=1.3",
+    "jsonschema>=4.25",
     "pytest>=8.4",
     "pytest-cov>=6.2",
     "ruff>=0.12",

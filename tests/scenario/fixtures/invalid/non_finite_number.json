@@ -1,5 +1,7 @@
 {
   "error_startswith": "/radio/eirp_dbw",
+  "schema_expressible": false,
+  "parser_only_rule": "JSON has no non-finite numbers; a validator sees whatever its JSON reader makes of 1e999 (infinity in Python)",
   "scenario": {
     "schema": "openleo.scenario/2",
     "name": "Global LEO declared hydrometeor sensitivity experiment",

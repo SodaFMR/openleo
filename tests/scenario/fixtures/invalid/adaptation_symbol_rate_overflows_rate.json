@@ -1,5 +1,7 @@
 {
   "error_startswith": "/adaptation/symbol_rate_baud",
+  "schema_expressible": false,
+  "parser_only_rule": "symbol_rate_baud x maximum MODCOD efficiency must be finite (overflow guard): arithmetic on two values, while the metadata bounds only the symbol rate from below",
   "scenario": {
     "schema": "openleo.scenario/2",
     "name": "Global LEO declared hydrometeor sensitivity experiment",

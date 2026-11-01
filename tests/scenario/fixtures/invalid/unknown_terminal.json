@@ -1,5 +1,7 @@
 {
   "error_startswith": "/ground_segment/stations/1/terminal",
+  "schema_expressible": false,
+  "parser_only_rule": "a station's terminal must be a key of terminals: a reference from a value to the keys of another object",
   "scenario": {
     "schema": "openleo.scenario/2",
     "name": "Global LEO declared hydrometeor sensitivity experiment",

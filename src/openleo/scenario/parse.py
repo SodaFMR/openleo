@@ -44,6 +44,7 @@ from openleo.physics.hydrometeor_path import (
     parse_hydrometeors,
 )
 from openleo.scenario.model import (
+    NOT_DOCUMENT_FIELDS,
     Adaptation,
     CatalogSource,
     ConvergenceSettings,
@@ -69,7 +70,6 @@ ITU_MINIMUM_ELEVATION_DEG = 5.0
 HYDROMETEOR_FREQUENCY_HZ = (1e9, 200e9)
 # Top-level keys of a v1 scenario or constellation file (v1 files carry no schema key).
 _V1_KEYS = frozenset(("orbit", "ground_station", "stations", "time_window", "radio_link"))
-_NOT_DOCUMENT_FIELDS = frozenset(("source_path", "source_sha256"))
 
 
 def load_scenario(path: str | Path) -> Scenario:
@@ -574,7 +574,7 @@ class _Section:
     ) -> None:
         if not isinstance(raw, Mapping):
             raise ValueError(f"{pointer or '/'} must be a JSON object")
-        fields = [name for name in _metadata(owner) if name not in _NOT_DOCUMENT_FIELDS]
+        fields = [name for name in _metadata(owner) if name not in NOT_DOCUMENT_FIELDS]
         optional = frozenset(name for name in fields if "default" in _metadata(owner)[name])
         _object(raw, frozenset(fields) - optional | frozenset(extra), pointer, optional)
         self.raw, self.pointer, self.owner = raw, pointer, owner
