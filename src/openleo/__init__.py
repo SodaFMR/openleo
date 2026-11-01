@@ -1,5 +1,7 @@
 """OpenLEO link budget tools."""
 
+__version__ = "2.0.0.dev0"
+
 from openleo.cli import main
 from openleo.constellation import (
     ConstellationScenario,
@@ -8,7 +10,7 @@ from openleo.constellation import (
     scenario_document,
     simulate_constellation,
 )
-from openleo.input import load_scenario
+from openleo.engine.run import run, save_run
 from openleo.model import GroundStation, OrbitSource, Provenance, RadioLink, Scenario, TimeWindow
 from openleo.network import NetworkConfig, add_network
 from openleo.orbit import LoadedOrbit, load_orbit
@@ -24,6 +26,8 @@ from openleo.physics.gases import (
     specific_gaseous_attenuation,
     write_gases_result,
 )
+from openleo.results import Results, load_results
+from openleo.scenario import load_scenario
 from openleo.sensitivity import (
     SensitivityBaselineContext,
     SensitivityCase,
@@ -51,6 +55,7 @@ __all__ = [
     "OrbitSource",
     "Provenance",
     "RadioLink",
+    "Results",
     "Scenario",
     "SensitivityBaselineContext",
     "SensitivityCase",
@@ -63,18 +68,22 @@ __all__ = [
     "SpecificGaseousAttenuation",
     "TimeWindow",
     "TraceRow",
+    "__version__",
     "add_network",
     "load_constellation",
     "load_experiment",
     "load_gases_benchmark",
     "load_orbit",
+    "load_results",
     "load_scenario",
     "load_sensitivity_study",
     "main",
     "parse_constellation",
     "render_workbench",
+    "run",
     "run_gases_benchmark",
     "run_sensitivity",
+    "save_run",
     "scenario_document",
     "select_modcod",
     "simulate_constellation",

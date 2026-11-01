@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openleo-link"
-version = "1.0.0"
+version = "2.0.0.dev0"
 description = "Reproducible LEO propagation, constellation and packet experiments with a scientific 3D workbench"
 readme = "README.md"
 license = "MIT"
