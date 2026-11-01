@@ -11,6 +11,7 @@ import json
 import math
 import os
 import re
+import shutil
 from hashlib import sha256
 from pathlib import Path
 
@@ -46,6 +47,20 @@ def _upgrade(raw: dict, path: Path = IRIDIUM_V1, output_dir: Path = V2_DIR) -> d
 def _normalised_text(document: dict, output_dir: Path, name: str) -> str:
     scenario = parse_scenario(document, output_dir / name, SHA)
     return json.dumps(scenario_document(scenario), indent=2, ensure_ascii=False) + "\n"
+
+
+def _example_tree(root: Path) -> Path:
+    """The ISS v1 example and its catalog copied under ``root``, so that paths between the
+    scenario, the catalog and an output folder never cross a drive (the checkout and the
+    temporary directory can be on different drives on Windows). Returns the v1 file."""
+    (root / "examples" / "scenarios").mkdir(parents=True)
+    (root / "examples" / "data").mkdir()
+    shutil.copyfile(
+        EXAMPLES / "data" / "iss_2026-08-30.csv", root / "examples" / "data" / "iss_2026-08-30.csv"
+    )
+    v1 = root / "examples" / "scenarios" / "iss_cartagena.json"
+    shutil.copyfile(ISS_V1, v1)
+    return v1
 
 
 # --- the four examples --------------------------------------------------------------------------
@@ -116,20 +131,25 @@ def test_upgrade_is_deterministic(path: Path, tmp_path: Path) -> None:
 
 
 def test_upgrade_rewrites_catalog_path_relative_to_output(tmp_path: Path) -> None:
-    folder = tmp_path / "deep" / "nested"
+    v1 = _example_tree(tmp_path)
+    folder = tmp_path / "examples" / "deep" / "nested"
     folder.mkdir(parents=True)
     output = folder / "iss.json"
-    text = upgrade_file(ISS_V1, output)
+    text = upgrade_file(v1, output)
     catalog = json.loads(text)["space_segment"]["catalogs"][0]
-    expected = Path(os.path.relpath(EXAMPLES / "data" / "iss_2026-08-30.csv", folder.resolve()))
-    assert catalog["path"] == expected.as_posix()
-    assert catalog["path"].startswith("../../")
-    assert load_scenario(output).space_segment.catalogs[0].path == (
-        EXAMPLES / "data" / "iss_2026-08-30.csv"
+    assert catalog["path"] == "../../data/iss_2026-08-30.csv"
+    assert (
+        load_scenario(output).space_segment.catalogs[0].path
+        == (tmp_path / "examples" / "data" / "iss_2026-08-30.csv").resolve()
     )
     # Without an output file the paths stay relative to the v1 file's own directory.
-    assert json.loads(upgrade_file(ISS_V1, None))["space_segment"]["catalogs"][0]["path"] == (
+    assert json.loads(upgrade_file(v1, None))["space_segment"]["catalogs"][0]["path"] == (
         "../data/iss_2026-08-30.csv"
+    )
+    # An output in the catalog's own folder needs no "..".
+    sibling = tmp_path / "examples" / "data" / "iss.json"
+    assert json.loads(upgrade_file(v1, sibling))["space_segment"]["catalogs"][0]["path"] == (
+        "iss_2026-08-30.csv"
     )
 
 
@@ -771,6 +791,24 @@ def test_upgrade_file_writes_exactly_the_text_it_returns(tmp_path: Path) -> None
     assert load_scenario(output).name == _v1(ISS_V1)["name"]
 
 
+def test_upgrade_file_writes_lf_line_endings_on_every_os(tmp_path: Path, monkeypatch) -> None:
+    # Text mode would turn "\n" into "\r\n" on Windows and change the scenario's SHA-256
+    # there. A Linux run cannot see that, so look at how the file is written as well as at it.
+    calls = []
+    original = Path.write_text
+
+    def spy(self, data, encoding=None, errors=None, newline=None):
+        calls.append(newline)
+        return original(self, data, encoding=encoding, errors=errors, newline=newline)
+
+    monkeypatch.setattr(Path, "write_text", spy)
+    output = tmp_path / "iss.json"
+    text = upgrade_file(ISS_V1, output)
+    assert calls == ["\n"]
+    assert b"\r" not in output.read_bytes()
+    assert sha256(output.read_bytes()).hexdigest() == sha256(text.encode("utf-8")).hexdigest()
+
+
 def test_upgrade_file_without_an_output_writes_nothing(tmp_path: Path) -> None:
     raw = _v1(ISS_V1)
     raw["orbit"]["path"] = str(EXAMPLES / "data" / "iss_2026-08-30.csv")
@@ -794,19 +832,16 @@ def test_upgrade_file_keeps_non_ascii_text_readable(tmp_path: Path) -> None:
 
 
 def test_an_absolute_v1_catalog_path_is_made_relative(tmp_path: Path) -> None:
-    raw = _v1(ISS_V1)
-    raw["orbit"]["path"] = str(EXAMPLES / "data" / "iss_2026-08-30.csv")
-    source = tmp_path / "iss.json"
-    source.write_text(json.dumps(raw), encoding="utf-8")
-    catalog = json.loads(upgrade_file(source, tmp_path / "out.json"))["space_segment"]["catalogs"][
-        0
-    ]
-    assert (
-        catalog["path"]
-        == Path(
-            os.path.relpath(EXAMPLES / "data" / "iss_2026-08-30.csv", tmp_path.resolve())
-        ).as_posix()
-    )
+    v1 = _example_tree(tmp_path)
+    catalog_file = tmp_path / "examples" / "data" / "iss_2026-08-30.csv"
+    raw = json.loads(v1.read_text(encoding="utf-8"))
+    raw["orbit"]["path"] = str(catalog_file)  # absolute
+    v1.write_text(json.dumps(raw), encoding="utf-8")
+    (tmp_path / "out").mkdir()
+    catalog = json.loads(upgrade_file(v1, tmp_path / "out" / "iss.json"))["space_segment"][
+        "catalogs"
+    ][0]
+    assert catalog["path"] == "../examples/data/iss_2026-08-30.csv"
 
 
 def test_upgrade_file_reports_an_upgrade_that_is_not_valid_v2_with_the_v2_pointer(

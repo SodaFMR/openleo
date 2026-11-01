@@ -209,6 +209,7 @@ def upgrade_file(path: Path, output: Path | None = None) -> str:
     The text is deterministic: the normalised document (``scenario_document`` of the parsed
     upgrade, so every default is explicit), 2-space indented, with a trailing newline. Catalog
     paths are relative to ``output``'s directory, or to ``path``'s when there is no ``output``.
+    The file is written as UTF-8 with LF line endings on every OS, so its SHA-256 is the same.
     """
     path = Path(path)
     raw, source_sha256 = _load_document(path)
@@ -223,7 +224,7 @@ def upgrade_file(path: Path, output: Path | None = None) -> str:
     text = json.dumps(scenario_document(scenario), indent=2, ensure_ascii=False) + "\n"
     if output is not None:
         try:
-            target.write_text(text, encoding="utf-8")
+            target.write_text(text, encoding="utf-8", newline="\n")  # LF on every OS
         except OSError as exc:
             raise ValueError(f"{target}: could not write the upgraded scenario: {exc}") from exc
     return text

@@ -26,8 +26,10 @@ ARCHIVED = "archived input"
 DECLARED = "declared assumption"
 MODEL = "model choice"
 
-# Scope limitations. Verbatim the strings of openleo.constellation._limitations (the v1 engine),
-# which holds a test to them, kept here so that v2 does not need the v1 engine to say them.
+# Scope limitations. Verbatim the strings of openleo.constellation._limitations (the v1 engine) and
+# openleo.output.LIMITATIONS (the Shannon caveat), which a test holds them to, kept here so that
+# v2 does not need the v1 engine to say them. The route-breakpoint line is the v2 statement of
+# design spec 6.5.
 _ARCHIVED_GP = (
     "Archived GP elements are propagated predictions, not measured satellite positions; age is "
     "reported without an uncertainty distribution."
@@ -58,6 +60,14 @@ _ATMOSPHERE = {
 }
 _SAMPLED_EVENTS = (
     "Contact boundaries and route choices are sampled; finer events between samples can be missed."
+)
+_ROUTES_BETWEEN_BREAKPOINTS = (
+    "Route choices are evaluated at event-aware breakpoints and held between them; "
+    "inter-satellite range and occlusion changes between breakpoints are not resolved."
+)
+# The wording of openleo.output.LIMITATIONS, the v1 summary.
+_SHANNON_UPPER_BOUND = (
+    "Shannon-Hartley capacity is a theoretical upper bound, not throughput or achieved goodput"
 )
 _POSIX_LEAP_SECONDS = (
     "UTC datetime integration uses the POSIX convention; inserted leap seconds are not explicit "
@@ -96,9 +106,13 @@ _LEGEND = (
 def limitations(scenario: Scenario) -> list[str]:
     """The scope limitations that apply to this scenario, in the order the v1 engine states them.
 
-    Which apply depends on the propagation model (and its hydrometeors), on whether events are
-    located (a sampled-contact limit holds only when they are not) and on whether there is a
-    network (the path-bottleneck limit).
+    Which apply depends on the propagation model (and its hydrometeors), and on routing:
+
+    - events disabled: the v1 sampled-contact line, whatever the network;
+    - events enabled with a network: routes are held between event-aware breakpoints, and
+      inter-satellite range and occlusion changes between them are not resolved (spec 6.5);
+    - events enabled without a network: no line;
+    - a network adds the path-bottleneck limit; every scenario carries the Shannon caveat.
     """
     propagation = scenario.propagation
     reference = propagation.model == "itu_reference"
@@ -109,12 +123,19 @@ def limitations(scenario: Scenario) -> list[str]:
         if reference
         else "free_space"
     )
+    if not scenario.time.events.enabled:
+        route_limit = [_SAMPLED_EVENTS]
+    elif scenario.network is not None:
+        route_limit = [_ROUTES_BETWEEN_BREAKPOINTS]
+    else:
+        route_limit = []
     return [
         _ARCHIVED_GP,
         _DECLARED_RF,
         _SYNTHETIC_ADAPTATION,
+        _SHANNON_UPPER_BOUND,
         _ATMOSPHERE[atmosphere],
-        *([] if scenario.time.events.enabled else [_SAMPLED_EVENTS]),
+        *route_limit,
         _POSIX_LEAP_SECONDS,
         *([_NETWORK_SNAPSHOTS] if scenario.network is not None else []),
         *(_REFERENCE_ATMOSPHERE if reference else ()),

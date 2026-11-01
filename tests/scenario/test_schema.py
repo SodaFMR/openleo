@@ -310,7 +310,10 @@ def test_description_lists_the_parser_only_rules() -> None:
         "of at least 5 deg",
         "every station has height_amsl_m",
         "propagation.hydrometeors requires itu_reference",
-        "it enforces every rule of this schema, except the stricter limits listed in (11)",
+        "it enforces every rule of this schema, except the stricter limits listed in (11) and (12)",
+        "(12) timestamps",
+        "only the RFC 3339 form YYYY-MM-DDTHH:MM:SS[.frac]Z",
+        "so the parser alone accepts the other ISO 8601 UTC forms",
         "the parser alone accepts bracketed host literals of every kind (IPv6 and IPvFuture)",
     ):
         assert phrase in description, phrase
@@ -620,6 +623,62 @@ def test_both_catalog_urls_share_one_fragment() -> None:
 def test_the_schema_is_stricter_than_the_parser_only_on_the_documented_urls(url: str) -> None:
     schema_says, parser_says = _url_verdicts(url)
     assert (schema_says, parser_says) == (False, True)
+
+
+TIMESTAMP_POINTERS = [
+    "/time/start_utc",
+    "/time/stop_utc",
+    "/space_segment/catalogs/0/retrieved_at_utc",
+]
+# ISO 8601 UTC forms that datetime.fromisoformat reads and RFC 3339 does not allow.
+PARSER_ONLY_TIMESTAMPS = {
+    "/time/start_utc": [
+        "2026-09-10 12:00:00Z",  # a space for T
+        "20260910T120000Z",  # the basic form
+        "2026-09-10T12:00Z",  # no seconds
+        "2026-09-10T12:00:00,5Z",  # a comma for the decimal point
+    ],
+    "/time/stop_utc": [
+        "2026-09-10 14:00:00Z",
+        "20260910T140000Z",
+        "2026-09-10T14:00Z",
+        "2026-09-10T14:00:00,5Z",
+    ],
+    "/space_segment/catalogs/0/retrieved_at_utc": [
+        "2026-09-10 22:00:25Z",
+        "20260910T220025Z",
+        "2026-09-10T22:00Z",
+        "2026-09-10T22:00:25,5Z",
+    ],
+}
+
+
+def test_the_schema_is_stricter_than_the_parser_only_on_the_documented_timestamps(
+    tmp_path: Path,
+) -> None:
+    assert set(PARSER_ONLY_TIMESTAMPS) == set(TIMESTAMP_POINTERS)
+    for pointer, values in PARSER_ONLY_TIMESTAMPS.items():
+        for value in values:
+            document = _edit(_spec_example(), (pointer, value))
+            assert parser_accepts(document, tmp_path), (pointer, value)
+            assert not schema_accepts(document), (pointer, value)
+
+
+def test_the_documented_timestamp_forms_are_the_only_ones_the_schema_is_stricter_on(
+    tmp_path: Path,
+) -> None:
+    # the RFC 3339 form itself, with and without a fraction, is accepted by both
+    for pointer in TIMESTAMP_POINTERS:
+        original = _get_pointer(_spec_example(), pointer)
+        for value in (original, original[:-1] + ".25Z"):
+            document = _edit(_spec_example(), (pointer, value))
+            assert schema_accepts(document) and parser_accepts(document, tmp_path), (pointer, value)
+
+
+def _get_pointer(document: Any, pointer: str) -> Any:
+    for token in pointer.strip("/").split("/"):
+        document = document[int(token) if isinstance(document, list) else token]
+    return document
 
 
 def _random_urls(alphabet: list[str], count: int, seed: int):

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from openleo.constellation import _limitations as v1_limitations
+from openleo.output import LIMITATIONS as V1_OUTPUT_LIMITATIONS
 from openleo.physics.adaptation import ETSI_SOURCE_URL, MODCODS
 from openleo.scenario.explain import explain, limitations
 from openleo.scenario.model import ConvergenceSettings, EventSettings
@@ -251,6 +252,13 @@ V1_SAMPLED = (
     "Contact boundaries and route choices are sampled; finer events between samples can be missed."
 )
 V1_NETWORK = "Snapshot path bottlenecks omit link scheduling"
+ROUTE_BREAKPOINTS = (
+    "Route choices are evaluated at event-aware breakpoints and held between them; "
+    "inter-satellite range and occlusion changes between breakpoints are not resolved."
+)
+SHANNON = (
+    "Shannon-Hartley capacity is a theoretical upper bound, not throughput or achieved goodput"
+)
 
 
 @pytest.mark.parametrize(
@@ -278,18 +286,68 @@ def test_limitations_follow_the_propagation_model(name: str, model_phrase: str) 
 @pytest.mark.parametrize(
     "name", ["iridium_global", "iridium_global_reference", "iridium_global_hydrometeors"]
 )
-def test_limitations_are_the_v1_strings_verbatim_when_nothing_is_dropped(name: str) -> None:
+def test_limitations_are_the_v1_strings_verbatim_apart_from_the_shannon_caveat(name: str) -> None:
     scenario = _with_time(_scenario(name), events=EventSettings(enabled=False))
     assert scenario.network is not None
     propagation = None if scenario.propagation.model == "free_space" else scenario.propagation
-    assert limitations(scenario) == v1_limitations(propagation)
+    ours = limitations(scenario)
+    assert [item for item in ours if item != SHANNON] == v1_limitations(propagation)
+    assert ours.count(SHANNON) == 1
 
 
-def test_the_sampled_contacts_limit_applies_only_without_event_localisation() -> None:
+def _no_network(scenario):
+    return dataclasses.replace(scenario, network=None)
+
+
+def test_events_disabled_keeps_the_v1_sampled_line_verbatim_with_or_without_a_network() -> None:
+    scenario = _with_time(_scenario("iridium_global"), events=EventSettings(enabled=False))
+    for variant in (scenario, _no_network(scenario)):
+        items = limitations(variant)
+        assert V1_SAMPLED in items
+        assert ROUTE_BREAKPOINTS not in items
+        assert items.count(V1_SAMPLED) == 1
+    assert V1_SAMPLED == v1_limitations(None)[4]  # the line is the v1 one, not a paraphrase
+
+
+def test_events_enabled_with_a_network_says_routes_are_held_between_breakpoints() -> None:
     scenario = _scenario("iridium_global")
-    assert scenario.time.events.enabled
-    assert V1_SAMPLED not in limitations(scenario)
-    assert V1_SAMPLED in limitations(_with_time(scenario, events=EventSettings(enabled=False)))
+    assert scenario.time.events.enabled and scenario.network is not None
+    items = limitations(scenario)
+    assert ROUTE_BREAKPOINTS in items
+    assert items.count(ROUTE_BREAKPOINTS) == 1
+    assert V1_SAMPLED not in items
+    text = explain(scenario).split("\n## Limitations\n")[1]
+    assert f"- {ROUTE_BREAKPOINTS}\n" in text
+    assert ROUTE_BREAKPOINTS == (
+        "Route choices are evaluated at event-aware breakpoints and held between them; "
+        "inter-satellite range and occlusion changes between breakpoints are not resolved."
+    )
+
+
+def test_events_enabled_without_a_network_has_neither_route_line() -> None:
+    scenario = _scenario("iss_cartagena")
+    assert scenario.time.events.enabled and scenario.network is None
+    items = limitations(scenario)
+    assert V1_SAMPLED not in items
+    assert ROUTE_BREAKPOINTS not in items
+    assert not any("Route choices" in item or "route choices" in item for item in items)
+
+
+@pytest.mark.parametrize("path", EXAMPLES, ids=lambda path: path.stem)
+@pytest.mark.parametrize("events", [True, False])
+@pytest.mark.parametrize("network", [True, False])
+def test_every_scenario_carries_the_shannon_caveat_once(path: Path, events: bool, network: bool):
+    scenario = _with_time(load_scenario(path), events=EventSettings(enabled=events))
+    scenario = scenario if network else _no_network(scenario)
+    assert limitations(scenario).count(SHANNON) == 1
+    assert f"- {SHANNON}\n" in explain(scenario).split("\n## Limitations\n")[1]
+
+
+def test_the_shannon_caveat_is_the_wording_of_the_v1_summary() -> None:
+    assert SHANNON in V1_OUTPUT_LIMITATIONS
+    assert SHANNON == (
+        "Shannon-Hartley capacity is a theoretical upper bound, not throughput or achieved goodput"
+    )
 
 
 def test_the_path_bottleneck_limit_applies_only_with_a_network() -> None:
