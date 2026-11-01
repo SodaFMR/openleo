@@ -39,7 +39,7 @@ def test_published_teme_states_match_existing_catalog_adapter():
     )
     assert result["time_convention"]["origin"] == "loaded SGP4 epoch"
     assert abs(result["time_convention"]["omm_epoch_shift_s"]) < 2e-7
-    assert result["adapter"] == "openleo.catalog.load_catalog -> Skyfield TEME"
+    assert result["adapter"] == "openleo.engine.catalogs.load_catalog -> Skyfield TEME"
     assert set(result["software"]) == {"openleo-link", "skyfield", "sgp4", "numpy"}
     assert len(result["epochs"]) == 5
     assert [row["elapsed_s"] for row in result["epochs"]] == [0, 7200, 14400, 21600, 28800]
@@ -146,5 +146,22 @@ def test_verify_orbit_passes_vallado():
 def test_itu_workbook_stub_message(tmp_path):
     from openleo.verify import verify_itu_workbook
 
-    with pytest.raises(NotImplementedError, match="available in S3"):
+    with pytest.raises(NotImplementedError) as raised:
         verify_itu_workbook(tmp_path / "workbook.xlsx")
+    assert str(raised.value) == "openleo verify itu-workbook is not available until S3"
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "name"),
+    [
+        ("openleo.orbit_verification", "openleo.verify.orbit", "verify_orbit_reference"),
+        ("openleo.hydrometeor_benchmark", "openleo.calc.hydrometeors", "run_hydrometeors"),
+        ("openleo.gases_plotting", "openleo.calc.gases_figure", "render_gases_overview"),
+    ],
+)
+def test_v1_import_paths_re_export_the_moved_modules(old, new, name):
+    import importlib
+
+    assert getattr(importlib.import_module(old), name) is getattr(
+        importlib.import_module(new), name
+    )

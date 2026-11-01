@@ -204,7 +204,7 @@ def verify_orbit_reference(config_path: str | Path) -> dict:
             "fixture_sha256": checksum,
             "source": dict(data["source"]),
             "converted_omm_sha256": sha256(csv_bytes).hexdigest(),
-            "adapter": "openleo.catalog.load_catalog -> Skyfield TEME",
+            "adapter": "openleo.engine.catalogs.load_catalog -> Skyfield TEME",
             "frame": "TEME",
             "units": dict(_UNITS),
             "time_convention": {

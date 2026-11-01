@@ -5,9 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import NoReturn
 
-MESSAGE = "available in S3"
+MESSAGE = "openleo verify itu-workbook is not available until S3"
 
 
 def verify_itu_workbook(path: str | Path) -> NoReturn:
-    """Always raises ``NotImplementedError``: workbook verification ships in S3."""
-    raise NotImplementedError(f"ITU-R workbook verification of {Path(path).name} is {MESSAGE}")
+    """Always raises ``NotImplementedError`` with ``MESSAGE``: workbook verification ships in S3.
+
+    ``path`` is accepted for the S3 interface and not read."""
+    raise NotImplementedError(MESSAGE)

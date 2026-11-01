@@ -6,10 +6,10 @@ import os
 from pathlib import Path
 
 import pytest
-from openleo.export import export_results
 
 from openleo import sweep
 from openleo.engine.run import run, save_run
+from openleo.export import export_results
 from openleo.report import write_report
 from openleo.results import load_results, manifest_digest, read_parquet, verify_manifest
 from openleo.scenario import load_scenario, parse_scenario, scenario_document
@@ -152,3 +152,24 @@ def test_export_rejects_unknown_formats_and_existing_output(results_dir, tmp_pat
     (tmp_path / "exists" / "f").write_text("x")
     with pytest.raises((ValueError, FileExistsError)):
         export_results(results_dir, "csv", tmp_path / "exists")
+
+
+def test_report_failure_leaves_the_output_directory_untouched(results_dir, tmp_path, monkeypatch):
+    from openleo.report import figures
+
+    def broken(context, stage):
+        (stage / "partial.png").write_bytes(b"partial")
+        raise ValueError("figure failed")
+
+    monkeypatch.setattr(figures, "render_figures", broken)
+    output = tmp_path / "out"
+    output.mkdir()
+    with pytest.raises(ValueError, match="figure failed"):
+        write_report(results_dir, output, figures=True)
+    assert output.is_dir() and list(output.iterdir()) == []
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["out"]
+    with pytest.raises(ValueError, match="figure failed"):
+        write_report(results_dir, tmp_path / "absent", figures=True)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["out"]
+    assert write_report(results_dir, output) == output
+    assert sorted(p.name for p in output.iterdir()) == ["report.md", "summary.csv"]

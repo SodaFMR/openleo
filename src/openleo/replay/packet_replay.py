@@ -2,8 +2,8 @@
 
 ``prepare_packet_replay`` turns one station-satellite link of a ``ReplaySource`` into the
 integer trace the native backend reads (``time_ns,rate_bps,delay_ns,available``). The rows are
-the window start, every breakpoint of the pair strictly inside the window (the grid, and with
-events on the exact AOS, LOS and MODCOD switch times) and the window stop. Each row holds the
+the window start, every breakpoint of the pair strictly inside the window (the grid and the
+pair's pass and MODCOD switch times, root-found with events on) and the window stop. Each row holds the
 link state at its time until the next row. Quantization is v1's: times and delays are rounded
 half up to whole nanoseconds, rates floored to whole bit/s; breakpoints that round to the same
 nanosecond keep the later state, the earlier one holding for under half a nanosecond.
@@ -584,8 +584,8 @@ LIMITATIONS = (
     *V1_LIMITATIONS,
     (
         "Rate, delay and availability are held from each trace row to the next: the rows are "
-        "the grid samples and, with events on, the exact AOS, LOS and MODCOD switch times, so "
-        "the slant delay is piecewise constant between them."
+        "the grid samples and the pair's pass and MODCOD switch times (root-found with events "
+        "on), so the slant delay is piecewise constant between them."
     ),
 )
 

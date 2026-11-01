@@ -47,9 +47,17 @@ def test_events_off_link_state_is_the_sample_state(off_source, hydrometeors_off)
         rate, delay = off_source.link_state(station[k], satellite[k], times[k])
         assert rate == rates[k]
         assert delay == pytest.approx(delays[k], abs=1e-15)
-        # Left hold between samples, as v1 held them.
+        # Visibility and rate are held between samples, as v1 held them; the delay is
+        # evaluated where the link is above the mask, else held from the sample.
         later = min(times[k] + 59.5, off_source.window_s - 0.5)
-        assert off_source.link_state(station[k], satellite[k], later) == (rate, delay)
+        held_rate, held_delay = off_source.link_state(station[k], satellite[k], later)
+        assert held_rate == rate
+        elevation = off_source.geometry.elevation_deg(station[k], satellite[k], [later])[0]
+        if elevation >= 10.0:
+            expected = off_source.evaluator.evaluate(station[k], satellite[k], [later])["delay_s"]
+            assert held_delay == expected[0]
+        else:
+            assert held_delay == delay
         checked += 1
     assert checked > 100
     visible = set(zip(station, satellite, times, strict=True))
@@ -217,3 +225,50 @@ def test_source_detects_a_changed_run_before_publishing(hydrometeors_off, tmp_pa
     write_manifest(copy)
     with pytest.raises(ValueError, match="changed"):
         source.provenance()
+
+
+@pytest.fixture(scope="module")
+def delayed_off(tmp_path_factory):
+    """Events off with a feedback delay: MODCOD switches, so route breakpoints, fall off-grid."""
+    from pathlib import Path
+
+    from openleo.engine.run import run, save_run
+    from openleo.scenario import load_scenario, parse_scenario, scenario_document
+
+    path = Path("examples/v2/iridium_global.json")
+    document = scenario_document(load_scenario(path))
+    document["time"]["stop_utc"] = "2026-09-10T12:30:00Z"
+    document["time"]["events"]["enabled"] = False
+    document["time"]["convergence"]["mode"] = "off"
+    document["adaptation"]["feedback_delay_s"] = 7.5
+    scenario = parse_scenario(document, path, "0" * 64)
+    return save_run(scenario, run(scenario), tmp_path_factory.mktemp("delayed") / "run")
+
+
+def test_events_off_edges_reproduce_the_engine_route_delays(delayed_off):
+    from itertools import pairwise
+
+    from openleo.replay import NetworkReplayConfig, prepare_network_replay
+
+    source = ReplaySource.from_results(delayed_off)
+    routes = load_results(delayed_off).tables["routes"]
+    off_grid = 0
+    for k in range(routes.rows):
+        if not routes["connected"][k]:
+            continue
+        start = float(routes["start_offset_s"][k])
+        model = routes["model"][k]
+        nodes = [int(n) for n in routes["nodes"][k].split()]
+        total = 0.0
+        for a, b in pairwise(nodes):
+            state = source.edge_state(min(a, b), max(a, b), start, model == "fixed_capacity")
+            assert state is not None and state[0] > 0, (start, model, a, b)
+            total += state[1]
+        assert total == pytest.approx(float(routes["delay_s"][k]), rel=0, abs=1e-12)
+        off_grid += start % 60 != 0
+    assert off_grid > 10
+    for model in source.route_models:
+        prepared = prepare_network_replay(
+            source, NetworkReplayConfig(routing_model=model, duration_s=1800)
+        )
+        assert prepared["routes"][-1]["state"] == "stop"

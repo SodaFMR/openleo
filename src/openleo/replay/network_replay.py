@@ -2,8 +2,8 @@
 
 ``prepare_network_replay`` reads one configured route pair (``pair_index``) and routing model of
 a ``ReplaySource``. Snapshots are the window start and every route breakpoint strictly inside
-the window (the grid and, with events on, the pass and MODCOD switch times of the route
-endpoints' links); each snapshot holds the route, the link states and the inter-satellite
+the window (the grid and the pass and MODCOD switch times of the route endpoints' links,
+which with events on are the root-found times); each snapshot holds the route, the link states and the inter-satellite
 geometry of the latest route breakpoint at or before it, which is where the engine evaluated
 that route. A change of the route's endpoint satellites starts an acquisition of
 ``acquisition_delay_s`` that gates both selected ground links, as in v1. Quantization is v1's:
@@ -454,8 +454,8 @@ LIMITATIONS = (
     *V1_LIMITATIONS[:4],
     (
         "Routes, link states and inter-satellite geometry are held from each route breakpoint "
-        "(the grid and, with events on, the pass and MODCOD switch times of the endpoint "
-        "stations' links) to the next; inter-satellite range and occlusion changes between "
+        "(the grid and the pass and MODCOD switch times of the endpoint stations' links) to "
+        "the next; inter-satellite range and occlusion changes between "
         "breakpoints are not resolved. Endpoint acquisition gates both selected ground links."
     ),
     V1_LIMITATIONS[5],

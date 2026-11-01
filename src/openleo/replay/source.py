@@ -10,16 +10,19 @@ and link evaluator from them. It then answers, at any offset ``t`` in seconds af
   rate that of the ``rate_segments`` row holding ``t`` (0 when none does), as the engine's
   routing reads them (``openleo.engine.routing.link_state_from_pairs``). The window stop holds
   no time; there a pass truncated by the window end is visible at the rate of the segment that
-  ends there. The delay is the link evaluator's. With events on it is evaluated at ``t`` (at
-  most ``tolerance_s`` before a root-found LOS, where the link is still above the mask, as the
-  engine's routing does). With events off it is held from the grid sample at or before ``t``:
-  v1's sampled semantics.
+  ends there. The delay is the link evaluator's at ``t``, as the engine's routing evaluates it
+  at its breakpoints: with events on at most ``tolerance_s`` before a root-found LOS (the link
+  is still above the mask there); with events off at ``t`` itself, so on grid samples it is
+  v1's sampled delay. With events off, visibility is held between grid samples (v1), so a pair
+  can count as visible at an off-grid ``t`` where the satellite is already below the mask and
+  the link budget is undefined; only there the delay is held from the grid sample at or before
+  ``t``.
 * ``route(pair_index, model, t)``: the node sequence of the ``routes`` row holding ``t``, or
   None while disconnected.
 * ``edge_state(a, b, t, fixed)``: an inter-satellite link (``a < b < N``) is
   ``(isl.capacity_bps, r/c)`` when the satellites' range ``r`` satisfies the engine's rule
-  (``0 < r <= isl.max_range_m`` with a clear WGS84 line of sight), from positions at ``t``
-  (events on) or at the grid sample at or before ``t`` (events off); a ground link
+  (``0 < r <= isl.max_range_m`` with a clear WGS84 line of sight), from positions at ``t``,
+  as the engine's routing builds its graph at a breakpoint; a ground link
   (satellite ``a``, station node ``b = N + k``) is ``link_state(k, a, t)`` with the rate
   replaced by ``fixed_capacity_bps`` when ``fixed``.
 * ``breakpoints(start, stop, ...)``: the times in ``[start, stop]`` where those states may
@@ -128,6 +131,11 @@ class ReplaySource:
         self.satellite_count = len(self.norad_ids)
         self.events_enabled = bool(scenario.time.events.enabled)
         self.tolerance_s = float(scenario.time.events.tolerance_s)
+        default = scenario.ground_segment.default_minimum_elevation_deg
+        self._masks = tuple(
+            default if s.minimum_elevation_deg is None else s.minimum_elevation_deg
+            for s in scenario.ground_segment.stations
+        )
         network = scenario.network
         self.network = network
         if network is None:
@@ -246,11 +254,8 @@ class ReplaySource:
             raise ValueError(f"t_s={t_s!r} is outside the results window [0, {self.window_s!r}] s")
         return t
 
-    def _held(self, t: float) -> float:
-        """The evaluation time of geometry at t: t (events on) or the grid sample at or before
-        it (events off)."""
-        if self.events_enabled:
-            return t
+    def _grid_sample(self, t: float) -> float:
+        """The grid sample at or before t."""
         return float(self.grid_s[bisect_right(self.grid_s, t) - 1])
 
     def _pass_at(self, station: int, satellite: int, t: float):
@@ -285,7 +290,11 @@ class ReplaySource:
             last = end if truncated else max(start, end - self.tolerance_s)
             query = min(t, last)
         else:
-            query = self._held(t)
+            query = t
+            if t != self._grid_sample(t):
+                elevation = self.geometry.elevation_deg(station, satellite, np.array([t]))[0]
+                if not elevation >= self._masks[station]:
+                    query = self._grid_sample(t)
         return rate, self._delay(station, satellite, query)
 
     def _delay(self, station: int, satellite: int, t: float) -> float:
@@ -341,8 +350,7 @@ class ReplaySource:
             raise ValueError("these results have no network: there are no edges to replay")
         t = self._time(t_s)
         if b < count:
-            held = self._held(t)
-            first, second = self._position(a, held), self._position(b, held)
+            first, second = self._position(a, t), self._position(b, t)
             range_m = math.dist(first, second)
             if 0.0 < range_m <= self.network.isl.max_range_m and _clear_segment(
                 _scaled(first), _scaled(second)

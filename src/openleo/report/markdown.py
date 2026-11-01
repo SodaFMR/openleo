@@ -21,12 +21,15 @@ import csv
 import io
 import json
 import math
+import os
+import shutil
+import tempfile
 from collections.abc import Callable, Sequence
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from openleo.results import load_results, manifest_digest, publish_atomically, verify_manifest
+from openleo.results import load_results, manifest_digest, verify_manifest
 
 SUMMARY_COLUMNS = ("scope", "name", "metric", "value", "unit")
 SWEEP_SUMMARY_COLUMNS = ("run_id", "metric", "value", "baseline_value", "delta", "ratio")
@@ -393,7 +396,9 @@ def _sweep_report(directory: Path) -> tuple[str, bytes, dict]:
 def write_report(path: Path, output_dir: Path, *, figures: bool = False) -> Path:
     """Write ``report.md`` and ``summary.csv`` (and figures) for a results or sweep directory.
 
-    ``output_dir`` must not exist or be empty; it is published atomically. Returns it.
+    ``output_dir`` must not exist or be an empty directory. Everything is built in a temporary
+    sibling directory first and renamed into place only when complete, so a failure leaves
+    ``output_dir`` exactly as it was. Returns ``output_dir``.
     """
     path, output_dir = Path(path), Path(output_dir)
     if (path / "results.json").is_file():
@@ -402,15 +407,11 @@ def write_report(path: Path, output_dir: Path, *, figures: bool = False) -> Path
         build = _sweep_report
     else:
         raise ValueError(f"{path} is neither a results or sweep directory")
-    if output_dir.is_symlink() or (output_dir.exists() and not output_dir.is_dir()):
-        raise ValueError(f"report output {output_dir} must be a directory")
-    if output_dir.exists():
-        if any(output_dir.iterdir()):
-            raise ValueError(f"refusing to overwrite a non-empty output directory {output_dir}")
-        output_dir.rmdir()
+    _check_output(output_dir)
     markdown, summary, context = build(path)
-
-    def publish(stage: Path) -> None:
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    stage = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.report-", dir=output_dir.parent))
+    try:
         text = markdown
         if figures:
             from openleo.report.figures import render_figures
@@ -421,12 +422,28 @@ def write_report(path: Path, output_dir: Path, *, figures: bool = False) -> Path
             )
         (stage / "report.md").write_bytes(text.encode("utf-8"))
         (stage / "summary.csv").write_bytes(summary)
-
-    try:
-        publish_atomically(output_dir, publish)
-    except FileExistsError as exc:
-        raise ValueError(str(exc)) from exc
+        _check_output(output_dir)
+        try:
+            # Replaces an empty directory atomically on POSIX.
+            os.replace(stage, output_dir)
+        except OSError:
+            if not output_dir.is_dir() or any(output_dir.iterdir()):
+                raise
+            output_dir.rmdir()  # platforms that cannot rename onto an empty directory
+            os.rename(stage, output_dir)
+    except OSError as exc:
+        raise ValueError(f"could not publish the report at {output_dir}: {exc}") from exc
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage, ignore_errors=True)
     return output_dir
+
+
+def _check_output(output_dir: Path) -> None:
+    if output_dir.is_symlink() or (output_dir.exists() and not output_dir.is_dir()):
+        raise ValueError(f"report output {output_dir} must be a directory")
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise ValueError(f"refusing to overwrite a non-empty output directory {output_dir}")
 
 
 __all__ = ["write_report"]
