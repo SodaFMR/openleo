@@ -54,6 +54,7 @@ from openleo.engine.run import run as run_engine
 from openleo.engine.run import save_run
 from openleo.results import Results, publish_atomically, write_manifest
 from openleo.scenario import load_scenario, parse_scenario, scenario_document
+from openleo.scenario.model import ROUTE_MODELS
 from openleo.scenario.parse import _checked_pairs, _reject_repeated_keys
 
 SWEEP_SCHEMA_ID = "openleo.sweep/2"
@@ -71,7 +72,6 @@ MODES = ("oat", "grid", "variants")
 PATCH_OPS = ("replace", "add", "remove")
 COMPARISON_COLUMNS = ("run_id", "metric", "value", "baseline_value", "delta", "ratio")
 NOMINAL_RUN = "oat:nominal"
-ROUTE_MODELS = ("minimum_delay", "maximum_rate", "fixed_capacity")
 LOAD_BOUNDS = (1.0, 1e9)
 ACQUISITION_BOUNDS = (0.0, 60.0)
 MAX_LOADS = 8

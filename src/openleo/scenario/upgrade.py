@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from openleo._validation import _field, _object, _positive_number, _safe_repr, _string
+from openleo.scenario.model import ROUTE_MODELS
 from openleo.scenario.parse import (
     SCENARIO_SCHEMA_ID,
     _load_document,
@@ -57,7 +58,6 @@ CONVERGENCE = {
     "absolute_tolerance_bits": 1.0,
 }
 OUTPUTS = {"formats": ["csv", "olc"], "satellite_positions": "grid"}
-ROUTE_MODELS = ["minimum_delay", "maximum_rate", "fixed_capacity"]
 DEFAULT_ROLLOFF = 0.2
 DEFAULT_SYMBOL_RATE_DIVISOR = 1.2  # symbol_rate_baud = channel_bandwidth_hz / 1.2
 

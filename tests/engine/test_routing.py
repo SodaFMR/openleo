@@ -579,3 +579,12 @@ def test_grid_mode_matches_v1_routes(name: str) -> None:
         assert metrics["route_changes"] == sum(
             1 for a, b in pairwise(held) if a is not None and b is not None and a != b
         )
+
+
+def test_the_route_models_have_one_definition():
+    from openleo import sweep
+    from openleo.replay import source
+    from openleo.scenario import upgrade
+
+    assert tuple(routing._ALGORITHMS) == ROUTE_MODELS
+    assert sweep.ROUTE_MODELS is source.ROUTE_MODELS is upgrade.ROUTE_MODELS is ROUTE_MODELS

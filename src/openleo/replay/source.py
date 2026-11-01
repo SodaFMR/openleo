@@ -52,16 +52,15 @@ from openleo.engine._assembly import canonical_sha256
 from openleo.engine.catalogs import load_catalogs
 from openleo.engine.evaluator import LinkEvaluator
 from openleo.engine.geometry import Geometry
-from openleo.engine.routing import _ALGORITHMS, _clear_segment, _scaled
+from openleo.engine.routing import _clear_segment, _scaled
 from openleo.engine.timegrid import build_grid, builtin_timescale
 from openleo.physics.link import propagation_delay_s
 from openleo.results import load_results, manifest_digest, verify_manifest
 from openleo.results.manifest import read_manifest, sha256_file
 from openleo.scenario import load_scenario
+from openleo.scenario.model import ROUTE_MODELS
 
 _HASH_KEYS = ("source_sha256", "normalised_sha256")
-#: The route models a replay can name: the engine's routing algorithms.
-ROUTE_MODELS = tuple(_ALGORITHMS)
 
 
 def _index(value: Any, count: int, name: str) -> int:
