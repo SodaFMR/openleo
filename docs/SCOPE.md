@@ -87,26 +87,28 @@ independence of a published numerical orbit comparison.
 
 ## OpenLEO 2.0 (S1) limitations
 
-These are recorded in the `limitations` of every `results.json` that they apply to.
+Each is a line of the `limitations` list in `results.json` (and of `openleo scenario explain`),
+written exactly under the condition given here (`openleo.scenario.explain.limitations`).
 
-- **Route breakpoints and ISLs.** Routes are evaluated at event-aware breakpoints (the grid plus
-  every pass and MODCOD boundary of the route endpoints' links) and held between them.
-  Inter-satellite range and occlusion changes between breakpoints are not resolved; ISL topology
-  events belong to a later stage. The ISL rule remains v1's all-pairs-within-range rule.
-- **Fixed-capacity threshold waiver.** The `fixed_capacity` baseline assigns
-  `fixed_capacity_bps` to every geometrically visible ground link of the route endpoints
-  regardless of the RF threshold (MODCOD lock): it can route over links whose adaptive rate is
-  zero. It is a geometric baseline, not an RF-usable one.
-- **Route convergence not gated.** Route metrics are compared on the refined grid and reported in
-  the `convergence` table (class `route`), but a route failure is only a warning: because of the
-  first limitation, route metrics can depend on the grid step. Link and station metrics are
-  gated.
-- **Events off.** `time.events.enabled = false` reproduces v1's sampled semantics for
-  comparison; its contact boundaries and route choices are sampled, and finer events between
-  samples can be missed. It is not intended for scientific claims.
-- **Culmination times** are accurate to max(`tolerance_s`, about 1e-5 s); AOS/LOS and MODCOD
-  switches to `tolerance_s`. A MODCOD crossing in the last `tolerance_s` before LOS is not
-  resolved.
+- **Route breakpoints and ISLs** (events enabled and a `network`). Routes are evaluated at
+  event-aware breakpoints (the grid plus every pass and MODCOD boundary of the route endpoints'
+  links) and held between them. Inter-satellite range and occlusion changes between breakpoints
+  are not resolved; ISL topology events belong to a later stage. The ISL rule remains v1's
+  all-pairs-within-range rule.
+- **Fixed-capacity threshold waiver** (a `network` whose `route_models` lists
+  `fixed_capacity`). The baseline assigns `fixed_capacity_bps` to every geometrically visible
+  ground link of the route endpoints regardless of the RF threshold (MODCOD lock): it can route
+  over links whose adaptive rate is zero. It is a geometric baseline, not an RF-usable one.
+- **Route convergence not gated** (any `network`). Route metrics are compared on the refined grid
+  and reported in the `convergence` table (class `route`), but a route failure is only a warning:
+  because of the first limitation, route metrics can depend on the grid step. Link and station
+  metrics are gated.
+- **Event-time accuracy** (events enabled). Event times are root-found to
+  `time.events.tolerance_s`; culmination times are accurate to max(`tolerance_s`, about 1e-5 s),
+  and a MODCOD threshold crossing within `tolerance_s` before LOS is not resolved.
+- **Sampled events** (events disabled, with or without a network). v1's line: contact boundaries
+  and route choices are sampled, and finer events between samples can be missed. This mode
+  reproduces v1's semantics for comparison and is not intended for scientific claims.
 
 ## Outside the current model
 

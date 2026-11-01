@@ -100,7 +100,7 @@ RUN/
 | `events` | `enabled`, `tolerance_s`, `integration` (`event_segments` or `grid_left_hold`), counts by type |
 | `convergence` | settings, summary by class (link, station, route), failures, `skipped` |
 | `warnings` | element age above 14 days, convergence warnings, the `synthetic_rf` notice |
-| `limitations` | the v1 limitation lines plus the S1 additions (route breakpoints, fixed-capacity threshold waiver, route convergence not gated) |
+| `limitations` | the v1 limitation lines plus the S1 additions (route breakpoints, fixed-capacity threshold waiver, route convergence not gated, event-time accuracy), each under the condition listed in [Scope](SCOPE.md#openleo-20-s1-limitations) |
 | `summary` | headline metrics with units in their key names, per station and per route |
 | `tables` | name → `{rows, columns: [{name, dtype, unit, description}], files: {csv, olc, parquet: {path, sha256}}}` |
 

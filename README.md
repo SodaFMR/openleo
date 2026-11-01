@@ -176,7 +176,10 @@ In the 2.0 engine, routes are re-evaluated at event-aware breakpoints and held b
 inter-satellite range and occlusion changes between breakpoints are not resolved, so route
 metrics are reported in the convergence table but not gated. The `fixed_capacity` baseline
 assigns its capacity to every geometrically visible ground link of the route endpoints, with or
-without MODCOD lock. Both limitations are written into every `results.json`.
+without MODCOD lock. `results.json` states the route-breakpoint and route-convergence lines only
+when the scenario has a `network` (with events enabled), the fixed-capacity line only when
+`network.route_models` lists `fixed_capacity`, and the event-time accuracy line whenever events
+are enabled; see [Scope](docs/SCOPE.md#openleo-20-s1-limitations).
 
 ## Citation, license and data terms
 

@@ -7,6 +7,7 @@ import pytest
 
 from openleo.physics.adaptation import ETSI_SOURCE_URL, MODCODS
 from openleo.scenario.explain import (
+    EVENT_TIME_ACCURACY,
     FIXED_CAPACITY_THRESHOLD_WAIVER,
     ROUTE_CONVERGENCE_NOT_GATED,
     explain,
@@ -481,3 +482,24 @@ def test_the_limitations_heading_carries_the_model_and_every_item_is_a_bullet() 
     assert free.startswith("\nPropagation model: free_space.\n\n- ")
     gas = explain(_scenario("iridium_global_reference")).split("\n## Limitations\n")[1]
     assert gas.startswith("\nPropagation model: itu_reference.\n\n- ")
+
+
+@pytest.mark.parametrize("name", ["iss_cartagena", "iridium_global"])
+def test_events_enabled_state_the_event_time_accuracy_with_or_without_a_network(name) -> None:
+    scenario = _scenario(name)
+    assert scenario.time.events.enabled
+    for variant in (scenario, _no_network(scenario)):
+        items = limitations(variant)
+        assert items.count(EVENT_TIME_ACCURACY) == 1
+        assert f"- {EVENT_TIME_ACCURACY}\n" in explain(variant).split("\n## Limitations\n")[1]
+    assert EVENT_TIME_ACCURACY not in limitations(
+        _with_time(scenario, events=EventSettings(enabled=False))
+    )
+    assert "max(tolerance_s, about 1e-5 s)" in EVENT_TIME_ACCURACY
+
+
+def test_run_results_carry_the_limitations_of_their_scenario() -> None:
+    from openleo.engine.run import run
+
+    scenario = _scenario("iss_cartagena")
+    assert run(scenario).metadata["limitations"] == limitations(scenario)

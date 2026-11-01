@@ -84,6 +84,11 @@ FIXED_CAPACITY_THRESHOLD_WAIVER = (
     "threshold and can route over links whose adaptive rate is zero."
 )
 ROUTE_CONVERGENCE_NOT_GATED = "Route-metric grid convergence is reported but not gated in S1."
+EVENT_TIME_ACCURACY = (
+    "Event times are root-found to time.events.tolerance_s; culmination times are accurate to "
+    "max(tolerance_s, about 1e-5 s), and a MODCOD threshold crossing within tolerance_s before "
+    "LOS is not resolved."
+)
 _REFERENCE_ATMOSPHERE = (
     (
         "AMSL heights are explicit assumptions distinct from WGS84 ellipsoid heights; a 6371 km "
@@ -118,7 +123,8 @@ def limitations(scenario: Scenario) -> list[str]:
     - events disabled: the v1 sampled-contact line, whatever the network;
     - events enabled with a network: routes are held between event-aware breakpoints, and
       inter-satellite range and occlusion changes between them are not resolved (spec 6.5);
-    - events enabled without a network: no line;
+    - events enabled without a network: no route line;
+    - events enabled: the accuracy of the event times (spec 6.1, as amended for culminations);
     - a network adds the path-bottleneck limit and says that route-metric grid convergence is
       reported but not gated; ``fixed_capacity`` among its route models adds the threshold
       waiver of that baseline (spec 6.5); every scenario carries the Shannon caveat.
@@ -135,9 +141,9 @@ def limitations(scenario: Scenario) -> list[str]:
     if not scenario.time.events.enabled:
         route_limit = [_SAMPLED_EVENTS]
     elif scenario.network is not None:
-        route_limit = [_ROUTES_BETWEEN_BREAKPOINTS]
+        route_limit = [_ROUTES_BETWEEN_BREAKPOINTS, EVENT_TIME_ACCURACY]
     else:
-        route_limit = []
+        route_limit = [EVENT_TIME_ACCURACY]
     return [
         _ARCHIVED_GP,
         _DECLARED_RF,
