@@ -561,3 +561,59 @@ def test_iss_pass_matches_dense_search() -> None:
     assert abs(p.culmination_s - scan[np.argmax(values)]) <= 0.01
     assert values.max() <= p.max_elevation_deg + 1e-9
     assert (values >= mask).all()
+
+
+def test_solve_brackets_with_known_end_values() -> None:
+    from openleo.engine.events import solve_brackets
+
+    lo, hi = np.array([0.0, 2.0, 5.0]), np.array([1.0, 4.0, 6.0])
+    levels = np.array([0.25, 3.0, 5.0])
+    evaluated = []
+
+    def f(t):
+        evaluated.append(np.array(t, copy=True))
+        return np.asarray(t, dtype=np.float64)
+
+    plain = solve_brackets(f, lo, hi, 1e-9, levels=levels)
+    evaluated.clear()
+    known = solve_brackets(f, lo, hi, 1e-9, levels=levels, f_lo=lo, f_hi=hi)
+    np.testing.assert_array_equal(known, plain)
+    # The ends are never evaluated again: the bracket is decided by the values given.
+    assert not np.isin(np.concatenate(evaluated), np.concatenate([lo, hi])).any()
+    # A zero at an end comes from the given value as well (5.0 - level 5.0).
+    assert known[2] == 5.0
+    # One end known, the other evaluated.
+    evaluated.clear()
+    np.testing.assert_array_equal(solve_brackets(f, lo, hi, 1e-9, levels=levels, f_lo=lo), plain)
+    assert np.isin(hi, evaluated[0]).all() and not np.isin(lo, evaluated[0]).any()
+
+
+def test_solve_brackets_known_values_decide_the_bracket() -> None:
+    from openleo.engine.events import solve_brackets
+
+    # A provider whose value at t = 1 differs by sign between calls (an ulp-level difference
+    # across batch sizes): with the known value, the bracket stays bracketed.
+    def jumpy(t):
+        t = np.asarray(t, dtype=np.float64)
+        return np.where(t == 1.0, 1e-15, t - 1.5)
+
+    with pytest.raises(ValueError, match="opposite sign"):
+        solve_brackets(jumpy, np.array([1.0]), np.array([2.0]), 1e-9)
+    found = solve_brackets(jumpy, np.array([1.0]), np.array([2.0]), 1e-9, f_lo=[-0.5])
+    assert abs(found[0] - 1.5) <= 1e-9
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"f_lo": [1.0]}, "f_lo"),
+        ({"f_hi": [[1.0, 2.0]]}, "f_hi"),
+        ({"f_lo": [np.nan, 1.0]}, "f_lo"),
+        ({"f_hi": [1.0, np.inf]}, "f_hi"),
+    ],
+)
+def test_solve_brackets_rejects_bad_known_values(kwargs, message) -> None:
+    from openleo.engine.events import solve_brackets
+
+    with pytest.raises(ValueError, match=message):
+        solve_brackets(lambda t: t - 0.5, np.zeros(2), np.ones(2), 1e-3, **kwargs)

@@ -645,3 +645,106 @@ def test_real_iridium_pass_against_a_dense_v1_walk(station, satellite, tolerance
             assert select_modcod(after + margin, rule, old) is new
             if event.decision_s > p.start_s:
                 assert select_modcod(before + margin, rule, old) is old
+
+
+# --- feedback delay: zero rate only while the mode in effect fails (Task 9 ruling) -------------
+
+
+def _peak(t):
+    """A peaks 1e-4 dB above req(QPSK 1/2) = 1.0 dB at 750 s; >= 1.0 on about [749, 751]."""
+    return 1.0 + 1e-4 - 1e-4 * (t - 750.0) ** 2
+
+
+def test_downgrade_while_an_upgrade_is_pending_keeps_the_running_mode() -> None:
+    # Reviewer probe (Task 9): h = 0, d = 2 s. QPSK 1/4 runs; the upgrade to QPSK 1/2 decided at
+    # ~749 s takes effect at ~751 s; the downgrade back to QPSK 1/4 is decided at ~751 s, just
+    # before that. QPSK 1/4 meets its threshold, so the downgrade decision zeroes nothing.
+    breakpoints = np.union1d(_breakpoints(), [750.0])
+    segments, events, _ = _run(_peak, delay_s=2.0, hysteresis_db=0.0, breakpoints=breakpoints)
+    upgrade, downgrade = events[1], events[2]
+    assert (upgrade.from_modcod, upgrade.to_modcod) == ("QPSK 1/4", "QPSK 1/2")
+    assert (downgrade.from_modcod, downgrade.to_modcod) == ("QPSK 1/2", "QPSK 1/4")
+    assert abs(upgrade.decision_s - 749.0) <= 1e-3 and abs(downgrade.decision_s - 751.0) <= 1e-3
+    assert downgrade.decision_s < upgrade.effective_s < downgrade.effective_s
+    # The Task 9 output had a zero-rate segment from the downgrade decision to its effect.
+    assert all(s.start_s != downgrade.decision_s for s in segments)
+    assert _at(segments, downgrade.decision_s) == "QPSK 1/4"
+    assert _at(segments, 0.5 * (downgrade.decision_s + upgrade.effective_s)) == "QPSK 1/4"
+    # The pending upgrade still arrives (the transmitter cannot know it was revoked): QPSK 1/2
+    # is in effect on [upgrade effective, downgrade effective) with A below 1.0 dB, so frames
+    # are lost there, and only there.
+    zero = [s for s in segments if s.modcod is None and 600.0 < s.start_s < 900.0]
+    assert [(s.start_s, s.end_s) for s in zero] == [(upgrade.effective_s, downgrade.effective_s)]
+    assert _at(segments, downgrade.effective_s) == "QPSK 1/4"
+
+
+def test_zero_rate_ends_when_the_mode_in_effect_recovers() -> None:
+    # A dips 1e-4 dB below req(QPSK 1/2) on about (749, 751) and recovers; h = 0, d = 4 s.
+    def trough(t):
+        return 1.0 - 1e-4 + 1e-4 * (t - 750.0) ** 2
+
+    breakpoints = np.union1d(_breakpoints(), [750.0])
+    passes = (_pass(500.0, 1000.0),)
+    segments, events, _ = _run(
+        trough, delay_s=4.0, hysteresis_db=0.0, passes=passes, breakpoints=breakpoints
+    )
+    down = next(e for e in events if abs(e.decision_s - 749.0) <= 1e-3)
+    up = next(e for e in events if abs(e.decision_s - 751.0) <= 1e-3)
+    assert (down.from_modcod, down.to_modcod, up.to_modcod) == ("QPSK 1/2", "QPSK 1/4", "QPSK 1/2")
+    tail = [(s.start_s, s.end_s, s.modcod) for s in segments if s.start_s >= down.decision_s]
+    assert tail[:3] == [
+        # QPSK 1/2 is in effect and fails until A is back at 1.0 dB ...
+        (down.decision_s, up.decision_s, None),
+        # ... then decodes again until the downgrade arrives;
+        (up.decision_s, down.effective_s, "QPSK 1/2"),
+        # QPSK 1/4 runs until the upgrade arrives.
+        (down.effective_s, up.effective_s, "QPSK 1/4"),
+    ]
+    assert tail[3][::2] == (up.effective_s, "QPSK 1/2")
+
+
+def test_grid_mode_zero_rate_only_while_the_mode_in_effect_fails() -> None:
+    from openleo.engine.acm import acm_on_grid
+    from openleo.engine.events import passes_on_grid
+
+    grid = np.arange(0.0, 70.0, 10.0)
+    passes = passes_on_grid(np.full(grid.size, 20.0), grid, 10.0)
+    # QPSK 1/2 from 0 s; A dips below 1.0 dB at the 20 s sample only; d = 25 s.
+    available = np.array([2.0, 2.0, 0.5, 2.0, 2.0, 2.0, 2.0])
+    segments, events = acm_on_grid(available, grid, passes, _adaptation(0.0, 25.0))
+    assert [(e.decision_s, e.to_modcod) for e in events] == [
+        (0.0, "QPSK 1/2"),
+        (20.0, "QPSK 1/4"),
+        (30.0, "QPSK 1/2"),
+    ]
+    assert [(s.start_s, s.end_s, s.modcod) for s in segments] == [
+        (0.0, 30.0, None),  # acquisition delay, then QPSK 1/2 with A = 0.5 dB held to 30 s
+        (30.0, 45.0, "QPSK 1/2"),  # A is back above 1.0 dB: QPSK 1/2 decodes again
+        (45.0, 55.0, "QPSK 1/4"),  # the downgrade arrives, then the upgrade
+        (55.0, 60.0, "QPSK 1/2"),
+    ]
+    # d = 5 s: QPSK 1/2 is in effect and fails on [20, 25); QPSK 1/4 then runs until 35 s.
+    segments, _ = acm_on_grid(available, grid, passes, _adaptation(0.0, 5.0))
+    assert [(s.start_s, s.end_s, s.modcod) for s in segments] == [
+        (0.0, 5.0, None),
+        (5.0, 20.0, "QPSK 1/2"),
+        (20.0, 25.0, None),
+        (25.0, 35.0, "QPSK 1/4"),
+        (35.0, 60.0, "QPSK 1/2"),
+    ]
+
+
+def test_crossings_use_the_values_already_known_at_breakpoints() -> None:
+    # A provider that returns an ulp-level different value at a breakpoint when evaluated in
+    # another batch: the crossing bracket must keep the sign seen when the level was counted.
+    level = 1.0  # req(QPSK 1/2); with h = 0 it is an upgrade level too
+    batches = []
+
+    def jumpy(t):
+        batches.append(t.size)
+        near = level - 1e-12 if len(batches) == 1 else level + 1e-12
+        return np.where(t == 300.0, near, level + 0.01 * (t - 300.0))
+
+    _, events, _ = _run(jumpy, hysteresis_db=0.0)
+    upgrade = next(e for e in events if e.to_modcod == "QPSK 1/2")
+    assert 300.0 < upgrade.decision_s <= 300.0 + TOLERANCE_S

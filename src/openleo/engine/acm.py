@@ -50,24 +50,32 @@ Feedback delay d (``Adaptation.feedback_delay_s``), per decision at t_c:
 
 - an acquisition or upgrade takes effect at t_c + d; the old rate (0 when unlocked) runs until
   then;
-- a downgrade or loss sets the rate to 0 on [t_c, t_c + d), the old mode being below its
-  threshold, then takes effect at t_c + d;
+- a downgrade or loss takes effect at t_c + d; until then the mode in effect keeps running,
+  but its rate is 0 while A is below its requirement (its frames are lost), which for A
+  monotone across the window is all of [t_c, t_c + d);
 - a decision whose effective time is at or after the pass end is dropped: the mode in effect
   stays (or the downgrade's zero rate runs) to the end, and the event records
   ``effective_s = end_s``.
 
 Overlapping decisions compose: the mode in effect is the last decision whose effective time
-has passed, and every downgrade or loss zeroes its own [t_c, t_c + d). With d = 0 this is v1's
-rule in continuous time. Losing visibility resets the state; the reset at LOS is not an event.
+has passed (the transmitter applies each decision d after it is made, and none is revoked), and
+the rate is 0 exactly while A is below the requirement of the mode in effect. That can only
+happen within d after a downgrade or loss, so only those windows are checked, against the A
+crossings already root-found. For example, an upgrade decided near a peak still arrives d
+later: if a downgrade was decided in between, the old mode keeps running until the upgrade
+arrives, and the upgraded mode then has rate 0 until the downgrade arrives. With d = 0 this is
+v1's rule in continuous time. Losing visibility resets the state; the reset at LOS is not an
+event.
 
-Segments tile every pass exactly: [start_s, end_s) is cut at decisions and effective times,
-equal neighbours are merged, and a zero-duration pass has no segment. A segment's rate is
+Segments tile every pass exactly: [start_s, end_s) is cut at decisions, effective times and,
+within d after a downgrade or loss, the crossings of A; equal neighbours are merged, and a zero-duration pass has no segment. A segment's rate is
 ``symbol_rate_baud * efficiency_bits_per_symbol`` (v1), or 0.0 with ``modcod=None`` when no mode
-is in effect or during a downgrade's delay.
+is in effect or the mode in effect is below its requirement.
 """
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import dataclass, replace
 from itertools import pairwise
 from math import isfinite
@@ -165,13 +173,15 @@ def acm_segments(
     segments, events = [], []
     for index, p in enumerate(passes):
         first = int(np.searchsorted(owner, index))
-        state = rule.select(rule.count(values[first]), None)
+        levels_reached = [(p.start_s, int(rule.count(values[first])))]
+        levels_reached += crossings.get(index, [])
+        state = rule.select(levels_reached[0][1], None)
         decisions = [(p.start_s, None, state)]
-        for t, count in crossings.get(index, ()):
+        for t, count in levels_reached[1:]:
             new = rule.select(count, state)
             decisions.append((t, state, new))
             state = new
-        pass_segments, pass_events = _schedule(p, _merged(decisions), rule)
+        pass_segments, pass_events = _schedule(p, _merged(decisions), levels_reached, rule)
         segments += pass_segments
         events += pass_events
     return tuple(segments), tuple(events)
@@ -214,7 +224,11 @@ def acm_on_grid(
             if new is not state:
                 decisions.append((float(grid[k]), state, new))
                 state = new
-        pass_segments, pass_events = _schedule(p, decisions, rule)
+        # A is held from each sample to the next, so the levels it reaches are held too.
+        levels_reached = list(
+            zip(grid[members].tolist(), rule.count(values[members]).tolist(), strict=True)
+        )
+        pass_segments, pass_events = _schedule(p, decisions, levels_reached, rule)
         segments += pass_segments
         events += pass_events
     return tuple(segments), tuple(events)
@@ -254,6 +268,10 @@ class _Rule:
         count = int(count)
         value = self.levels[count - 1] if count else self.levels[0] - 1.0
         return select_modcod(float(value), self.config, previous)
+
+    def meets(self, modcod: Modcod, count: int) -> bool:
+        """Whether an A at or above exactly the lowest ``count`` levels reaches req(modcod)."""
+        return count > 0 and self.levels[count - 1] >= modcod.required_esn0_db
 
     def rate_bps(self, modcod: Modcod | None) -> float:
         return self.symbol_rate_baud * modcod.efficiency_bits_per_symbol if modcod else 0.0
@@ -347,8 +365,17 @@ def _crossings(f, rule, times, values, owner, tolerance):
     rising = np.repeat(count_b > count_a, crossed)
     start = np.repeat(count_a, crossed)
     level = np.where(rising, start + step, start - 1 - step)
+    # The ends' values are those the levels were counted from: passing them avoids a second
+    # evaluation and keeps every bracket bracketed even if the provider rounds differently in
+    # another batch.
     roots = solve_brackets(
-        f, times[interval], times[interval + 1], tolerance, levels=rule.levels[level]
+        f,
+        times[interval],
+        times[interval + 1],
+        tolerance,
+        levels=rule.levels[level],
+        f_lo=values[interval],
+        f_hi=values[interval + 1],
     )
     # Each root is within tolerance of its crossing; keep their order within an interval
     # consistent with the order A meets the levels (intervals are already in time order).
@@ -383,8 +410,12 @@ def _merged(decisions):
     return merged
 
 
-def _schedule(p: Pass, decisions, rule: _Rule):
-    """Rate segments and events of one pass from its decisions (module docstring)."""
+def _schedule(p: Pass, decisions, levels_reached, rule: _Rule):
+    """Rate segments and events of one pass from its decisions (module docstring).
+
+    ``levels_reached`` is [(time, count), ...] in time order from the pass start: from each time
+    on, A is at or above exactly the lowest ``count`` levels, until the next entry.
+    """
     end, delay = p.end_s, rule.delay_s
     events, switches, blackouts = [], [], []
     for t, old, new in decisions:
@@ -395,17 +426,23 @@ def _schedule(p: Pass, decisions, rule: _Rule):
         downgrade = old is not None and (new is None or new.required_esn0_db < old.required_esn0_db)
         if downgrade and delay > 0.0:
             blackouts.append((t, min(effective, end)))
+    reached_t = [t for t, _ in levels_reached]
     cuts = sorted(
         {p.start_s, end}
         | {t for t, _ in switches}
         | {t for blackout in blackouts for t in blackout}
+        # Inside a downgrade's delay, the mode in effect fails or decodes as A crosses its level.
+        | {t for t in reached_t if any(a < t < b for a, b in blackouts)}
     )
     segments: list[RateSegment] = []
     for start, stop in pairwise(cuts):
-        if any(a <= start < b for a, b in blackouts):
-            modcod = None
-        else:
-            modcod = next((new for t, new in reversed(switches) if t <= start), None)
+        modcod = next((new for t, new in reversed(switches) if t <= start), None)
+        if (
+            modcod is not None
+            and any(a <= start < b for a, b in blackouts)
+            and not rule.meets(modcod, levels_reached[bisect_right(reached_t, start) - 1][1])
+        ):
+            modcod = None  # the mode in effect is below its threshold: its frames are lost
         rate = rule.rate_bps(modcod)
         if segments and segments[-1].modcod == _name(modcod) and segments[-1].rate_bps == rate:
             segments[-1] = replace(segments[-1], end_s=stop)

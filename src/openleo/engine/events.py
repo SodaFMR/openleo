@@ -87,12 +87,21 @@ def solve_brackets(
     hi: ArrayLike,
     tolerance_s: float,
     levels: ArrayLike | None = None,
+    *,
+    f_lo: ArrayLike | None = None,
+    f_hi: ArrayLike | None = None,
 ) -> NDArray[np.float64]:
     """Roots of ``f`` in every bracket [lo, hi], all brackets solved together.
 
     With ``levels`` (one finite value per bracket), bracket i solves ``f(t) = levels[i]``
     instead: the function is ``f(t) - levels[i]``, so its sign is that of ``f(t) >= levels[i]``
     (zero exactly at equality), and brackets with different levels still share every call.
+
+    ``f_lo`` and ``f_hi``, when given, are the values ``f(lo)`` and ``f(hi)`` the caller already
+    has (one finite value per bracket, before ``levels`` is subtracted); those ends are then not
+    evaluated again. Passing them keeps the bracket decided by the values the caller saw: a
+    provider that rounds differently in another batch cannot turn it into one without a sign
+    change.
 
     Each bracket needs ``f(lo)`` and ``f(hi)`` of opposite sign, or a zero at one end, which is
     then returned (``lo`` if both are zero). Otherwise the solver is Illinois regula falsi,
@@ -109,10 +118,24 @@ def solve_brackets(
     shift = np.zeros(lo.size) if levels is None else np.asarray(levels, dtype=np.float64)
     if shift.shape != lo.shape or not np.isfinite(shift).all():
         raise ValueError(f"levels must hold one finite value for each of the {lo.size} brackets")
+    known = {"f_lo": f_lo, "f_hi": f_hi}
+    for name, value in known.items():
+        if value is not None:
+            value = np.asarray(value, dtype=np.float64)
+            if value.shape != lo.shape or not np.isfinite(value).all():
+                raise ValueError(
+                    f"{name} must hold one finite value for each of the {lo.size} brackets"
+                )
+            known[name] = value
     if lo.size == 0:
         return np.empty(0)
-    values = _evaluate(f, np.concatenate([lo, hi])) - np.concatenate([shift, shift])
-    return _solve(f, lo, hi, values[: lo.size], values[lo.size :], tolerance, shift)
+    missing = [t for t, name in ((lo, "f_lo"), (hi, "f_hi")) if known[name] is None]
+    if missing:
+        evaluated = iter(np.split(_evaluate(f, np.concatenate(missing)), len(missing)))
+        for name in ("f_lo", "f_hi"):
+            if known[name] is None:
+                known[name] = next(evaluated)
+    return _solve(f, lo, hi, known["f_lo"] - shift, known["f_hi"] - shift, tolerance, shift)
 
 
 def maximize_brackets(
