@@ -438,7 +438,13 @@ RETIRED_CASES = [
     ("verify-orbit", "verify orbit"),
     ("plot", "report --figures"),
     ("plot-sensitivity", "report --figures"),
-    ("plot-gases", "report --figures"),
+    (
+        "plot-gases",
+        (
+            "calc gases CONFIG --output DIR, then in Python "
+            "openleo.calc.gases_figure.render_gases_overview(DIR, SVG) (plot extra)"
+        ),
+    ),
     ("packet-replay", "replay link"),
     ("network-replay", "replay network"),
 ]
@@ -630,3 +636,15 @@ def test_importing_the_package_keeps_lazy_exports():
     assert "run" in dir(openleo) and "main" in openleo.__all__
     with pytest.raises(AttributeError):
         openleo.no_such_name  # noqa: B018
+
+
+def test_the_plot_gases_replacement_renders_the_gas_figure(tmp_path, capsys):
+    """The retired plot-gases pointer names a route that works: calc gases, then the renderer."""
+    pytest.importorskip("matplotlib")
+    from openleo.calc.gases_figure import render_gases_overview
+
+    assert main(["plot-gases"]) == 2
+    assert "render_gases_overview(DIR, SVG)" in capsys.readouterr().err
+    assert main(["calc", "gases", str(GASES), "--output", str(tmp_path / "gases")]) == 0
+    figure = render_gases_overview(tmp_path / "gases", tmp_path / "gases.svg")
+    assert figure.read_text(encoding="utf-8").lstrip().startswith("<?xml")

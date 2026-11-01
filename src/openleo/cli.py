@@ -64,7 +64,11 @@ RETIRED = {
     "verify-orbit": "verify orbit",
     "plot": "report --figures",
     "plot-sensitivity": "report --figures",
-    "plot-gases": "report --figures",
+    # report reads results and sweeps only; the P.676 figure renders a calc gases directory.
+    "plot-gases": (
+        "calc gases CONFIG --output DIR, then in Python "
+        "openleo.calc.gases_figure.render_gases_overview(DIR, SVG) (plot extra)"
+    ),
     "packet-replay": "replay link",
     "network-replay": "replay network",
 }

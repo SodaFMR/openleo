@@ -21,7 +21,8 @@ examples. v1.0.0 remains available at its tag.
 | `openleo gases CONFIG` | `openleo calc gases CONFIG` |
 | `openleo hydrometeors CONFIG` | `openleo calc hydrometeors CONFIG` |
 | `openleo verify-orbit REFERENCE` | `openleo verify orbit REFERENCE` |
-| `openleo plot`, `plot-sensitivity`, `plot-gases` | `openleo report RESULTS --figures` (the gas figure: `openleo.calc.gases_figure.render_gases_overview`) |
+| `openleo plot`, `plot-sensitivity` | `openleo report RESULTS_OR_SWEEP --figures` |
+| `openleo plot-gases RUN` | `openleo calc gases CONFIG --output DIR`, then `openleo.calc.gases_figure.render_gases_overview(DIR, SVG)` in Python (plot extra) |
 | `openleo packet-replay BUNDLE` | `openleo replay link RESULTS --station NAME --satellite NORAD` |
 | `openleo network-replay BUNDLE` | `openleo replay network RESULTS --pair SRC:DST --model MODEL` |
 | `openleo app SCENARIO` (workbench UI) | `openleo app SCENARIO` (API only in S1; see [App API](WORKBENCH.md)) |
