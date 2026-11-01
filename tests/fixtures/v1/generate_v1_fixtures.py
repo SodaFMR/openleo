@@ -15,6 +15,10 @@ are sorted and gzip headers carry ``mtime=0`` and no file name, so repeated runs
 interpreter and zlib produce identical bytes.
 """
 
+# ruff: noqa: I001
+# This script imports the v1.0.0 package, so it runs only inside a v1.0.0 checkout.
+# In the 2.0 tree those modules no longer exist, and ruff would misclassify them
+# as third-party imports.
 from __future__ import annotations
 
 import argparse
