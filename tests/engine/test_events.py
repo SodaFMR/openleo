@@ -361,6 +361,29 @@ def test_solve_brackets_zero_endpoints_and_empty_input() -> None:
     assert solve_brackets(f, np.array([]), np.array([]), 1e-3).shape == (0,)
 
 
+def test_solve_brackets_with_a_level_per_bracket() -> None:
+    from openleo.engine.events import solve_brackets
+
+    calls = []
+
+    def f(t):
+        calls.append(t.size)
+        return 2.0 * t
+
+    lo, hi = np.zeros(4), np.full(4, 10.0)
+    levels = np.array([1.0, 7.0, 0.0, 20.0])  # the last two are zero at an end
+    found = solve_brackets(f, lo, hi, 1e-9, levels=levels)
+
+    np.testing.assert_allclose(found, [0.5, 3.5, 0.0, 10.0], atol=1e-9)
+    assert found[2] == 0.0 and found[3] == 10.0
+    # One call for all ends, then one per iteration for every bracket together.
+    assert calls[0] == 8 and len(calls) <= 10
+    with pytest.raises(ValueError, match="levels"):
+        solve_brackets(f, lo, hi, 1e-9, levels=levels[:3])
+    with pytest.raises(ValueError, match="levels"):
+        solve_brackets(f, lo, hi, 1e-9, levels=np.full(4, np.inf))
+
+
 def test_solve_brackets_terminates_on_flat_steps() -> None:
     from openleo.engine.events import solve_brackets
 

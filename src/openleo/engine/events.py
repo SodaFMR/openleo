@@ -82,9 +82,17 @@ class Pass:
 
 
 def solve_brackets(
-    f: Provider, lo: ArrayLike, hi: ArrayLike, tolerance_s: float
+    f: Provider,
+    lo: ArrayLike,
+    hi: ArrayLike,
+    tolerance_s: float,
+    levels: ArrayLike | None = None,
 ) -> NDArray[np.float64]:
     """Roots of ``f`` in every bracket [lo, hi], all brackets solved together.
+
+    With ``levels`` (one finite value per bracket), bracket i solves ``f(t) = levels[i]``
+    instead: the function is ``f(t) - levels[i]``, so its sign is that of ``f(t) >= levels[i]``
+    (zero exactly at equality), and brackets with different levels still share every call.
 
     Each bracket needs ``f(lo)`` and ``f(hi)`` of opposite sign, or a zero at one end, which is
     then returned (``lo`` if both are zero). Otherwise the solver is Illinois regula falsi,
@@ -98,10 +106,13 @@ def solve_brackets(
     """
     lo, hi = _brackets(lo, hi)
     tolerance = _tolerance(tolerance_s)
+    shift = np.zeros(lo.size) if levels is None else np.asarray(levels, dtype=np.float64)
+    if shift.shape != lo.shape or not np.isfinite(shift).all():
+        raise ValueError(f"levels must hold one finite value for each of the {lo.size} brackets")
     if lo.size == 0:
         return np.empty(0)
-    values = _evaluate(f, np.concatenate([lo, hi]))
-    return _solve(f, lo, hi, values[: lo.size], values[lo.size :], tolerance)
+    values = _evaluate(f, np.concatenate([lo, hi])) - np.concatenate([shift, shift])
+    return _solve(f, lo, hi, values[: lo.size], values[lo.size :], tolerance, shift)
 
 
 def maximize_brackets(
@@ -269,7 +280,9 @@ def _merge(times, values, extra_t, extra_v):
     return t[keep], v[keep]
 
 
-def _solve(f, lo, hi, f_lo, f_hi, tolerance):
+def _solve(f, lo, hi, f_lo, f_hi, tolerance, shift=None):
+    """Illinois on ``f - shift`` (``shift`` per bracket, zero by default); see solve_brackets."""
+    shift = np.zeros(lo.size) if shift is None else shift
     lo, hi = lo.astype(np.float64, copy=True), hi.astype(np.float64, copy=True)
     f_lo, f_hi = f_lo.astype(np.float64, copy=True), f_hi.astype(np.float64, copy=True)
     zero_lo, zero_hi = f_lo == 0.0, f_hi == 0.0
@@ -307,7 +320,7 @@ def _solve(f, lo, hi, f_lo, f_hi, tolerance):
         index, trial = index[~stuck], trial[~stuck]
         if index.size == 0:
             continue
-        f_trial = _evaluate(f, trial)
+        f_trial = _evaluate(f, trial) - shift[index]
         exact = f_trial == 0.0
         result[index[exact]] = trial[exact]
         active[index[exact]] = False
