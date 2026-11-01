@@ -157,7 +157,7 @@ def test_example_release_benchmark_is_the_release_matrix():
     assert spec["replay"]["network"] is not None
     assert spec["replay"]["link"] is None
     base = load_scenario(Path(spec["base_scenario_path"]))
-    assert len(sweep.expand_sweep(spec, scenario_document(base))) == 8
+    assert len(sweep.expand_sweep(spec, scenario_document(base))) == 20
 
 
 def test_reproduce_orchestration_with_a_stand_in_for_the_native_replays(tmp_path, monkeypatch):

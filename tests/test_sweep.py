@@ -1210,8 +1210,8 @@ EXAMPLE_SWEEPS = {
     "sweeps/propagation_cases": ("variants", 3),
     "sweeps/eirp_oat": ("oat", 3),
     "sweeps/sampling_fidelity": ("grid", 6),
-    "sweeps/release_matrix": ("grid", 8),
-    "reproduce/release_benchmark": ("grid", 8),
+    "sweeps/release_matrix": ("grid", 20),
+    "reproduce/release_benchmark": ("grid", 20),
 }
 
 
@@ -1257,7 +1257,44 @@ def test_example_release_matrix_reproduces_the_v1_frozen_matrix():
     by_path = {p["path"]: p["values"] for p in spec["parameters"]}
     assert by_path["/radio/carrier_frequency_hz"] == v1["frequencies_hz"]
     assert by_path["/time/step_s"] == v1["sampling_steps_s"]
-    assert by_path["/propagation/refinement"] == v1["refinements"]
+    # v1 ran its three aligned propagation cases (free space, reference gases, gases plus the
+    # source's declared hydrometeors) at every refinement. Free space ignores the refinement, so
+    # v1's free-space runs at refinement 2 duplicated refinement 1: five distinct cases remain.
+    v1_scenario = json.loads((V1_STUDIES / v1["scenario_path"]).read_text())
+    declared = v1_scenario["propagation"]["hydrometeors"]
+    assert by_path["/propagation"] == [
+        {"model": "free_space"},
+        *(
+            {"model": "itu_reference", "refinement": refinement, "hydrometeors": hydrometeors}
+            for hydrometeors in (None, declared)
+            for refinement in v1["refinements"]
+        ),
+    ]
+    assert "/propagation/refinement" not in by_path
+    runs = sweep.expand_sweep(spec, _document(HYDROMETEORS))
+    cases = {
+        (
+            r.document["propagation"]["model"],
+            r.document["propagation"]["refinement"],
+            r.document["propagation"]["hydrometeors"] is not None,
+        )
+        for r in runs
+    }
+    assert cases == {
+        ("free_space", 1, False),
+        *(
+            (m, ref, h)
+            for m, h in (("itu_reference", False), ("itu_reference", True))
+            for ref in v1["refinements"]
+        ),
+    }
+    frequencies, steps = v1["frequencies_hz"], v1["sampling_steps_s"]
+    assert len(runs) == len(frequencies) * len(steps) * len(cases) == 20
+    # One network replay per run, routing model and load: v1's 144 less the 24 duplicated
+    # free-space replays at refinement 2.
+    models = 3
+    assert len(runs) * models * len(v1["traffic_loads_bps"]) == 120
+    assert 120 == 144 - len(frequencies) * len(steps) * models * len(v1["traffic_loads_bps"])
     network = spec["replay"]["network"]
     assert network["loads_bps"] == v1["traffic_loads_bps"]
     for key in (

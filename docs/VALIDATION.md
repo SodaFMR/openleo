@@ -312,8 +312,10 @@ loss, a satellite MAC/PHY, TCP, real traffic or operator performance. See
 `tests/test_reproduce.py` checks that `openleo reproduce` requires a passing published orbit
 reference and actual native packet results with no unresolved packets or send errors, and
 publishes nothing otherwise. The frozen configuration (`examples/reproduce/release_benchmark.json`)
-expands to 8 runs (12/20 GHz × 30/60 s × layer refinement 1/2) with 2 network loads; those counts
-are configuration expectations until a complete execution supplies its own evidence. See
+expands to 20 runs (12/20 GHz × 30/60 s × five propagation cases) with 3 routing models and 2
+network loads, 120 native replays (v1: 144, of which the 24 free-space replays at refinement 2
+duplicated refinement 1); `tests/test_sweep.py` checks the cases against v1's. Those counts are
+configuration expectations until a complete execution supplies its own evidence. See
 [Benchmark](BENCHMARK.md) and [Reproducibility](REPRODUCIBILITY.md).
 
 ## Validation Still Required

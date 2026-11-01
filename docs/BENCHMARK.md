@@ -2,13 +2,17 @@
 
 `examples/reproduce/release_benchmark.json` fixes the release matrix before results are
 interpreted. It is an `openleo.sweep/2` grid on the declared-hydrometeor Iridium example:
-12 and 20 GHz, 30 and 60 s sampling and gas-layer refinements 1 and 2 (8 runs), each clipped to
-the first 300 s of the base window, with native network replays at 10,000 and 300,000 bit/s per
+12 and 20 GHz, 30 and 60 s sampling and five propagation cases (free space; ITU reference gases at
+layer refinement 1 and 2; reference gases plus the example's declared rain and cloud at refinement
+1 and 2), 20 runs, each clipped to the first 300 s of the base window, with native network replays at 10,000 and 300,000 bit/s per
 flow. Packets carry 1,200 payload bytes, queues hold eight packets, two flows run in each
 direction, acquisition takes 0.1 s and the seed is 1. The four stations, rain and cloud layers,
 gains, EIRP and receiver noise are declared controlled inputs, not measured weather or calibrated
 hardware; gain and EIRP stay identical across the frequency cases.
-`examples/sweeps/release_matrix.json` is the same matrix as an ordinary sweep.
+`examples/sweeps/release_matrix.json` is the same matrix as an ordinary sweep. Every run replays
+the Madrid-Tromso pair for the three routing models at both loads: 120 native replays. The five
+cases are v1's three aligned propagation cases at both refinements, less free space at refinement
+2; v1's 144 (16 configurations × 3 propagation cases × 3 models) included 24 free-space replays at layer refinement 2, which duplicate refinement 1 because free space has no layers.
 
 ```python
 from pathlib import Path
@@ -25,9 +29,10 @@ evidence = run_reproduce(
 
 The backend must be the trusted, compiled OpenLEO ns-3 network adapter; it is never downloaded or
 selected from a configuration field. Every generated scenario is validated before anything runs.
-The sweep's `comparisons.csv` compares every run with `grid:0` (12 GHz, 30 s, refinement 1) per
+The sweep's `comparisons.csv` compares every run with `grid:0` (12 GHz, 30 s, free space) per
 metric: value, baseline, delta (in the metric's unit) and ratio (empty for a zero baseline).
-Zero effects stay visible. Step and layer-refinement comparisons are numerical sensitivity checks;
+Zero effects stay visible. Step and layer-refinement comparisons are numerical sensitivity checks,
+and the propagation cases compare declared atmospheres;
 frequency comparisons hold every other declared input fixed. Native packet results (goodput,
 delay, queue and acquisition accounting per flow and direction) are in each replay's
 `network-summary.json`. No hypothesis tests, confidence claims or uncertainty bars are inferred,

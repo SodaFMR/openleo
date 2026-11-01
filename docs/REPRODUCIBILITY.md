@@ -38,18 +38,20 @@ The [frozen configuration](../examples/reproduce/release_benchmark.json) is a sw
 | Base scenario | `examples/constellations/iridium_global_hydrometeors.json` (reference gases plus declared rain and cloud) |
 | Frequency | 12 and 20 GHz |
 | Sampling step | 30 and 60 s |
-| Gas-layer refinement | 1 and 2 |
+| Propagation case | free space; ITU reference gases at layer refinement 1 and 2; reference gases plus the base scenario's declared rain and cloud at refinement 1 and 2 |
 | Window | the first 300 s of the base scenario |
 | UDP load | 10,000 and 300,000 payload bit/s per flow |
 | Traffic | 1200-byte payloads, two flows per direction |
 | Queues, acquisition, seed | eight packets, 0.1 s, 1 |
 | Routing models | minimum delay, maximum rate, fixed capacity (the base scenario's) |
 
-The grid yields 8 runs; each replays the Madrid-Tromso pair for 3 routing models at 2 loads, so
-48 native replays are expected. These are expected counts from the configuration, not a statement
-that a particular release has executed them; `release-evidence.json` reports the actual counts.
-The aligned propagation cases of v1's benchmark (free space, gases, gases plus declared
-hydrometeors) are the separate sweep `examples/sweeps/propagation_cases.json`.
+The grid yields 20 runs (2 frequencies × 2 steps × 5 propagation cases); each replays the
+Madrid-Tromso pair for 3 routing models at 2 loads, so 120 native replays are expected. These are
+expected counts from the configuration, not a statement that a particular release has executed
+them; `release-evidence.json` reports the actual counts. The five propagation cases are v1's three
+aligned cases (free space, reference gases, gases plus declared hydrometeors) at both layer
+refinements, less free space at refinement 2: v1's 144 (16 configurations × 3 propagation cases × 3 models) included 24 free-space replays at layer refinement 2, which duplicate refinement 1 because free space has no layers, so 120 replays carry
+the same evidence.
 
 The two frequencies keep identical declared gains, EIRP, bandwidth and receiver noise; this is not
 a fixed-aperture or frequency-specific hardware comparison. Rain and cloud states and station

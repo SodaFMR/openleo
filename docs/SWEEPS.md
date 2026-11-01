@@ -67,7 +67,7 @@ and [Network replay](NETWORK_REPLAY.md).
 | `examples/sweeps/eirp_oat.json` | `oat` | 3 | ISS pass, EIRP 7/10/13 dBW around the 10 dBW nominal |
 | `examples/sweeps/propagation_cases.json` | `variants` | 3 | the v1 aligned propagation cases: free space, ITU reference gases, gases plus declared hydrometeors, over the first 1800 s |
 | `examples/sweeps/sampling_fidelity.json` | `grid` | 6 | the v1 fidelity study: 12/20 GHz × 30/60/120 s steps on the reference atmosphere, first 1200 s |
-| `examples/sweeps/release_matrix.json` | `grid` | 8 | the frozen release matrix (12/20 GHz × 30/60 s × layer refinement 1/2, 300 s) with network replays at 10 and 300 kbit/s |
+| `examples/sweeps/release_matrix.json` | `grid` | 20 | the frozen release matrix (12/20 GHz × 30/60 s × five propagation cases: free space, reference gases and gases plus declared hydrometeors, the last two at layer refinement 1 and 2; 300 s) with network replays at 10 and 300 kbit/s: 120 replays (v1's 144 less 24 duplicate free-space replays at refinement 2) |
 
 The 12 and 20 GHz cases hold the declared EIRP and antenna gains fixed; they are not a comparison
 at fixed antenna aperture and do not reconstruct an operator's radio system.
