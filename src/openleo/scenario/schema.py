@@ -57,7 +57,22 @@ _JSON_TYPES = {bool: "boolean", int: "integer", float: "number", str: "string"}
 # character that is not whitespace). The others restate the rules of openleo._validation.
 _TEXT = {"type": "string"}
 _NON_BLANK = {"type": "string", "minLength": 1, "pattern": "\\S"}
-_URL = {"type": "string", "format": "uri", "pattern": "^https?://"}
+# A URL as openleo._validation._url reads it: scheme http or https in any case, a non-empty host,
+# no user information (@), no whitespace anywhere. The host stops at the first / ? or #, so
+# those and @ cannot occur in it. Escapes keep the pattern ECMA-262 portable and exact.
+# _END: Python's re also lets $ match before a final newline, which the parser rejects.
+_END = r"$(?!\n)"
+# Whitespace as str.isspace sees it, which is what the parser tests: \t-\r, \x1c-\x1f, space,
+# \x85, \xa0, \u1680, \u2000-\u200a, \u2028, \u2029, \u202f, \u205f, \u3000.
+_SPACE = r"\t-\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000"
+# Printable ASCII except / ? # @ [ ]. The schema is stricter than the parser on hosts: it takes
+# no IPv6 literal (brackets), no non-ASCII name (write punycode, xn--) and no control character.
+_HOST_CHARACTER = r"[\x21\x22\x24-\x2e\x30-\x3e\x41-\x5a\x5c\x5e-\x7e]"
+_URL = {
+    "type": "string",
+    "format": "uri",
+    "pattern": rf"^[hH][tT][tT][pP][sS]?://{_HOST_CHARACTER}+([/?#][^{_SPACE}]*)?{_END}",
+}
 _SHA256 = {"type": "string", "minLength": 64, "maxLength": 64, "pattern": "^[0-9a-f]{64}$"}
 _TIMESTAMP = {
     "type": "string",
@@ -65,7 +80,7 @@ _TIMESTAMP = {
     # Each field in its range. A day that its month lacks (February 30) is parser-only.
     "pattern": (
         "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])"
-        "T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?Z$"
+        "T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?Z" + _END
     ),
 }
 _STRINGS: dict[tuple[type, str], dict[str, Any]] = {
@@ -364,7 +379,11 @@ def _description() -> str:
         "(9) the catalog sha256 matches the catalog file, there are no duplicate NORAD ids across "
         "catalogs, and the catalogs stay within their size limits (checked when they are read); "
         "(10) a scenario file of at most 1 MB with no duplicate JSON object keys and no "
-        "non-finite numbers (properties of the JSON text, not of a parsed instance). "
+        "non-finite numbers (properties of the JSON text, not of a parsed instance); "
+        "(11) catalog URLs: the schema pattern needs an ASCII host without brackets or control "
+        "characters (write an internationalised host name as punycode, xn--) and no leading "
+        "control character, so the parser alone accepts IPv6-literal hosts, non-ASCII hosts and "
+        "those control characters. "
         "Also expressed by this schema with if/then/else, and listed because the parser "
         "is authoritative: "
         "(a) fixed_capacity_bps is present (not null) exactly when route_models lists "

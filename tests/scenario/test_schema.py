@@ -9,6 +9,8 @@ and on the cross-field rules the schema expresses with ``if``/``then``/``else``.
 import dataclasses
 import json
 import math
+import random
+import re
 import types
 import typing
 from pathlib import Path
@@ -17,6 +19,7 @@ from typing import Any
 import jsonschema
 import pytest
 
+from openleo._validation import _url
 from openleo.scenario import model, scenario_json_schema
 from openleo.scenario import schema as schema_module
 from openleo.scenario.parse import load_scenario, parse_scenario
@@ -304,6 +307,7 @@ def test_description_lists_the_parser_only_rules() -> None:
         "of at least 5 deg",
         "every station has height_amsl_m",
         "propagation.hydrometeors requires itu_reference",
+        "the parser alone accepts IPv6-literal hosts, non-ASCII hosts",
     ):
         assert phrase in description, phrase
 
@@ -454,6 +458,59 @@ def test_schema_and_parser_agree_on_the_hydrometeor_station_bounds(tmp_path: Pat
     assert state["polarization_tilt_deg"]["maximum"] == 180
 
 
+URL_ACCEPTED = [
+    "http://example.org",
+    "https://example.org/a?b=c#d",
+    "https://example.org:8080/x",
+    "https://example.org:99999/",  # the parser never reads the port
+    "https://example.org?q",
+    "https://example.org#fragment",
+    "https://a/b",
+    "https://127.0.0.1:8080/gp.php?GROUP=iridium-NEXT&FORMAT=CSV",
+    "https://xn--mnchen-3ya.de/",
+    "https://example.org/caf\u00e9",  # non-ASCII outside the host is fine for both
+    "https://example.org/a[1]@b",  # brackets and @ after the host are ordinary characters
+    "HTTP://example.org",  # urlsplit lowercases the scheme
+    "HtTpS://example.org/Mixed",
+]
+URL_REJECTED = [
+    "",
+    "   ",
+    "ftp://example.org",
+    "example.org",
+    "//example.org",
+    "mailto:a@b.c",
+    "file:///etc/passwd",
+    "http:example.org",
+    "http:/example.org",
+    "https//example.org",
+    "htp://example.org",
+    "https ://example.org",
+    " https://example.org",
+    "http://",
+    "https:///path",
+    "https://user:pw@example.org/",
+    "https://@example.org",
+    "https://example.org@",
+    "https://:@example.org",
+    "https://exa mple.org/",
+    "https://example.org/a b",
+    "https://example.org/\t",
+    "https://example.org/\n",
+    "https://example.org\n",
+    "https://example.org/\u00a0",
+    "https://example.org/\u2003x",
+    "https://example.org/\x1f",  # str.isspace is true for U+001C to U+001F and U+0085
+    "https://example.org/\x85",
+    "http://?q",
+    "http://#fragment",
+    "https://[abc/",
+    "https://abc]/",
+    "https://[abc]/",
+    5,
+    None,
+]
+
 STRING_CASES = [
     # (pointer, strings both must accept, values both must reject)
     ("/name", ["x", "two words"], ["", " ", "\t\n", " ", 5, None]),
@@ -468,16 +525,8 @@ STRING_CASES = [
         ["a" * 64, "0123456789abcdef" * 4],
         ["", "a" * 63, "a" * 65, "A" * 64, "g" * 64, "a" * 64 + "\n", " " + "a" * 63, 5, None],
     ),
-    (
-        "/space_segment/catalogs/0/source_url",
-        ["http://example.org", "https://example.org/a?b=c#d", "https://example.org:8080/x"],
-        ["", "ftp://example.org", "example.org", "//example.org", "mailto:a@b.c", 5, None],
-    ),
-    (
-        "/space_segment/catalogs/0/terms_url",
-        ["https://example.org/terms"],
-        ["", "file:///etc/passwd", "www.example.org", 5, None],
-    ),
+    ("/space_segment/catalogs/0/source_url", URL_ACCEPTED, URL_REJECTED),
+    ("/space_segment/catalogs/0/terms_url", URL_ACCEPTED, URL_REJECTED),
     (
         # The parser also reads other ISO 8601 forms ("2026-09-10 22:00:25Z"); the schema accepts
         # the RFC 3339 form only, a subset, so only that form is compared here.
@@ -488,6 +537,7 @@ STRING_CASES = [
             "2026-09-10T22:00:25",
             "2026-09-10T22:00:25+00:00",
             "2026-09-10T22:00:25z",
+            "2026-09-10T22:00:25Z\n",
             "2026-13-10T22:00:25Z",
             "2026-00-10T22:00:25Z",
             "2026-09-32T22:00:25Z",
@@ -516,6 +566,90 @@ def test_schema_and_parser_agree_on_strings(pointer, accepted, rejected, tmp_pat
         document = _edit(_spec_example(), (pointer, value))
         assert not schema_accepts(document), (pointer, value)
         assert not parser_accepts(document, tmp_path), (pointer, value)
+
+
+URL_SCHEMA = SCHEMA["properties"]["space_segment"]["properties"]["catalogs"]["items"]["properties"][
+    "source_url"
+]
+
+
+URL_VALIDATOR = jsonschema.Draft202012Validator(URL_SCHEMA)
+
+
+def _url_verdicts(value: str) -> tuple[bool, bool]:
+    """(schema, parser) verdicts for one catalog URL, without building a whole document."""
+    try:
+        _url(value, "/url")
+        parser = True
+    except ValueError:
+        parser = False
+    return URL_VALIDATOR.is_valid(value), parser
+
+
+def test_both_catalog_urls_share_one_fragment() -> None:
+    catalog = SCHEMA["properties"]["space_segment"]["properties"]["catalogs"]["items"]
+    fragment = catalog["properties"]["terms_url"]
+    assert {key: value for key, value in fragment.items() if key != "description"} == {
+        key: value for key, value in URL_SCHEMA.items() if key != "description"
+    }
+    assert URL_SCHEMA["format"] == "uri"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://[::1]/x",  # an IPv6 literal
+        "https://[2001:db8::1]:8080/gp.php",
+        "https://m\u00fcnchen.de/",  # a non-ASCII host name
+        "https://example.org\u00e9/",
+        "https://ex\x01ample.org/",  # a control character in the host
+        "\x01https://example.org/",  # urlsplit drops leading control characters
+        "\x00https://example.org/",
+    ],
+)
+def test_the_schema_is_stricter_than_the_parser_only_on_the_documented_urls(url: str) -> None:
+    schema_says, parser_says = _url_verdicts(url)
+    assert (schema_says, parser_says) == (False, True)
+
+
+def _random_urls(alphabet: list[str], count: int, seed: int):
+    rng = random.Random(seed)
+    prefixes = ["", "https://", "HtTp://", "http:/", "https:", "https://a", "https://a/"]
+    for _ in range(count):
+        body = "".join(rng.choice(alphabet) for _ in range(rng.randint(0, 12)))
+        yield rng.choice(prefixes) + body
+
+
+def test_the_url_pattern_equals_the_parser_on_plain_urls() -> None:
+    plain = list("hHtTpPsS:/?#@. %\\-_~0a9Z") + ["\t", "\n", "\r", " ", "\u00a0", "\u2003", "\x1f"]
+    for url in _random_urls(plain, 20_000, seed=1):
+        schema_says, parser_says = _url_verdicts(url)
+        assert schema_says == parser_says, repr(url)
+
+
+def test_the_url_pattern_never_accepts_what_the_parser_rejects() -> None:
+    rough = [
+        *"hHtTpPsS:/?#@[]. \t\n\r%\\-_~0a9\x00\x01\x7f\x85\ufeff",
+        "\u00e9",  # a non-ASCII letter
+        "\u2100",  # NFKC turns it into "a/c": urlsplit refuses it in a host
+        "\uff03",  # a full-width number sign
+        "\uff1a",  # a full-width colon
+        "\u2003",
+        "\U0001f600",
+    ]
+    for url in _random_urls(rough, 30_000, seed=2):
+        schema_says, parser_says = _url_verdicts(url)
+        assert parser_says or not schema_says, repr(url)
+
+
+def test_the_url_whitespace_class_is_exactly_str_isspace() -> None:
+    pattern = re.compile(URL_SCHEMA["pattern"])
+    for code in range(0x110000):
+        character = chr(code)
+        if character in "/?#@[]":
+            continue
+        accepted = pattern.search(f"https://e/{character}") is not None
+        assert accepted == (not character.isspace()), hex(code)
 
 
 def test_terminal_names_must_be_non_blank_in_both() -> None:
