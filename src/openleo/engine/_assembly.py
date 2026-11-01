@@ -653,7 +653,7 @@ def models(
         },
         "free_space_path_loss": {
             "standard": "ITU-R P.525",
-            "version": "P.525-4",
+            "version": "P.525-5",
             "method": "20 log10(4 pi d f / c)",
         },
         "radio_link": {
