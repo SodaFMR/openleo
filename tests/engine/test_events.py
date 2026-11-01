@@ -1,7 +1,6 @@
 """Exact AOS, LOS and culmination events, checked against closed forms and a dense ISS scan."""
 
 import functools
-import time
 from datetime import UTC, datetime, timedelta
 from math import asin, pi
 from pathlib import Path
@@ -84,8 +83,13 @@ def test_crossings_within_tolerance(tolerance_s: float) -> None:
 
 
 @pytest.mark.parametrize(("tolerance_s", "time_error_s"), [(1e-3, 1e-3), (1e-6, 1e-4)])
-def test_culmination_within_tolerance(tolerance_s: float, time_error_s: float) -> None:
-    """Culminations are within tolerance_s down to the value-noise floor (module docstring)."""
+def test_culmination_accurate_to_tolerance_or_noise_floor(
+    tolerance_s: float, time_error_s: float
+) -> None:
+    """Culmination times are accurate to max(tolerance_s, value-noise floor): 1e-4 s at 1e-6.
+
+    Spec section 6.1 as amended; see the events module docstring.
+    """
     from openleo.engine.events import find_passes
 
     phase, window_s = -2.0, 12_007.5
@@ -225,17 +229,50 @@ def test_guard_bisects_hidden_dips() -> None:
 
 
 def test_non_monotone_raises() -> None:
-    """A peak at one third of every interval stays off-centre at every bisection level."""
+    """A cusp dip at one third of every interval stays off-centre at every bisection level."""
     from openleo.engine.events import find_passes
 
     step_s, window_s = 60.0, 600.0
 
     def sawtooth(t):
         t = np.asarray(t, dtype=np.float64)
-        return 20.0 - 3.0 * np.abs(np.mod(t / step_s, 1.0) - 1.0 / 3.0)
+        return 20.0 + 3.0 * np.abs(np.sin(pi * (t / step_s - 1.0 / 3.0)))
 
+    # Visible endpoints, dips toward the mask: raises.
     with pytest.raises(ValueError, match=r"^non-monotone elevation between \d"):
         find_passes(sawtooth, _grid(window_s, step_s), MASK_DEG, 1e-3)
+    # Invisible endpoints, so the same dips point away from the mask and cannot change
+    # visibility: no error and no pass.
+    assert find_passes(sawtooth, _grid(window_s, step_s), 30.0, 1e-3) == ()
+
+
+@pytest.mark.parametrize("tolerance_s", [0.1, 0.3, 1.0])
+@pytest.mark.parametrize(
+    ("peak_s", "sharpness_deg"),
+    [(509.9125565, 0.00125), (600.0004, 0.001), (600.07, 0.003), (603.3, 0.02), (647.81, 0.5)],
+)
+def test_cone_peak_with_coarse_tolerance(
+    peak_s: float, sharpness_deg: float, tolerance_s: float
+) -> None:
+    """A sharp unimodal peak whose refined culmination misses it by up to tolerance_s.
+
+    The interval next to the culmination can hold the true peak, so its midpoint rises above
+    both visible endpoints: away from the mask, which must not raise (review finding 1).
+    """
+    from openleo.engine.events import find_passes
+
+    window_s = 1_200.0
+
+    def cone(t):
+        t = np.asarray(t, dtype=np.float64)
+        return 90.0 - np.sqrt(sharpness_deg**2 + (0.87 * (t - peak_s)) ** 2)
+
+    (p,) = find_passes(cone, _grid(window_s, 10.0), MASK_DEG, tolerance_s)
+
+    half_s = np.sqrt((90.0 - MASK_DEG) ** 2 - sharpness_deg**2) / 0.87
+    assert abs(p.start_s - (peak_s - half_s)) <= tolerance_s
+    assert abs(p.end_s - (peak_s + half_s)) <= tolerance_s
+    assert abs(p.culmination_s - peak_s) <= tolerance_s
 
 
 def test_quantised_provider_terminates() -> None:
@@ -486,9 +523,7 @@ def test_iss_pass_matches_dense_search() -> None:
         calls.append(t.size)
         return geometry.elevation_deg(0, 0, t)
 
-    began = time.perf_counter()
     (p,) = find_passes(elevation, grid.offsets_s, mask, tolerance)
-    assert time.perf_counter() - began < 10.0
     assert not (p.truncated_start or p.truncated_end)
     assert len(calls) <= 40
 

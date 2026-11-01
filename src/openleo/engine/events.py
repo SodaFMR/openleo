@@ -7,12 +7,16 @@ elevation is at or above the mask, without the sampling artefacts of a fixed gri
 2. Discrete local extrema of the samples are refined by golden-section search on
    [t_{k-1}, t_{k+1}] clipped to the window (``maximize_brackets``). Window edges are candidate
    extrema too. Maxima are culminations; minima are refined as well, at no extra provider
-   calls, so that the elevation is monotone between consecutive breakpoints at troughs and
-   the monotonicity guard does not trip there.
+   calls, so that the elevation is monotone between consecutive breakpoints at troughs too.
 3. The guard of spec section 6.7 evaluates every inter-breakpoint interval at its midpoint.
    A midpoint outside the endpoint range by more than ``MONOTONICITY_SLACK`` relative (to the
-   larger endpoint magnitude, and at least 1 degree) bisects the interval, up to
-   ``MAX_BISECTION_LEVELS`` levels; non-monotonicity that survives them raises ValueError.
+   larger endpoint magnitude, and at least 1 degree) *toward the mask* bisects the interval, up
+   to ``MAX_BISECTION_LEVELS`` levels; such non-monotonicity that survives them raises
+   ValueError. Toward the mask means below the endpoint range when either endpoint is visible,
+   or above it when either endpoint is not. A deviation away from the mask cannot change
+   visibility, so it is ignored: a refined culmination is only within ``tolerance_s`` of the
+   true peak, and the interval next to it may hold the peak itself, a harmless excursion above
+   both (visible) endpoints that coarse tolerances would otherwise report as non-monotone.
 4. Every interval across which ``e >= mask`` changes is root-found (``solve_brackets``).
 
 Breakpoints are the grid, the refined extrema and the guard's midpoints. A pass whose peak
@@ -26,9 +30,9 @@ Accuracy. Crossings are within ``tolerance_s`` of the root of the provider as gi
 rounds times to the microsecond, so 1e-6 s is the useful floor. Culminations come from function
 values alone, so their location is limited by value noise: near a maximum e(t) ≈ e_max −
 k (t − t_max)², and a value noise ε hides location errors up to sqrt(ε / k). For float64
-elevations that floor is of order 1e-5 to 1e-4 s, so below it ``culmination_s`` is accurate to
-the floor rather than to ``tolerance_s``; ``max_elevation_deg`` is affected only to second
-order (by about ε).
+elevations that floor is of order 1e-5 s (up to about 1e-4 s), so culmination times are
+accurate to max(``tolerance_s``, the value-noise floor), as amended in spec section 6.1, not to
+``tolerance_s`` alone; ``max_elevation_deg`` is affected only to second order (by about ε).
 """
 
 from __future__ import annotations
@@ -132,7 +136,7 @@ def find_passes(
     samples = _evaluate(elevation, grid)
 
     times, values = _with_extrema(elevation, grid, samples, tolerance)
-    times, values = _monotone_breakpoints(elevation, times, values)
+    times, values = _monotone_breakpoints(elevation, times, values, mask)
 
     visible = values >= mask
     crossings = np.flatnonzero(visible[:-1] != visible[1:])
@@ -227,8 +231,8 @@ def _with_extrema(f, grid, samples, tolerance):
     return _merge(grid, samples, where[better], value[better])
 
 
-def _monotone_breakpoints(f, times, values):
-    """Spec section 6.7: bisect intervals whose midpoint leaves the endpoint range."""
+def _monotone_breakpoints(f, times, values, mask):
+    """Spec section 6.7: bisect intervals whose midpoint leaves the endpoint range toward mask."""
     a, b, fa, fb = times[:-1], times[1:], values[:-1], values[1:]
     added_t, added_v = [], []
     for level in range(MAX_BISECTION_LEVELS + 1):
@@ -237,15 +241,16 @@ def _monotone_breakpoints(f, times, values):
         added_t.append(middle)
         added_v.append(fm)
         slack = MONOTONICITY_SLACK * np.maximum(np.maximum(np.abs(fa), np.abs(fb)), 1.0)
-        bad = (fm < np.minimum(fa, fb) - slack) | (fm > np.maximum(fa, fb) + slack)
+        low, high = np.minimum(fa, fb), np.maximum(fa, fb)
+        bad = ((fm < low - slack) & (high >= mask)) | ((fm > high + slack) & (low < mask))
         if not bad.any():
             break
         if level == MAX_BISECTION_LEVELS:
             first = int(np.argmax(bad))
             raise ValueError(
                 f"non-monotone elevation between {a[first]:.6f} s and {b[first]:.6f} s after "
-                f"the window start: the midpoint value {float(fm[first])!r} lies outside the "
-                f"endpoint range [{float(min(fa[first], fb[first]))!r}, "
+                f"the window start: the midpoint value {float(fm[first])!r} lies toward the mask "
+                f"outside the endpoint range [{float(min(fa[first], fb[first]))!r}, "
                 f"{float(max(fa[first], fb[first]))!r}] after "
                 f"{MAX_BISECTION_LEVELS} bisections; elevation is not monotone between "
                 "breakpoints (is the step longer than P/8?)"
