@@ -1,0 +1,29 @@
+{
+  "schema": "openleo.sweep/2",
+  "name": "Aligned propagation cases: free space, ITU reference, declared hydrometeors",
+  "base_scenario": "../iridium_global_hydrometeors.json",
+  "mode": "variants",
+  "variants": [
+    {
+      "id": "free_space",
+      "label": "Free space",
+      "baseline": true,
+      "patch": [
+        {"op": "replace", "path": "/propagation", "value": {"model": "free_space"}}
+      ]
+    },
+    {
+      "id": "itu_reference",
+      "label": "ITU reference gases and atmosphere",
+      "patch": [
+        {"op": "replace", "path": "/propagation/hydrometeors", "value": null}
+      ]
+    },
+    {
+      "id": "itu_reference_hydrometeors",
+      "label": "ITU reference plus declared hydrometeors",
+      "patch": []
+    }
+  ],
+  "window": {"start_offset_s": 0, "duration_s": 1800}
+}

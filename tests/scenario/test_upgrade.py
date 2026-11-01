@@ -107,12 +107,13 @@ def test_committed_examples_are_the_normalised_upgrade(path: Path) -> None:
     assert document["space_segment"]["catalogs"][0]["path"].startswith("../data/")
 
 
-def test_every_v1_example_has_a_v2_twin_and_nothing_else_is_in_the_folder() -> None:
+def test_every_v1_example_has_a_v2_twin_and_only_sweeps_and_reproduce_are_added() -> None:
     assert sorted(path.name for path in V2_DIR.glob("*.json")) == sorted(
         path.name for path in V1_EXAMPLES
     )
+    # Besides the twins, the folder holds only the sweep and reproduce example folders (Task 14).
     assert sorted(path.name for path in V2_DIR.iterdir()) == sorted(
-        path.name for path in V1_EXAMPLES
+        [*(path.name for path in V1_EXAMPLES), "reproduce", "sweeps"]
     )
 
 
