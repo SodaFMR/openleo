@@ -24,13 +24,20 @@ Route                                                  Method  Token  Response
 Every scenario a request carries is validated by the scenario parser against the directory of
 the scenario the server was started with, and its normalised ``space_segment`` must equal that
 scenario's (403 otherwise): the browser can never name a file. Sweep specs carry no
-``base_scenario``: the base is the submitted scenario, else the startup one. Backends are the
-ones given at startup; no request field names an executable or an output path.
+``base_scenario``: the base is the submitted scenario, else the startup one. A sweep whose
+parameters or variant patches reach ``/space_segment`` is refused (403), and every run it
+generates must keep the pinned ``space_segment``, checked when it is submitted and again by the
+worker. Backends are the ones given at startup; no request field names an executable or an
+output path. Error messages name the catalogs by their scenario-relative paths, and no SHA-256
+other than the pinned catalogs' own appears in them.
 
 Job ids are the SHA-256 of the normalised request (``jobs.job_id``). Results live under a
 server-owned temporary directory that ``close`` removes. Tables are served from the OLC files of
 the run directory (the app always writes OLC); results are never re-read from CSV here. A job
-whose files exceed the artifact limit fails and leaves nothing behind.
+whose files exceed the artifact limit fails and leaves nothing behind; an export that would
+take its job past the limit is refused (507). Finished jobs together stay within the session
+limit (default four artifact limits): the least recently used are evicted, and their ids answer
+404 until they are submitted again.
 """
 
 from __future__ import annotations
@@ -43,6 +50,7 @@ import secrets
 import shutil
 import tempfile
 import threading
+from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -53,7 +61,7 @@ import numpy as np
 
 from openleo import __version__
 from openleo._validation import MAX_SCENARIO_BYTES
-from openleo.app.jobs import JobQueue, QueueFull
+from openleo.app.jobs import JobQueue, QueueFull, job_id
 from openleo.engine._assembly import canonical_sha256
 from openleo.engine.run import PHASES, save_run
 from openleo.engine.run import run as run_engine
@@ -67,6 +75,7 @@ from openleo.sweep import (
     execute_sweep,
     expand_sweep,
     parse_sweep,
+    spec_touches,
 )
 
 if TYPE_CHECKING:
@@ -77,6 +86,7 @@ if TYPE_CHECKING:
 API_VERSION = 2
 MAX_BODY_BYTES = MAX_SCENARIO_BYTES
 DEFAULT_ARTIFACT_LIMIT_BYTES = 256 * 2**20
+SESSION_LIMIT_FACTOR = 4
 RATE_LIMIT_PER_S = 60
 INDEX_PAGE = Path(__file__).resolve().parent.parent / "_web" / "dist" / "index.html"
 CONTENT_SECURITY_POLICY = (
@@ -85,12 +95,17 @@ CONTENT_SECURITY_POLICY = (
 )
 ZIP_DATE_TIME = (2000, 1, 1, 0, 0, 0)
 PINNED = "The catalog is pinned: space_segment must equal the scenario the app was started with."
+PINNED_SWEEP = (
+    "The catalog is pinned: a sweep cannot vary or patch /space_segment, and every run must keep "
+    "the space_segment of the scenario the app was started with."
+)
 _URL_KINDS = {"runs": "run", "sweeps": "sweep"}
 
 _JOB = re.compile(r"/api/(runs|sweeps)/([0-9a-f]{64})(?:/(.*))?")
 _TABLE = re.compile(r"tables/([a-z][a-z0-9_]*)\.olc")
 _SWEEP_RUN = re.compile(r"runs/(0|[1-9][0-9]{0,3})/(results\.json|tables/([a-z][a-z0-9_]*)\.olc)")
 _POINTER = re.compile(r"/[^=\s:]*")
+_SHA256 = re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{64}(?![0-9A-Fa-f])")
 _COMPARISON_COLUMNS = (
     Column("run_id", "str", "", "sweep run id"),
     Column("metric", "str", "", "flattened metric name"),
@@ -182,12 +197,18 @@ class Api:
         packet_backend: Path | None,
         network_backend: Path | None,
         artifact_limit_bytes: int,
+        session_limit_bytes: int | None = None,
     ) -> None:
         self.scenario = scenario
         self.document = scenario_document(scenario)
         self.packet_backend = packet_backend
         self.network_backend = network_backend
         self.artifact_limit_bytes = artifact_limit_bytes
+        self.session_limit_bytes = (
+            SESSION_LIMIT_FACTOR * artifact_limit_bytes
+            if session_limit_bytes is None
+            else session_limit_bytes
+        )
         self.token = secrets.token_urlsafe(32)
         self._index = _index_page(self.token)
         self._scenario_body = json_bytes(
@@ -198,6 +219,8 @@ class Api:
             }
         )
         self._export_lock = threading.Lock()
+        self._usage: OrderedDict[str, tuple[Path, int]] = OrderedDict()  # LRU first
+        self._usage_lock = threading.Lock()
         self.root = Path(tempfile.mkdtemp(prefix="openleo-app-"))
         directory = scenario.source_path.parent
         redactions = [
@@ -212,6 +235,7 @@ class Api:
         # A filesystem root is never redacted: replacing "/" would mangle every JSON pointer.
         redactions = [(p, shown) for p, shown in redactions if Path(p).parent != Path(p)]
         self._redactions = sorted(redactions, key=lambda pair: len(pair[0]), reverse=True)
+        self._known_hashes = {c.sha256.lower() for c in scenario.space_segment.catalogs}
         self.jobs = JobQueue(self._execute)
         self._capabilities = json_bytes(self._capability_document())
         self._routes = {
@@ -230,10 +254,14 @@ class Api:
         shutil.rmtree(self.root, ignore_errors=True)
 
     def public(self, message: str) -> str:
-        """``message`` with the server's directories replaced by names the browser knows."""
+        """``message`` with the server's directories replaced by names the browser knows and
+        every SHA-256 other than the pinned catalogs' replaced by ``<sha256>`` (a hash of a
+        file's actual bytes would otherwise be an oracle on its contents)."""
         for private, shown in self._redactions:
             message = message.replace(private, shown)
-        return message
+        return _SHA256.sub(
+            lambda m: m[0] if m[0].lower() in self._known_hashes else "<sha256>", message
+        )
 
     # ------------------------------------------------------------------------------ routing
 
@@ -250,7 +278,9 @@ class Api:
             name = "results.json" if kind == "run" else "sweep.json"
             return self._artifact(kind, identifier, lambda d: (d / name, "application/json"))
         if rest == "export.zip":
-            return self._artifact(kind, identifier, lambda d: (self._export(d), "application/zip"))
+            return self._artifact(
+                kind, identifier, lambda d: (self._export(identifier, d), "application/zip")
+            )
         table = _TABLE.fullmatch(rest)
         if table is not None:
             return self._artifact(kind, identifier, lambda d: self._table(kind, d, table[1]))
@@ -262,6 +292,9 @@ class Api:
     def _artifact(self, kind: str, identifier: str, locate: Callable) -> Route:
         def handler(_: Any) -> Response:
             path, content_type = locate(self._finished(kind, identifier))
+            if not path.is_file():  # evicted while this request was being served
+                raise ApiError(404, self._evicted(kind))
+            self._touch(identifier)
             return Response(200, content_type=content_type, file=path)
 
         return Route(("GET",), True, handler)
@@ -292,6 +325,7 @@ class Api:
                 "request_bytes": MAX_BODY_BYTES,
                 "artifact_bytes": self.artifact_limit_bytes,
                 "requests_per_second": RATE_LIMIT_PER_S,
+                "session_bytes": self.session_limit_bytes,
                 "pending_jobs": self.jobs.max_pending,
                 "sweep_runs": MAX_RUNS,
             },
@@ -321,9 +355,16 @@ class Api:
             raise ApiError(400, "/base_scenario is not allowed: the base is the app's scenario.")
         try:
             spec = self._spec(raw)
-            expand_sweep(spec, document)
         except ValueError as exc:
             raise ApiError(400, self.public(str(exc))) from None
+        if spec_touches(spec, "/space_segment"):
+            raise ApiError(403, PINNED_SWEEP)
+        try:
+            runs = expand_sweep(spec, document)
+        except ValueError as exc:
+            raise ApiError(400, self.public(str(exc))) from None
+        if not self._pinned_runs(runs):
+            raise ApiError(403, PINNED_SWEEP)
         normalised = {
             key: value
             for key, value in spec.items()
@@ -342,7 +383,14 @@ class Api:
     def _get_status(self, kind: str, identifier: str) -> Response:
         if self.jobs.kind(identifier) != kind:
             raise ApiError(404, f"Unknown {kind}.")
-        return _json(self.jobs.status(identifier))
+        status = self.jobs.status(identifier)
+        if status["state"] == "evicted":
+            raise ApiError(404, self._evicted(kind))
+        return _json(status)
+
+    @staticmethod
+    def _evicted(kind: str) -> str:
+        return f"The {kind} was evicted to bound disk use; resubmit it."
 
     # ------------------------------------------------------------------------- validation
 
@@ -361,6 +409,10 @@ class Api:
         if document["space_segment"] != self.document["space_segment"]:
             raise ApiError(403, PINNED)
         return document, replace(scenario, source_sha256=canonical_sha256(document))
+
+    def _pinned_runs(self, runs) -> bool:
+        pinned = self.document["space_segment"]
+        return all(run.document["space_segment"] == pinned for run in runs)
 
     def _spec(self, raw: Any) -> dict:
         """A sweep spec over the app's scenario; ``base_scenario`` is set here, never sent."""
@@ -386,19 +438,26 @@ class Api:
                 save_run(scenario, results, result, self._formats(scenario))
             else:
                 self._execute_sweep(payload, result)
-            self._check_size(result)
+            size = self._check_size(result)
         except ValueError as exc:
             shutil.rmtree(directory, ignore_errors=True)
             raise ValueError(self.public(str(exc))) from None
         except BaseException:
             shutil.rmtree(directory, ignore_errors=True)
             raise
+        self._record(job_id(kind, payload), directory, size)
         return result
 
     def _execute_sweep(self, payload: dict, result: Path) -> None:
         base = self._parse(payload["scenario"])
+        if scenario_document(base)["space_segment"] != self.document["space_segment"]:
+            raise ValueError(PINNED)
         spec = self._spec(payload["spec"])
+        if spec_touches(spec, "/space_segment"):
+            raise ValueError(PINNED_SWEEP)
         runs = expand_sweep(spec, payload["scenario"])
+        if not self._pinned_runs(runs):
+            raise ValueError(PINNED_SWEEP)
 
         def build(stage: Path) -> None:
             execute_sweep(
@@ -418,13 +477,49 @@ class Api:
         table = _comparisons_table(result / "comparisons.csv")
         (result.parent / "comparisons.olc").write_bytes(encode_table(table))
 
-    def _check_size(self, result: Path) -> None:
-        total = sum(p.stat().st_size for p in result.parent.rglob("*") if p.is_file())
+    @staticmethod
+    def _bytes(directory: Path) -> int:
+        return sum(p.stat().st_size for p in directory.rglob("*") if p.is_file())
+
+    def _check_size(self, result: Path) -> int:
+        total = self._bytes(result.parent)
         if total > self.artifact_limit_bytes:
             raise ValueError(
                 f"the results take {total} bytes, more than the artifact limit of "
                 f"{self.artifact_limit_bytes} bytes; run this with the CLI instead"
             )
+        return total
+
+    # ---------------------------------------------------------------------- disk accounting
+
+    def usage_bytes(self) -> int:
+        """Bytes held by the finished jobs' directories."""
+        with self._usage_lock:
+            return sum(size for _, size in self._usage.values())
+
+    def _record(self, identifier: str, directory: Path, size: int) -> None:
+        """Account a job's directory as most recently used, then evict down to the limit."""
+        with self._usage_lock:
+            self._usage[identifier] = (directory, size)
+            self._usage.move_to_end(identifier)
+            evicted = []
+            total = sum(size for _, size in self._usage.values())
+            for other in list(self._usage):
+                if total <= self.session_limit_bytes:
+                    break
+                if other == identifier:
+                    continue
+                old_directory, old_size = self._usage.pop(other)
+                total -= old_size
+                evicted.append((other, old_directory))
+        for other, old_directory in evicted:
+            self.jobs.evict(other)
+            shutil.rmtree(old_directory, ignore_errors=True)
+
+    def _touch(self, identifier: str) -> None:
+        with self._usage_lock:
+            if identifier in self._usage:
+                self._usage.move_to_end(identifier)
 
     # --------------------------------------------------------------------------- artifacts
 
@@ -434,6 +529,8 @@ class Api:
         found = self.jobs.result(identifier)
         if found is None:
             state = self.jobs.status(identifier)["state"]
+            if state == "evicted":
+                raise ApiError(404, self._evicted(kind))
             raise ApiError(409, f"The {kind} is not finished: its state is {state}.")
         return found[1]
 
@@ -458,8 +555,12 @@ class Api:
             return directory / "results.json", "application/json"
         return self._table("run", directory, match[3])
 
-    def _export(self, result: Path) -> Path:
-        """The result directory as a ZIP with sorted entries and fixed metadata (built once)."""
+    def _export(self, identifier: str, result: Path) -> Path:
+        """The result directory as a ZIP with sorted entries and fixed metadata (built once).
+
+        The archive counts against the job's artifact limit (507 when it would exceed it) and
+        against the session limit.
+        """
         archive = result.parent / "export.zip"
         with self._export_lock:
             if not archive.exists():
@@ -476,7 +577,16 @@ class Api:
                         info.file_size = path.stat().st_size
                         with path.open("rb") as source, zipped.open(info, "w") as target:
                             shutil.copyfileobj(source, target)
+                total = self._bytes(result.parent)
+                if total > self.artifact_limit_bytes:
+                    partial.unlink()
+                    raise ApiError(
+                        507,
+                        f"The export would take this job to {total} bytes, more than the "
+                        f"artifact limit of {self.artifact_limit_bytes} bytes; use the CLI.",
+                    )
                 partial.replace(archive)
+                self._record(identifier, result.parent, total)
         return archive
 
 

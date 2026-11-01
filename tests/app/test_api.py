@@ -3,6 +3,7 @@
 import copy
 import json
 import threading
+from dataclasses import replace
 from hashlib import sha256
 from io import BytesIO
 from zipfile import ZipFile
@@ -423,3 +424,179 @@ def test_unknown_job_ids_are_404(client, kind, suffix):
     status, document = client.get_json(f"/api/{kind}/{'0' * 64}{suffix}")
     assert status == 404
     assert document["error"].startswith("Unknown")
+
+
+# --- fix round 1: the catalog pin holds for sweeps, and disk use is bounded -------------------
+
+PASSWD_SHA = "4320d92464d9902007796f5bb632fbb5e22888eb9fb01d985b0fc1e531947a87"
+CATALOG_PATCHES = [
+    [
+        {"op": "replace", "path": "/space_segment/catalogs/0/path", "value": "/etc/passwd"},
+        {"op": "replace", "path": "/space_segment/catalogs/0/sha256", "value": PASSWD_SHA},
+    ],
+    [{"op": "replace", "path": "/space_segment/synthetic_rf", "value": True}],
+    [{"op": "add", "path": "/space_segment/select_norad_ids", "value": [25544]}],
+    [{"op": "replace", "path": "/space_segment", "value": {}}],
+    [{"op": "remove", "path": "/space_segment/catalogs/0"}],
+]
+
+
+def _no_leak(text: str) -> None:
+    assert "/etc/passwd" not in text
+    assert PASSWD_SHA not in text
+    assert "passwd" not in text
+
+
+@pytest.mark.parametrize("patch", CATALOG_PATCHES)
+def test_sweep_variant_patches_cannot_touch_the_catalog(running_app, client, patch):
+    spec = {
+        "schema": "openleo.sweep/2",
+        "name": "probe",
+        "mode": "variants",
+        "variants": [{"id": "a", "patch": []}, {"id": "b", "patch": patch}],
+    }
+    status, _, body = client.post("/api/sweeps", {"spec": spec})
+    assert status == 403
+    assert "catalog" in json.loads(body)["error"]
+    _no_leak(body.decode())
+    assert running_app.api.jobs.count() == 0
+
+
+@pytest.mark.parametrize(
+    "parameter",
+    [
+        {"path": "/space_segment/synthetic_rf", "values": [False, True], "nominal": False},
+        {"path": "/space_segment/catalogs/0/path", "values": ["orbit.csv", "/etc/passwd"]},
+        {"path": "/space_segment", "values": [{}]},
+    ],
+)
+def test_sweep_parameters_cannot_touch_the_catalog(running_app, client, parameter):
+    mode = "oat" if "nominal" in parameter else "grid"
+    spec = {"schema": "openleo.sweep/2", "name": "probe", "mode": mode, "parameters": [parameter]}
+    status, _, body = client.post("/api/sweeps", {"spec": spec})
+    assert status == 403
+    _no_leak(body.decode())
+    assert running_app.api.jobs.count() == 0
+
+
+def test_generated_runs_are_checked_against_the_pin(running_app, client, monkeypatch):
+    from openleo.app import api
+
+    real = api.expand_sweep
+
+    def tampered(spec, document):
+        runs = real(spec, document)
+        document = copy.deepcopy(runs[-1].document)
+        document["space_segment"]["synthetic_rf"] = True
+        return (*runs[:-1], replace(runs[-1], document=document))
+
+    monkeypatch.setattr(api, "expand_sweep", tampered)
+    status, document = client.post_json("/api/sweeps", {"spec": EIRP_SPEC})
+    assert status == 403
+    assert "catalog" in document["error"]
+    assert running_app.api.jobs.count() == 0
+
+
+def test_worker_refuses_a_sweep_that_escapes_the_pin(running_app, client, monkeypatch):
+    """Defence in depth: a hostile spec reaching the queue directly never reads a file."""
+    import openleo.engine.run as engine_run
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("no catalog may be read")
+
+    monkeypatch.setattr(engine_run, "load_catalogs", forbidden)
+    spec = {
+        "schema": "openleo.sweep/2",
+        "name": "probe",
+        "mode": "variants",
+        "variants": [{"id": "b", "patch": CATALOG_PATCHES[0], "label": "b", "baseline": False}],
+        "max_runs": 512,
+    }
+    identifier = running_app.api.jobs.submit("sweep", {"scenario": client.scenario(), "spec": spec})
+    failed = client.wait("sweeps", identifier)
+    assert failed["state"] == "failed"
+    assert "catalog" in failed["error"]
+    _no_leak(failed["error"])
+
+
+def test_catalog_errors_do_not_reveal_server_file_hashes(running_app, client, scenario):
+    catalog = scenario.space_segment.catalogs[0].path
+    catalog.write_bytes(b"replaced catalog bytes")
+    identifier = client.post_json("/api/runs", {"scenario": client.scenario()})[1]["id"]
+    failed = client.wait("runs", identifier)
+    assert failed["state"] == "failed"
+    assert "SHA-256" in failed["error"]
+    assert sha256(b"replaced catalog bytes").hexdigest() not in failed["error"]
+    assert str(catalog) not in failed["error"]
+
+
+def _job_bytes(server, identifier) -> int:
+    _, path = server.api.jobs.result(identifier)
+    return sum(p.stat().st_size for p in path.parent.rglob("*") if p.is_file())
+
+
+def test_export_counts_against_the_artifact_limit(running_app, client, monkeypatch):
+    identifier = client.post_json("/api/runs", {"scenario": client.scenario()})[1]["id"]
+    assert client.wait("runs", identifier)["state"] == "done"
+    size = _job_bytes(running_app, identifier)
+    monkeypatch.setattr(running_app.api, "artifact_limit_bytes", size + 100)
+    status, document = client.get_json(f"/api/runs/{identifier}/export.zip")
+    assert status == 507
+    assert "artifact limit" in document["error"]
+    assert _job_bytes(running_app, identifier) == size
+    assert client.get(f"/api/runs/{identifier}/results.json")[0] == 200
+
+
+def _run(client, eirp):
+    raw = client.scenario()
+    raw["radio"]["eirp_dbw"] = eirp
+    identifier = client.post_json("/api/runs", {"scenario": raw})[1]["id"]
+    assert client.wait("runs", identifier)["state"] == "done"
+    return identifier, raw
+
+
+def test_session_limit_evicts_the_least_recently_used_results(scenario):
+    from openleo.app import create_server
+
+    server = create_server(scenario)
+    thread = start(server)
+    try:
+        client = Client(server)
+        first, first_raw = _run(client, 1.0)
+        size = _job_bytes(server, first)
+        server.api.session_limit_bytes = int(size * 2.5)
+        second, _ = _run(client, 2.0)
+        assert client.get(f"/api/runs/{first}/results.json")[0] == 200  # first is now newer
+        third, _ = _run(client, 3.0)
+        for suffix in ("", "/results.json", "/tables/samples.olc", "/export.zip"):
+            status, document = client.get_json(f"/api/runs/{second}{suffix}")
+            assert status == 404
+            assert "evicted" in document["error"] and "resubmit" in document["error"]
+        assert client.get(f"/api/runs/{first}/results.json")[0] == 200
+        assert client.get(f"/api/runs/{third}/results.json")[0] == 200
+        assert server.api.usage_bytes() <= server.api.session_limit_bytes
+        assert len(list(server.api.root.iterdir())) == 2
+        assert client.post_json("/api/runs", {"scenario": first_raw})[1]["id"] == first
+        assert _run(client, 2.0)[0] == second
+        assert client.wait("runs", second)["state"] == "done"
+        assert server.api.usage_bytes() <= server.api.session_limit_bytes
+    finally:
+        stop(server, thread)
+
+
+def test_session_limit_must_hold_one_artifact(scenario):
+    from openleo.app import create_server
+
+    with pytest.raises(ValueError, match="session_limit_bytes"):
+        create_server(scenario, artifact_limit_bytes=1000, session_limit_bytes=999)
+    server = create_server(scenario, artifact_limit_bytes=1000)
+    try:
+        assert server.api.session_limit_bytes == 4000
+        assert (
+            json.loads(server.api.route("/api/capabilities").handler(None).body)["limits"][
+                "session_bytes"
+            ]
+            == 4000
+        )
+    finally:
+        server.server_close()

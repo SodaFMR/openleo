@@ -1462,3 +1462,18 @@ def test_spec_hash_and_bytes_come_from_the_single_read(tmp_path, monkeypatch):
     summary = sweep.run_sweep(path, tmp_path / "out")
     assert path not in calls
     assert summary["spec_sha256"] == spec["spec_sha256"]
+
+
+def test_spec_touches_reports_paths_at_under_or_above_a_pointer():
+    def spec(parameters=None, variants=None):
+        return {"parameters": parameters, "variants": variants}
+
+    oat = spec([{"path": "/radio/eirp_dbw", "values": [1], "nominal": 0}])
+    assert not sweep.spec_touches(oat, "/space_segment")
+    assert sweep.spec_touches(oat, "/radio")
+    assert sweep.spec_touches(oat, "/radio/eirp_dbw/x")
+    patch = [{"op": "remove", "path": "/space_segment/catalogs/0"}]
+    variants = spec(variants=[{"id": "a", "patch": []}, {"id": "b", "patch": patch}])
+    assert sweep.spec_touches(variants, "/space_segment")
+    assert not sweep.spec_touches(variants, "/space_segment_extra")
+    assert not sweep.spec_touches(spec(), "/space_segment")

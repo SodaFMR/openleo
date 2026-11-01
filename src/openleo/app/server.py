@@ -61,6 +61,14 @@ class AppServer(ThreadingHTTPServer):
             self._recent.append(now)
             return True
 
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        """Log a connection error by type only: no traceback (it may hold private values).
+
+        Clients hanging up mid-response (``BrokenPipeError``, ``ConnectionResetError``) land
+        here too.
+        """
+        print(f"OpenLEO connection error: {type(sys.exc_info()[1]).__name__}.", file=sys.stderr)
+
     def server_close(self) -> None:
         try:
             super().server_close()
@@ -205,12 +213,15 @@ def create_server(
     packet_backend: Path | None = None,
     network_backend: Path | None = None,
     artifact_limit_bytes: int = DEFAULT_ARTIFACT_LIMIT_BYTES,
+    session_limit_bytes: int | None = None,
 ) -> AppServer:
     """Bind the v2 API to ``127.0.0.1:port`` (0 picks a free port); nothing runs until asked.
 
     The backends are trusted executables chosen by whoever starts the server; requests can only
-    ask for replays through them. ``server_close`` stops the job worker and removes every
-    result.
+    ask for replays through them. ``artifact_limit_bytes`` bounds one job's files, exports
+    included; ``session_limit_bytes`` (default four artifact limits) bounds all finished jobs
+    together, evicting the least recently used. ``server_close`` cancels the running job at its
+    next phase, waits for the worker and removes every result.
     """
     if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
         raise ValueError("port must be an integer between 0 and 65535")
@@ -220,11 +231,18 @@ def create_server(
         or artifact_limit_bytes < 1
     ):
         raise ValueError("artifact_limit_bytes must be a positive integer")
+    if session_limit_bytes is not None and (
+        isinstance(session_limit_bytes, bool)
+        or not isinstance(session_limit_bytes, int)
+        or session_limit_bytes < artifact_limit_bytes
+    ):
+        raise ValueError("session_limit_bytes must be an integer of at least artifact_limit_bytes")
     api = Api(
         scenario,
         packet_backend=None if packet_backend is None else Path(packet_backend),
         network_backend=None if network_backend is None else Path(network_backend),
         artifact_limit_bytes=artifact_limit_bytes,
+        session_limit_bytes=session_limit_bytes,
     )
     try:
         return AppServer(port, api)
@@ -240,13 +258,18 @@ def run_app(
     open_browser: bool = True,
     packet_backend: Path | None = None,
     network_backend: Path | None = None,
+    artifact_limit_bytes: int = DEFAULT_ARTIFACT_LIMIT_BYTES,
 ) -> None:
     """Load a scenario, serve the app until Ctrl-C, then release the socket and the results."""
     from openleo.scenario import load_scenario
 
     scenario = load_scenario(scenario_path)
     with create_server(
-        scenario, port, packet_backend=packet_backend, network_backend=network_backend
+        scenario,
+        port,
+        packet_backend=packet_backend,
+        network_backend=network_backend,
+        artifact_limit_bytes=artifact_limit_bytes,
     ) as server:
         url = f"http://127.0.0.1:{server.server_port}/"
         print(f"workbench: {url}", flush=True)

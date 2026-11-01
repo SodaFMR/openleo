@@ -469,3 +469,59 @@ def test_page_without_head_is_refused_at_startup(scenario, tmp_path, monkeypatch
     monkeypatch.setattr("openleo.app.api.INDEX_PAGE", page)
     with pytest.raises(ValueError, match="head"):
         create_server(scenario)
+
+
+def test_closing_mid_job_cancels_it_and_removes_every_result(scenario):
+    import time
+
+    from openleo.app import create_server
+
+    server = create_server(scenario)
+    thread = start(server)
+    client = Client(server)
+    values = [float(v) for v in range(1, 40)]
+    spec = {
+        "schema": "openleo.sweep/2",
+        "name": "long",
+        "mode": "oat",
+        "parameters": [{"path": "/radio/eirp_dbw", "values": values, "nominal": 10.0}],
+    }
+    identifier = client.post_json("/api/sweeps", {"spec": spec})[1]["id"]
+    deadline = time.monotonic() + 30
+    while client.get_json(f"/api/sweeps/{identifier}")[1]["phase"] is None:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    root, worker = server.api.root, server.api.jobs.worker
+    started = time.monotonic()
+    stop(server, thread)
+    assert time.monotonic() - started < 10
+    assert not worker.is_alive()
+    assert not root.exists()
+    assert server.api.jobs.status(identifier)["state"] == "failed"
+    time.sleep(0.5)
+    assert not root.exists()
+
+
+def test_client_hang_ups_are_logged_by_type_only(running_app, capsys):
+    for error in (BrokenPipeError("/secret/pipe"), ConnectionResetError("/secret/reset")):
+        try:
+            raise error
+        except OSError:
+            running_app.handle_error(None, ("127.0.0.1", 1))
+    err = capsys.readouterr().err
+    assert "BrokenPipeError" in err and "ConnectionResetError" in err
+    assert "Traceback" not in err and "secret" not in err
+
+
+def test_run_app_passes_the_artifact_limit(scenario_path, monkeypatch):
+    from openleo.app import run_app
+
+    limits = []
+
+    def interrupt(server):
+        limits.append(server.api.artifact_limit_bytes)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("socketserver.BaseServer.serve_forever", interrupt)
+    run_app(scenario_path, port=0, open_browser=False, artifact_limit_bytes=2**20)
+    assert limits == [2**20]

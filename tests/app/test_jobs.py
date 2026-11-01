@@ -204,3 +204,45 @@ def test_close_stops_the_worker_and_refuses_new_jobs(queues):
     assert not queue.worker.is_alive()
     with pytest.raises(RuntimeError):
         queue.submit("run", {})
+
+
+def test_close_cancels_the_running_job_at_its_next_phase(queues):
+    from openleo.app.jobs import JobCancelled
+
+    started, finished = threading.Event(), []
+
+    def run_fn(kind, payload):
+        queue.report("catalog")
+        started.set()
+        while True:
+            try:
+                queue.report("geometry")
+            except JobCancelled:
+                finished.append("cancelled")
+                raise
+            time.sleep(0.01)
+
+    queue = queues(run_fn)
+    identifier = queue.submit("run", {})
+    waiting = queue.submit("run", {"n": 2})
+    assert started.wait(10)
+    queue.close()
+    assert not queue.worker.is_alive()
+    assert finished == ["cancelled"]
+    assert queue.status(identifier)["state"] == "failed"
+    assert "shutting down" in queue.status(identifier)["error"]
+    assert queue.status(waiting)["state"] == "queued"
+
+
+def test_evicted_jobs_report_it_and_can_be_resubmitted(queues):
+    calls = []
+    queue = queues(lambda kind, payload: calls.append(1) or Path("/ok"))
+    identifier = queue.submit("run", {})
+    _wait(queue, identifier)
+    queue.evict(identifier)
+    assert queue.status(identifier)["state"] == "evicted"
+    assert queue.result(identifier) is None
+    assert queue.submit("run", {}) == identifier
+    assert _wait(queue, identifier)["state"] == "done"
+    assert calls == [1, 1]
+    queue.evict("0" * 64)  # unknown ids are ignored

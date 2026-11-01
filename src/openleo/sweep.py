@@ -590,6 +590,15 @@ def parse_sweep(raw: Any, source: bytes) -> dict:
     }
 
 
+def spec_touches(spec: dict, pointer: str) -> bool:
+    """Whether a parameter path or a variant patch path of a validated spec is at, under or
+    above ``pointer`` (so a run could change the value there)."""
+    target = _tokens(pointer, "pointer")
+    paths = [parameter["path"] for parameter in spec.get("parameters") or ()]
+    paths += [op["path"] for variant in spec.get("variants") or () for op in variant["patch"]]
+    return any(_overlap(_tokens(path, "path"), target) for path in paths)
+
+
 def _moves_time_bounds(pointer: str) -> bool:
     tokens = _tokens(pointer, "")
     return any(_overlap(tokens, ["time", bound]) for bound in TIME_BOUNDS)
@@ -1232,4 +1241,5 @@ __all__ = [
     "number_text",
     "parse_sweep",
     "run_sweep",
+    "spec_touches",
 ]
