@@ -30,6 +30,7 @@ import os
 import re
 import secrets
 import shutil
+import threading
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from math import isfinite, isnan
@@ -238,19 +239,24 @@ def _parse_column(column: Column, texts: list[str]) -> Any:
 
 
 _CSV_FIELD_LIMIT = 1 << 28  # characters per cell; Python's default of 131072 is too small
+# ``csv.field_size_limit`` is process-global: one thread restoring it while another parses would
+# make that parse fail (the app server loads results from worker and request threads). Raising,
+# parsing and restoring therefore happen under one lock.
+_CSV_LIMIT_LOCK = threading.Lock()
 
 
 def _csv_rows(text: str, name: str) -> list[list[str]]:
-    previous = csv.field_size_limit(_CSV_FIELD_LIMIT)
-    try:
-        return list(csv.reader(io.StringIO(text, newline="")))
-    except csv.Error as exc:
-        raise ValueError(
-            f"CSV table {name!r} cannot be parsed (a field may exceed {_CSV_FIELD_LIMIT} "
-            f"characters): {exc}"
-        ) from exc
-    finally:
-        csv.field_size_limit(previous)
+    with _CSV_LIMIT_LOCK:
+        previous = csv.field_size_limit(_CSV_FIELD_LIMIT)
+        try:
+            return list(csv.reader(io.StringIO(text, newline="")))
+        except csv.Error as exc:
+            raise ValueError(
+                f"CSV table {name!r} cannot be parsed (a field may exceed {_CSV_FIELD_LIMIT} "
+                f"characters): {exc}"
+            ) from exc
+        finally:
+            csv.field_size_limit(previous)
 
 
 def read_csv(data: bytes, name: str, columns: Sequence[Column]) -> Table:

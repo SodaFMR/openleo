@@ -5,9 +5,9 @@ from datetime import timedelta
 from hashlib import sha256
 
 import pytest
-import test_app
+import v1_constellation
 
-scenario = test_app.scenario
+scenario = v1_constellation.scenario
 
 
 def _with_atmosphere(scenario, *, hydrometeors=False):

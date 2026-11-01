@@ -4,10 +4,10 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
-import test_app
+import v1_constellation
 from test_benchmark import _config
 
-scenario = test_app.scenario
+scenario = v1_constellation.scenario
 REFERENCE = Path("examples/validation/vallado_06251.json")
 
 

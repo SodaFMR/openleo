@@ -544,3 +544,47 @@ def test_csv_parse_errors_are_value_errors(
     monkeypatch.setattr(results_io.csv, "reader", broken)
     with pytest.raises(ValueError, match="cannot be parsed"):
         load_results(tmp_path / "run")
+
+
+def test_csv_field_limit_is_safe_across_threads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``csv.field_size_limit`` is process-global: concurrent loads must not undo each other."""
+    import csv
+    import threading
+    import time
+
+    from openleo.results import io as results_io
+
+    text = ("x" * 200_000, "y")
+    table = Table("big", (Column("v", "str", "", ""),), {"v": text})
+    _write(Results({}, {"big": table}), tmp_path / "run", formats=("csv",))
+
+    class SlowCsv:
+        """The csv module, with a pause between raising the limit and parsing."""
+
+        Error = csv.Error
+        field_size_limit = staticmethod(csv.field_size_limit)
+
+        @staticmethod
+        def reader(*args, **kwargs):
+            time.sleep(0.2)
+            return iter(list(csv.reader(*args, **kwargs)))
+
+    monkeypatch.setattr(results_io, "csv", SlowCsv)
+    outcomes: list[object] = []
+
+    def load() -> None:
+        try:
+            outcomes.append(load_results(tmp_path / "run").tables["big"].data["v"])
+        except ValueError as exc:
+            outcomes.append(exc)
+
+    threads = [threading.Thread(target=load) for _ in range(3)]
+    for thread in threads:
+        thread.start()
+        time.sleep(0.05)
+    for thread in threads:
+        thread.join(10)
+    assert outcomes == [text, text, text]
+    assert csv.field_size_limit() == 131072

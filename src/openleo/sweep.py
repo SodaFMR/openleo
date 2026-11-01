@@ -41,7 +41,7 @@ import itertools
 import json
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -527,6 +527,18 @@ def load_sweep(path: Path) -> dict:
     """
     path = Path(path)
     raw, source = _read_json(path)
+    spec = parse_sweep(raw, source)
+    spec["base_scenario_path"] = str((path.parent / spec["base_scenario"]).resolve())
+    return spec
+
+
+def parse_sweep(raw: Any, source: bytes) -> dict:
+    """Validate an already parsed sweep document: ``load_sweep`` without the file.
+
+    ``source`` is recorded as ``source_bytes``. The result has no ``base_scenario_path``: the
+    caller decides where the base scenario lives (``load_sweep`` resolves ``base_scenario``
+    against the sweep file; the app server pins it to the scenario it was started with).
+    """
     entry = _object(raw, "")
     if "schema" not in entry:
         raise ValueError("/schema is required")
@@ -573,7 +585,6 @@ def load_sweep(path: Path) -> dict:
         "window": window,
         "replay": replay,
         "max_runs": maximum,
-        "base_scenario_path": str((path.parent / base).resolve()),
         "spec_sha256": document_sha256(raw),
         "source_bytes": source,
     }
@@ -1124,16 +1135,28 @@ def execute_sweep(
     workers: int,
     packet_backend: Path | None,
     network_backend: Path | None,
+    *,
+    progress: Callable[[str], None] | None = None,
+    extra_formats: tuple[str, ...] = (),
 ) -> dict:
-    """Run and save every run into ``stage`` and write ``comparisons.csv`` and ``sweep.json``."""
+    """Run and save every run into ``stage`` and write ``comparisons.csv`` and ``sweep.json``.
+
+    ``progress`` receives ``run <i>/<n>: <phase>`` as each engine phase of each run starts.
+    ``extra_formats`` are written for every run besides the formats its scenario asks for.
+    """
     base_document = scenario_document(base)
     plan, missing = _replay_plan(spec["replay"], packet_backend, network_backend)
     entries, all_metrics = [], []
-    for run in runs:
+    for number, run in enumerate(runs, start=1):
         scenario = parse_scenario(run.document, base.source_path, run.sha256)
+        options: dict[str, Any] = {"workers": workers}
+        if progress is not None:
+            prefix = f"run {number}/{len(runs)}: "
+            options["progress"] = lambda phase, prefix=prefix: progress(prefix + phase)
         try:
-            results = run_engine(scenario, workers=workers)
-            directory = save_run(scenario, results, stage / "runs" / run.id)
+            results = run_engine(scenario, **options)
+            formats = (*scenario.outputs.formats, *extra_formats) if extra_formats else None
+            directory = save_run(scenario, results, stage / "runs" / run.id, formats)
             replay = (
                 _run_replays(directory, plan, packet_backend, network_backend) if plan else None
             )
@@ -1207,5 +1230,6 @@ __all__ = [
     "flatten_metrics",
     "load_sweep",
     "number_text",
+    "parse_sweep",
     "run_sweep",
 ]

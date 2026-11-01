@@ -4,10 +4,10 @@ from dataclasses import FrozenInstanceError
 from hashlib import sha256
 
 import pytest
-import test_app
+import v1_constellation
 from test_experiment import _with_atmosphere
 
-scenario = test_app.scenario
+scenario = v1_constellation.scenario
 
 
 def _config(scenario, tmp_path, **updates):

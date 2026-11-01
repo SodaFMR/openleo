@@ -42,7 +42,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Run OpenLEO scientific benchmarks and render completed artifacts.",
         epilog=(
             "Examples:\n"
-            "  openleo app CONSTELLATION.json\n"
+            "  openleo app SCENARIO.json\n"
             "  openleo constellation CONSTELLATION.json --output DIRECTORY\n"
             "  openleo propagation-study CONSTELLATION.json --output DIRECTORY\n"
             "  openleo fidelity-study STUDY.json --output DIRECTORY\n"
@@ -60,8 +60,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    app_parser = subparsers.add_parser("app", help="open the local scientific workbench")
-    app_parser.add_argument("scenario", metavar="CONSTELLATION.json")
+    app_parser = subparsers.add_parser(
+        "app", help="serve the local v2 run and sweep API for a v2 scenario"
+    )
+    app_parser.add_argument("scenario", metavar="SCENARIO.json")
     app_parser.add_argument("--port", type=int, default=8765)
     app_parser.add_argument("--packet-backend", help="trusted local single-link ns-3 executable")
     app_parser.add_argument("--network-backend", help="trusted local multi-hop ns-3 executable")
@@ -348,32 +350,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (ValueError, OSError, UnicodeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-    if args.command in {"app", "constellation"}:
+    if args.command == "app":
+        try:
+            from openleo.app import run_app
+
+            run_app(
+                Path(args.scenario),
+                port=args.port,
+                open_browser=not args.no_browser,
+                packet_backend=None if args.packet_backend is None else Path(args.packet_backend),
+                network_backend=None
+                if args.network_backend is None
+                else Path(args.network_backend),
+            )
+            return 0
+        except (ValueError, OSError, UnicodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    if args.command == "constellation":
         try:
             from openleo.constellation import load_constellation, simulate_constellation
+            from openleo.network import add_network
+            from openleo.workbench import write_workbench
 
             scenario = load_constellation(args.scenario)
-            if args.command == "app":
-                from openleo.app import run_app
-
-                backends = {
-                    name: getattr(args, name)
-                    for name in ("packet_backend", "network_backend")
-                    if getattr(args, name) is not None
-                }
-                run_app(scenario, port=args.port, open_browser=not args.no_browser, **backends)
-            else:
-                from openleo.network import add_network
-                from openleo.workbench import write_workbench
-
-                document = add_network(simulate_constellation(scenario))
-                paths = write_workbench(document, args.output)
-                print(f"experiment: {scenario.name}")
-                print(f"satellites: {len(document['satellites'])}")
-                print(f"stations: {len(document['stations'])}")
-                print(f"samples: {len(document['timestamps_utc'])}")
-                for path in paths:
-                    print(f"{path.name}: {path}")
+            document = add_network(simulate_constellation(scenario))
+            paths = write_workbench(document, args.output)
+            print(f"experiment: {scenario.name}")
+            print(f"satellites: {len(document['satellites'])}")
+            print(f"stations: {len(document['stations'])}")
+            print(f"samples: {len(document['timestamps_utc'])}")
+            for path in paths:
+                print(f"{path.name}: {path}")
             return 0
         except (ValueError, OSError, UnicodeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
