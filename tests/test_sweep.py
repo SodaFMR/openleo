@@ -1140,7 +1140,7 @@ def test_variants_match_v1_aligned_cases(tmp_path):
 EXAMPLE_SWEEPS = {
     "propagation_cases": ("variants", 3),
     "eirp_oat": ("oat", 3),
-    "sampling_fidelity": ("variants", 4),
+    "sampling_fidelity": ("grid", 6),
     "release_matrix": ("grid", 8),
 }
 
@@ -1194,12 +1194,29 @@ def test_example_release_matrix_reproduces_the_v1_frozen_matrix():
 
 
 def test_example_sampling_fidelity_mirrors_v1():
+    v1 = json.loads((ROOT / "examples" / "studies" / "reference_fidelity.json").read_text())
+    cases = {
+        case["id"]: json.loads((ROOT / "examples" / "studies" / case["scenario"]).read_text())
+        for case in v1["cases"]
+    }
     spec = sweep.load_sweep(EXAMPLES / "sweeps" / "sampling_fidelity.json")
-    base = _document(Path(spec["base_scenario_path"]))
-    runs = sweep.expand_sweep(spec, base)
-    steps = sorted({r.document["time"]["step_s"] for r in runs})
-    assert steps == [30.0, 60.0, 120.0]
-    assert {r.document["propagation"]["refinement"] for r in runs} == {1, 2}
+    by_path = {p["path"]: p["values"] for p in spec["parameters"]}
+    assert by_path["/radio/carrier_frequency_hz"] == [
+        cases[c]["radio_link"]["carrier_frequency_hz"] for c in ("12ghz", "20ghz")
+    ]
+    assert by_path["/time/step_s"] == v1["sampling_steps_s"]
+    window = cases["12ghz"]["time_window"]
+    assert spec["window"]["duration_s"] == 1200.0 == 20 * 60  # v1: 12:00 to 12:20
+    assert (window["start_utc"], window["stop_utc"]) == (
+        "2026-09-10T12:00:00Z",
+        "2026-09-10T12:20:00Z",
+    )
+    runs = sweep.expand_sweep(spec, _document(Path(spec["base_scenario_path"])))
+    combos = {
+        (r.document["radio"]["carrier_frequency_hz"], r.document["time"]["step_s"]) for r in runs
+    }
+    assert combos == {(f, s) for f in (12e9, 20e9) for s in (30.0, 60.0, 120.0)}
+    assert {r.document["propagation"]["model"] for r in runs} == {"itu_reference"}
 
 
 def test_oat_over_an_array_element_and_deep_json(tmp_path):
@@ -1247,3 +1264,133 @@ def test_propagation_cases_example_runs_and_orders_the_cases(tmp_path):
     )
     assert free > reference > declared
     verify_manifest(tmp_path / "out")
+
+
+def _hand_edit(spec: dict, patch: list) -> dict:
+    """The loaded spec with extra patch operations, as a caller that skips load_sweep would."""
+    spec = copy.deepcopy(spec)
+    spec["variants"][0]["patch"] = patch
+    return spec
+
+
+def test_patches_cannot_move_the_window_bounds_when_a_window_is_set(tmp_path):
+    window = {"start_offset_s": 0, "duration_s": 600}
+    stop = {"op": "replace", "path": "/time/stop_utc", "value": "2026-08-30T08:24:00Z"}
+    start = {"op": "replace", "path": "/time/start_utc", "value": "2026-08-30T05:00:00Z"}
+    whole = {"op": "replace", "path": "/time", "value": _document()["time"]}
+    for position, operation in enumerate((stop, start, whole)):
+        spec = {
+            "mode": "variants",
+            "variants": [{"id": "a", "patch": [{"op": "remove", "path": "/network"}, operation]}],
+            "window": window,
+        }
+        path = _write(tmp_path, {**spec, "replay": {"network": {"loads_bps": [1000]}}})
+        with pytest.raises(
+            ValueError,
+            match=rf"^/variants/0/patch/1/path='{operation['path']}' cannot change "
+            r"/time/start_utc or /time/stop_utc when a window is set",
+        ):
+            sweep.load_sweep(path)
+    parameter = {"path": "/time/stop_utc", "values": ["2026-08-30T06:20:00Z"], "nominal": "x"}
+    path = _write(tmp_path, {"mode": "oat", "parameters": [parameter], "window": window})
+    with pytest.raises(ValueError, match=r"^/parameters/0/path='/time/stop_utc' cannot change"):
+        sweep.load_sweep(path)
+    parameter = {"path": "/time", "values": [{}]}
+    path = _write(tmp_path, {"mode": "grid", "parameters": [parameter], "window": window})
+    with pytest.raises(ValueError, match=r"^/parameters/0/path='/time' cannot change"):
+        sweep.load_sweep(path)
+    # Other time fields are fine, and without a window the bounds may be patched.
+    ok = {"op": "replace", "path": "/time/step_s", "value": 5.0}
+    spec = {"mode": "variants", "variants": [{"id": "a", "patch": [ok]}], "window": window}
+    assert sweep.load_sweep(_write(tmp_path, spec))["variants"][0]["patch"] == [ok]
+    spec = {"mode": "variants", "variants": [{"id": "a", "patch": [stop]}]}
+    assert sweep.load_sweep(_write(tmp_path, spec))["window"] is None
+
+
+def test_generated_runs_stay_inside_the_window_and_short_with_a_replay(tmp_path):
+    """Defence after patching, for specs that did not come through load_sweep."""
+    network = {"loads_bps": [1000]}
+    spec = sweep.load_sweep(
+        _write(
+            tmp_path,
+            {
+                "mode": "variants",
+                "variants": [{"id": "a", "patch": []}],
+                "window": {"start_offset_s": 0, "duration_s": 600},
+                "replay": {"network": network},
+            },
+        )
+    )
+    long_stop = {"op": "replace", "path": "/time/stop_utc", "value": "2026-08-30T08:24:00Z"}
+    early_start = {"op": "replace", "path": "/time/start_utc", "value": "2026-08-30T06:00:00Z"}
+    with pytest.raises(
+        ValueError, match=r"^/variants/0: run variant%3Aa spans .*T08:24:00Z.*base window"
+    ):
+        sweep.expand_sweep(_hand_edit(spec, [long_stop]), _document())
+    with pytest.raises(
+        ValueError, match=r"^/variants/0: run variant%3Aa spans 2026-08-30T06:00:00Z.*outside"
+    ):
+        sweep.expand_sweep(_hand_edit(spec, [early_start]), _document())
+    # A base window longer than 3600 s: only the replay rule applies when no window is set.
+    base = _document()
+    base["time"]["stop_utc"] = "2026-08-30T07:00:00Z"
+    unwindowed = sweep.load_sweep(
+        _write(
+            tmp_path,
+            {
+                "mode": "variants",
+                "variants": [{"id": "a", "patch": [long_stop]}],
+                "replay": {"network": network},
+            },
+        )
+    )
+    with pytest.raises(
+        ValueError, match=r"^/variants/0: run variant%3Aa spans 7800 s, more than the 3600 s"
+    ):
+        sweep.expand_sweep(unwindowed, base)
+    # Without a replay or a window, a patched span is the caller's business.
+    spec_plain = sweep.load_sweep(
+        _write(tmp_path, {"mode": "variants", "variants": [{"id": "a", "patch": [long_stop]}]})
+    )
+    assert (
+        sweep.expand_sweep(spec_plain, _document())[0].document["time"]["stop_utc"]
+        == "2026-08-30T08:24:00Z"
+    )
+
+
+@pytest.mark.parametrize("value", [1e300, 10**400, 31 * 86400.0 + 1])
+def test_huge_window_numbers_are_value_errors(tmp_path, value):
+    for key, other in (("start_offset_s", "duration_s"), ("duration_s", "start_offset_s")):
+        window = {key: value, other: 60}
+        path = _write(tmp_path, {"mode": "variants", "variants": [{"id": "a", "patch": []}]})
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["window"] = window
+        path.write_text(json.dumps(document), encoding="utf-8")
+        with pytest.raises(ValueError, match=rf"^/window/{key}=.* must be a finite number"):
+            sweep.load_sweep(path)
+    # The same bound protects the other numeric fields.
+    with pytest.raises(ValueError, match=r"^/replay/network/loads_bps/0=.* must be"):
+        sweep._replay({"network": {"loads_bps": [10**400]}})
+
+
+def test_spec_hash_and_bytes_come_from_the_single_read(tmp_path, monkeypatch):
+    path = _eirp(tmp_path)
+    original = path.read_bytes()
+    spec = sweep.load_sweep(path)
+    assert spec["source_bytes"] == original
+    assert spec["spec_sha256"] == sweep.document_sha256(json.loads(original))
+    assert not (
+        {"source_bytes", "spec_sha256", "base_scenario_path"} & set(sweep._spec_document(spec))
+    )
+    # run_sweep reads the spec file once (load_sweep); changing it afterwards cannot matter.
+    calls = []
+    real = Path.read_text
+
+    def spy(self, *args, **kwargs):
+        calls.append(self)
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", spy)
+    summary = sweep.run_sweep(path, tmp_path / "out")
+    assert path not in calls
+    assert summary["spec_sha256"] == spec["spec_sha256"]

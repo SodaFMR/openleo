@@ -1,30 +1,11 @@
 {
   "schema": "openleo.sweep/2",
-  "name": "Sampling and ray-trace refinement fidelity",
+  "name": "Ground-link propagation and sampling study",
   "base_scenario": "../iridium_global_reference.json",
-  "mode": "variants",
-  "variants": [
-    {
-      "id": "step_30s",
-      "label": "30 s sampling",
-      "patch": [{"op": "replace", "path": "/time/step_s", "value": 30.0}]
-    },
-    {
-      "id": "step_60s",
-      "label": "60 s sampling (scenario default)",
-      "baseline": true,
-      "patch": [{"op": "replace", "path": "/time/step_s", "value": 60.0}]
-    },
-    {
-      "id": "step_120s",
-      "label": "120 s sampling",
-      "patch": [{"op": "replace", "path": "/time/step_s", "value": 120.0}]
-    },
-    {
-      "id": "refinement_2",
-      "label": "60 s sampling, ray-trace refinement 2",
-      "patch": [{"op": "replace", "path": "/propagation/refinement", "value": 2}]
-    }
+  "mode": "grid",
+  "parameters": [
+    {"path": "/radio/carrier_frequency_hz", "values": [12000000000.0, 20000000000.0]},
+    {"path": "/time/step_s", "values": [30.0, 60.0, 120.0]}
   ],
-  "window": {"start_offset_s": 0, "duration_s": 1800}
+  "window": {"start_offset_s": 0, "duration_s": 1200}
 }

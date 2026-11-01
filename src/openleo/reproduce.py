@@ -130,12 +130,12 @@ def run_reproduce(
 
     def build(stage: Path) -> None:
         (stage / "sweep").mkdir()
-        document = sweep.execute_sweep(spec, config, base, runs, stage / "sweep", 1, None, backend)
+        document = sweep.execute_sweep(spec, base, runs, stage / "sweep", 1, None, backend)
         write_manifest(stage / "sweep")
         packets = require_native_evidence(document)
         (stage / "inputs").mkdir()
         (stage / "inputs" / "orbit-reference.json").write_bytes(reference_bytes)
-        (stage / "inputs" / "configuration.json").write_bytes(config.read_bytes())
+        (stage / "inputs" / "configuration.json").write_bytes(spec["source_bytes"])
         _write_json(stage / "orbit-verification.json", reference)
         comparisons = (stage / "sweep" / "comparisons.csv").read_bytes()
         evidence.update(

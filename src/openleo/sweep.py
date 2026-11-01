@@ -63,6 +63,8 @@ COMPARISON_LABEL = "deterministic comparison; not an uncertainty interval"
 MAX_RUNS = 512
 MAX_SPEC_BYTES = MAX_SCENARIO_BYTES
 MAX_REPLAY_WINDOW_S = 3600.0
+MAX_WINDOW_S = 31 * 86400.0  # the scenario window limit
+TIME_BOUNDS = ("start_utc", "stop_utc")
 MAX_RUN_ID_CHARS = 200
 MAX_VARIANT_ID_CHARS = 64
 MODES = ("oat", "grid", "variants")
@@ -95,6 +97,7 @@ _MISSING_REPLAY_LIMITATION = (
     "Packet replay evidence is missing for {kinds}: no trusted backend was configured, so "
     "those replays were not run."
 )
+_LOAD_ONLY_KEYS = frozenset(("base_scenario_path", "spec_sha256", "source_bytes"))
 _SPEC_KEYS = frozenset(("schema", "name", "base_scenario", "mode"))
 _SPEC_OPTIONAL = frozenset(("parameters", "variants", "window", "replay", "max_runs"))
 _PATCH_KEYS = frozenset(("op", "path", "value"))
@@ -217,7 +220,8 @@ def _child(node: Any, token: str, where: str, prefix: str) -> Any:
 # ------------------------------------------------------------------------------------ the spec
 
 
-def _read_json(path: Path) -> Any:
+def _read_json(path: Path) -> tuple[Any, bytes]:
+    """The parsed JSON of a bounded file and the bytes it was parsed from."""
     try:
         source = _read_scenario_bytes(path)
     except OSError as exc:
@@ -241,7 +245,7 @@ def _read_json(path: Path) -> Any:
     except ValueError as exc:
         raise ValueError(f"{path}: invalid JSON: {exc}") from exc
     _reject_repeated_keys(raw)
-    return raw
+    return raw, source
 
 
 def _only(raw: Mapping, pointer: str, required: frozenset, optional: frozenset = frozenset()):
@@ -268,13 +272,16 @@ def _text(value: Any, pointer: str, limit: int | None = None) -> str:
 
 
 def _number(value: Any, pointer: str, low: float, high: float | None, *, strict: bool = False):
-    bounded = (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-        and (value > low if strict else value >= low)
-        and (high is None or value <= high)
-    )
+    try:
+        bounded = (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            and (value > low if strict else value >= low)
+            and (high is None or value <= high)
+        )
+    except OverflowError:  # an integer too large for a float
+        bounded = False
     if not bounded:
         upper = "" if high is None else f" and at most {high:g}"
         lower = f"greater than {low:g}" if strict else f"at least {low:g}"
@@ -409,8 +416,12 @@ def _window(raw: Any) -> dict:
     entry = _object(raw, "/window")
     _only(entry, "/window", frozenset(("start_offset_s", "duration_s")))
     return {
-        "start_offset_s": _number(entry["start_offset_s"], "/window/start_offset_s", 0.0, None),
-        "duration_s": _number(entry["duration_s"], "/window/duration_s", 0.0, None, strict=True),
+        "start_offset_s": _number(
+            entry["start_offset_s"], "/window/start_offset_s", 0.0, MAX_WINDOW_S
+        ),
+        "duration_s": _number(
+            entry["duration_s"], "/window/duration_s", 0.0, MAX_WINDOW_S, strict=True
+        ),
     }
 
 
@@ -506,12 +517,15 @@ def load_sweep(path: Path) -> dict:
     """Read and validate an ``openleo.sweep/2`` file.
 
     The result holds every key explicitly (absent optional blocks are ``None``, ``max_runs``
-    defaults to 512, variants carry ``label`` and ``baseline``) and one key that is not in the
-    file: ``base_scenario_path``, the base scenario's absolute path (``base_scenario`` is
-    relative to the sweep file). The base scenario itself is read by ``run_sweep``.
+    defaults to 512, variants carry ``label`` and ``baseline``) and three keys that are not in
+    the file: ``base_scenario_path``, the base scenario's absolute path (``base_scenario`` is
+    relative to the sweep file), ``spec_sha256``, the canonical hash of the parsed file, and
+    ``source_bytes``, the bytes that were parsed. The base scenario itself is read by
+    ``run_sweep``. With a ``window``, patches under ``/time/start_utc`` and ``/time/stop_utc``
+    are refused: the window decides them.
     """
     path = Path(path)
-    raw = _read_json(path)
+    raw, source = _read_json(path)
     entry = _object(raw, "")
     if "schema" not in entry:
         raise ValueError("/schema is required")
@@ -546,6 +560,8 @@ def load_sweep(path: Path) -> dict:
             f"{MAX_REPLAY_WINDOW_S:g} when a replay is requested (the v1 experiment rule)"
         )
     maximum = _integer(entry.get("max_runs", MAX_RUNS), "/max_runs", 1, MAX_RUNS)
+    if window is not None:
+        _refuse_time_bounds(parameters, variants)
     return {
         "schema": SWEEP_SCHEMA_ID,
         "name": name,
@@ -557,7 +573,29 @@ def load_sweep(path: Path) -> dict:
         "replay": replay,
         "max_runs": maximum,
         "base_scenario_path": str((path.parent / base).resolve()),
+        "spec_sha256": document_sha256(raw),
+        "source_bytes": source,
     }
+
+
+def _moves_time_bounds(pointer: str) -> bool:
+    tokens = _tokens(pointer, "")
+    return any(_overlap(tokens, ["time", bound]) for bound in TIME_BOUNDS)
+
+
+def _refuse_time_bounds(parameters: list[dict] | None, variants: list[dict] | None) -> None:
+    """With a ``window``, the run's start and stop belong to the window, not to a patch."""
+    suffix = " cannot change /time/start_utc or /time/stop_utc when a window is set"
+    for index, parameter in enumerate(parameters or ()):
+        if _moves_time_bounds(parameter["path"]):
+            where = _field(_field("/parameters", str(index)), "path")
+            raise ValueError(f"{where}={_safe_repr(parameter['path'])}{suffix}")
+    for index, variant in enumerate(variants or ()):
+        for position, operation in enumerate(variant["patch"]):
+            if _moves_time_bounds(operation["path"]):
+                patch = _field(_field("/variants", str(index)), "patch")
+                where = _field(_field(patch, str(position)), "path")
+                raise ValueError(f"{where}={_safe_repr(operation['path'])}{suffix}")
 
 
 # ------------------------------------------------------------------------------- expansion
@@ -650,7 +688,25 @@ def _replace(document: dict, pointer: str, value: Any) -> dict:
     return apply_patch(document, [{"op": "replace", "path": pointer, "value": value}])
 
 
-def _generated(base_path: Path, patched: dict, run_id: str, label: str, where: str) -> SweepRun:
+def _check_extent(document: dict, extent: dict, run_id: str, where: str) -> None:
+    """A generated run keeps the window rules: inside the base window, short with a replay."""
+    start, stop = _utc(document["time"]["start_utc"]), _utc(document["time"]["stop_utc"])
+    if extent["windowed"] and (start < extent["start"] or stop > extent["stop"]):
+        raise ValueError(
+            f"{where}: run {run_id} spans {_utc_text(start)} to {_utc_text(stop)}, outside the "
+            f"base window {_utc_text(extent['start'])} to {_utc_text(extent['stop'])}"
+        )
+    length = (stop - start).total_seconds()
+    if extent["replay"] and length > MAX_REPLAY_WINDOW_S:
+        raise ValueError(
+            f"{where}: run {run_id} spans {length:g} s, more than the {MAX_REPLAY_WINDOW_S:g} s "
+            "allowed when a replay is requested"
+        )
+
+
+def _generated(
+    base_path: Path, patched: dict, run_id: str, label: str, where: str, extent: dict
+) -> SweepRun:
     """Validate ``patched`` as a scenario and keep its normalised document and hash."""
     digest = document_sha256(patched)
     try:
@@ -658,6 +714,7 @@ def _generated(base_path: Path, patched: dict, run_id: str, label: str, where: s
     except ValueError as exc:
         raise ValueError(f"{where}: generated scenario {run_id} is invalid: {exc}") from exc
     normalised = scenario_document(scenario)
+    _check_extent(normalised, extent, run_id, where)
     return SweepRun(run_id, label, normalised, document_sha256(normalised))
 
 
@@ -670,14 +727,20 @@ def expand_sweep(spec: dict, base_document: dict) -> tuple[SweepRun, ...]:
     base_path = Path(spec.get("base_scenario_path", spec["base_scenario"]))
     replay = spec.get("replay")
     clipped = _clip(base_document, spec.get("window"), replay=replay is not None)
+    extent = {
+        "windowed": spec.get("window") is not None,
+        "replay": replay is not None,
+        "start": _utc(base_document["time"]["start_utc"]),
+        "stop": _utc(base_document["time"]["stop_utc"]),
+    }
     mode, maximum = spec["mode"], spec.get("max_runs", MAX_RUNS)
     runs: list[SweepRun] = []
     if mode == "oat":
-        runs = _expand_oat(spec, base_document, clipped, base_path, maximum)
+        runs = _expand_oat(spec, base_document, clipped, base_path, maximum, extent)
     elif mode == "grid":
-        runs = _expand_grid(spec, base_document, clipped, base_path, maximum)
+        runs = _expand_grid(spec, base_document, clipped, base_path, maximum, extent)
     else:
-        runs = _expand_variants(spec, clipped, base_path, maximum)
+        runs = _expand_variants(spec, clipped, base_path, maximum, extent)
     if replay is not None:
         for run in runs:
             _check_replay(replay, run)
@@ -688,7 +751,7 @@ def _too_many(pointer: str, what: str, count: int, maximum: int) -> ValueError:
     return ValueError(f"{pointer}: the {what} has {count} runs, at most {maximum} are allowed")
 
 
-def _expand_oat(spec, base_document, clipped, base_path, maximum) -> list[SweepRun]:
+def _expand_oat(spec, base_document, clipped, base_path, maximum, extent) -> list[SweepRun]:
     parameters = spec["parameters"]
     count = 1 + sum(
         sum(not _numbers_equal(v, p["nominal"]) for v in p["values"]) for p in parameters
@@ -705,7 +768,12 @@ def _expand_oat(spec, base_document, clipped, base_path, maximum) -> list[SweepR
             )
     runs = [
         _generated(
-            base_path, clipped, _run_id(NOMINAL_RUN, "/parameters"), "nominal", "/parameters"
+            base_path,
+            clipped,
+            _run_id(NOMINAL_RUN, "/parameters"),
+            "nominal",
+            "/parameters",
+            extent,
         )
     ]
     for index, parameter in enumerate(parameters):
@@ -717,11 +785,11 @@ def _expand_oat(spec, base_document, clipped, base_path, maximum) -> list[SweepR
             patched = _replace(clipped, parameter["path"], value)
             text = f"{parameter['path']} = {_value_text(value)}"
             run_id = _run_id(f"oat:{parameter['path']}={_value_text(value)}", where)
-            runs.append(_generated(base_path, patched, run_id, text, where))
+            runs.append(_generated(base_path, patched, run_id, text, where, extent))
     return runs
 
 
-def _expand_grid(spec, base_document, clipped, base_path, maximum) -> list[SweepRun]:
+def _expand_grid(spec, base_document, clipped, base_path, maximum, extent) -> list[SweepRun]:
     parameters = spec["parameters"]
     count = math.prod(len(p["values"]) for p in parameters)
     if count > maximum:
@@ -739,11 +807,11 @@ def _expand_grid(spec, base_document, clipped, base_path, maximum) -> list[Sweep
             f"{p['path']} = {_value_text(v)}" for p, v in zip(parameters, combination, strict=True)
         )
         run_id = _run_id(f"grid:{number}", "/parameters")
-        runs.append(_generated(base_path, patched, run_id, label, "/parameters"))
+        runs.append(_generated(base_path, patched, run_id, label, "/parameters", extent))
     return runs
 
 
-def _expand_variants(spec, clipped, base_path, maximum) -> list[SweepRun]:
+def _expand_variants(spec, clipped, base_path, maximum, extent) -> list[SweepRun]:
     variants = spec["variants"]
     if len(variants) > maximum:
         raise _too_many("/variants", "variants sweep", len(variants), maximum)
@@ -755,7 +823,7 @@ def _expand_variants(spec, clipped, base_path, maximum) -> list[SweepRun]:
         except ValueError as exc:
             raise ValueError(f"{_field(here, 'patch')}{exc}") from exc
         run_id = _run_id(f"variant:{variant['id']}", _field(here, "id"))
-        runs.append(_generated(base_path, patched, run_id, variant["label"], here))
+        runs.append(_generated(base_path, patched, run_id, variant["label"], here, extent))
     return runs
 
 
@@ -924,7 +992,7 @@ def _replay_plan(replay: dict | None, packet_backend, network_backend) -> tuple[
 
 
 def _spec_document(spec: dict) -> dict:
-    return {key: value for key, value in spec.items() if key != "base_scenario_path"}
+    return {key: value for key, value in spec.items() if key not in _LOAD_ONLY_KEYS}
 
 
 def run_sweep(
@@ -950,9 +1018,7 @@ def run_sweep(
 
     def build(stage: Path) -> None:
         document.update(
-            execute_sweep(
-                spec, spec_path, base, runs, stage, workers, packet_backend, network_backend
-            )
+            execute_sweep(spec, base, runs, stage, workers, packet_backend, network_backend)
         )
 
     publish_atomically(output_dir, lambda stage: (build(stage), write_manifest(stage)))
@@ -967,7 +1033,6 @@ def prepare_sweep(spec_path: Path):
 
 def execute_sweep(
     spec: dict,
-    spec_path: Path,
     base,
     runs: Sequence[SweepRun],
     stage: Path,
@@ -1014,7 +1079,6 @@ def execute_sweep(
     else:
         evidence = "actual" if not missing else ("partial" if plan is not None else "missing")
         replay_block = {"evidence": evidence, "missing": missing}
-    source = json.loads(spec_path.read_text(encoding="utf-8"))
     document = {
         "kind": SWEEP_RESULT_KIND,
         "schema_version": SWEEP_RESULT_SCHEMA_VERSION,
@@ -1022,7 +1086,7 @@ def execute_sweep(
         "mode": spec["mode"],
         "comparison_label": COMPARISON_LABEL,
         "spec": _spec_document(spec),
-        "spec_sha256": document_sha256(source),
+        "spec_sha256": spec["spec_sha256"],
         "base": {
             "source_sha256": base.source_sha256,
             "normalised_sha256": document_sha256(base_document),

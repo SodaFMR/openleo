@@ -201,6 +201,7 @@ def test_reproduce_orchestration_with_a_stand_in_for_the_native_replays(tmp_path
     assert (output / "inputs" / "orbit-reference.json").read_bytes() == REFERENCE.read_bytes()
     assert json.loads((output / "orbit-verification.json").read_text())["passed"] is True
     assert (output / "inputs" / "configuration.json").read_bytes() == config.read_bytes()
+    assert stored["numerical_metrics_sha256"]
 
 
 def test_reproduce_publishes_nothing_without_native_evidence(tmp_path, monkeypatch):
