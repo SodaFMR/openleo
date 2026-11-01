@@ -287,6 +287,16 @@ skips the gate and records that it did. **Route metrics are reported in the `con
 failure is always a warning. With events on, only route metrics and the Shannon integral (through
 node placement) can still depend on the grid step.
 
+## Memory budget
+
+Before propagation the run estimates its large arrays and refuses to start above
+`--memory-budget` (default 4 GiB): satellites × samples × 6 float64 (ECEF position and velocity)
+plus stations × satellites × samples × 4 float64 (elevation, azimuth, range, range rate), and
+with a network one chunk of satellite positions at route breakpoints and the inter-satellite
+link temporaries of one breakpoint. The estimate does not count the `samples` table or the other
+result tables, nor the per-worker duplication of the catalogs, geometry and evaluator under
+`--workers N`; peak memory can exceed it.
+
 ## Workers and determinism
 
 `--workers N` splits the per-satellite phases over processes; results are byte-identical to one

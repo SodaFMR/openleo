@@ -133,7 +133,8 @@ def estimate_memory_bytes(
     With a network, routing adds one chunk of satellite positions at route breakpoints,
     c x satellites x 3 float64 with c = max(1, ROUTE_CHUNK_BYTES // (24 x satellites)), and the
     inter-satellite link temporaries of one breakpoint, satellites x (satellites - 1) / 2 x
-    ISL_PAIR_BYTES.
+    ISL_PAIR_BYTES. It does not count the ``samples`` table or the other result tables, nor the
+    duplication of per-satellite work in each worker process, so peak memory can exceed it.
     """
     for name, value in (("satellites", satellites), ("stations", stations), ("samples", samples)):
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:

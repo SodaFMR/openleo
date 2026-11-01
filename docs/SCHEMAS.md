@@ -34,7 +34,12 @@ one eighth of the shortest orbital period in the catalogs; `events.tolerance_s` 
 `refinement_factor` an integer in [2, 16]; `convergence.mode` in `error`, `warn`, `off`;
 `feedback_delay_s` in [0, 10] s; catalogs at most 10 MB per file and 20,000 objects; per-station
 masks in [0, 90) deg and at least 5 deg under `itu_reference`. A memory estimate refuses runs
-above `--memory-budget` (default 4 GiB) before propagation.
+above `--memory-budget` (default 4 GiB) before propagation. The estimate
+(`openleo.engine.run.estimate_memory_bytes`) counts the geometry arrays (satellite ECEF state and
+per-station topocentric values over the grid) and, with a network, the routing arrays (one chunk
+of satellite positions at route breakpoints and the inter-satellite link temporaries). It does not
+count the `samples` table or other result tables, nor the duplication of per-satellite work in
+each worker process under `--workers N`, so peak memory can exceed it.
 
 ### JSON Schema
 
