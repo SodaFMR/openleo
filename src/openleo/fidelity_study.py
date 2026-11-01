@@ -19,6 +19,7 @@ from tempfile import mkdtemp
 
 from skyfield.api import load
 
+from openleo._validation import _object, _positive_number, _string, _utc
 from openleo.catalog import load_catalog
 from openleo.constellation import (
     MAX_LINK_SAMPLES,
@@ -29,7 +30,6 @@ from openleo.constellation import (
     parse_constellation,
 )
 from openleo.constellation import _statistics as _station_statistics
-from openleo.input import _object, _positive_number, _string, _utc
 from openleo.network import ROUTE_MODELS
 from openleo.network import _summary as _route_summary
 from openleo.propagation_study import CASE_NAMES, run_propagation_study

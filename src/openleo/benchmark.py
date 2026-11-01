@@ -16,6 +16,7 @@ from time import perf_counter
 
 from skyfield.api import load
 
+from openleo._validation import _string
 from openleo.catalog import load_catalog
 from openleo.constellation import (
     MAX_LINK_SAMPLES,
@@ -28,7 +29,6 @@ from openleo.experiment import ExperimentConfig, _manifest, _windowed, _write_js
 from openleo.experiment_report import _bars, _link, _number, _table
 from openleo.fidelity_report import _CSS
 from openleo.fidelity_study import _check_output, _read, _unique_object, metric_csv
-from openleo.input import _string
 from openleo.network_replay import NetworkReplayConfig, _offers, _validate_config
 from openleo.orbit import MAX_ORBIT_BYTES
 from openleo.packet_replay import _integer, _microseconds

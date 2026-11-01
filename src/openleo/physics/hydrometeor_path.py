@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from openleo.input import _non_negative_number, _object, _range, _string
+from openleo._validation import _non_negative_number, _object, _range, _string
 from openleo.physics.hydrometeors import (
     _cloud_slant_attenuation_array,
     _rain_specific_attenuation_array,

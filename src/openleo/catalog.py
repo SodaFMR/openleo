@@ -12,7 +12,7 @@ from math import isfinite
 from sgp4.api import SGP4_ERRORS
 from skyfield.api import EarthSatellite
 
-from openleo.input import _finite_number, _positive_number, _range, _string
+from openleo._validation import _finite_number, _positive_number, _range, _string
 from openleo.model import OrbitSource
 from openleo.orbit import MAX_ORBIT_BYTES, REQUIRED_OMM_FIELDS, LoadedOrbit
 

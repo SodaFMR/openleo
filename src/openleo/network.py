@@ -17,7 +17,7 @@ from typing import Any
 
 from skyfield.api import wgs84
 
-from openleo.input import (
+from openleo._validation import (
     _finite_number,
     _non_negative_number,
     _object,

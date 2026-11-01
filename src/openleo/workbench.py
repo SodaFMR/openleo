@@ -14,11 +14,8 @@ from math import isclose, log10
 from pathlib import Path
 from string import Template
 
-from openleo.constellation import parse_constellation
-from openleo.input import (
-    GROUND_STATION_KEYS,
+from openleo._validation import (
     _finite_number,
-    _ground_station,
     _non_negative_number,
     _object,
     _positive_number,
@@ -28,6 +25,8 @@ from openleo.input import (
     _url,
     _utc,
 )
+from openleo.constellation import parse_constellation
+from openleo.input import GROUND_STATION_KEYS, _ground_station
 from openleo.network import ROUTE_MODELS, _ground_edges, _list, _position
 from openleo.physics.adaptation import MODCODS
 from openleo.physics.hydrometeor_path import HYDROMETEOR_LINK_FIELDS, rain_layer_path_length_m

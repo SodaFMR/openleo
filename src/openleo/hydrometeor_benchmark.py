@@ -11,7 +11,7 @@ from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from openleo.input import _object, _string
+from openleo._validation import _object, _string
 from openleo.physics.hydrometeors import (
     CLOUD_SOURCE,
     RAIN_SOURCE,

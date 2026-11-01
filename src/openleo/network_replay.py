@@ -17,7 +17,7 @@ from itertools import pairwise
 from math import ceil, floor
 from pathlib import Path
 
-from openleo.input import _utc
+from openleo._validation import _utc
 from openleo.network import ROUTE_MODELS
 from openleo.network_packet_io import (
     EDGE_FIELDS,

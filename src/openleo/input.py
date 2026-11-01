@@ -3,16 +3,26 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from hashlib import sha256
 from json import JSONDecodeError
-from math import isclose, isfinite
-from numbers import Real
+from math import isclose
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
 
+from openleo._validation import (
+    _finite_number,
+    _non_negative_number,
+    _object,
+    _positive_number,
+    _range,
+    _read_scenario_bytes,
+    _safe_repr,
+    _sha256,
+    _string,
+    _url,
+    _utc,
+)
 from openleo.model import GroundStation, OrbitSource, Provenance, RadioLink, Scenario, TimeWindow
 
 SCENARIO_KEYS = frozenset(("name", "orbit", "ground_station", "time_window", "radio_link"))
@@ -30,7 +40,6 @@ RADIO_LINK_KEYS = frozenset(
     )
 )
 MAX_TIME_GRID_SAMPLES = 100_000
-MAX_SCENARIO_BYTES = 1_000_000
 
 
 def load_scenario(path: str | Path) -> Scenario:
@@ -51,14 +60,6 @@ def load_scenario(path: str | Path) -> Scenario:
         if str(exc).startswith(f"{scenario_path}:"):
             raise
         raise ValueError(f"{scenario_path}: invalid scenario: {exc}") from exc
-
-
-def _read_scenario_bytes(path: Path) -> bytes:
-    with path.open("rb") as scenario_file:
-        source_bytes = scenario_file.read(MAX_SCENARIO_BYTES + 1)
-    if len(source_bytes) > MAX_SCENARIO_BYTES:
-        raise ValueError(f"{path}: scenario JSON exceeds {MAX_SCENARIO_BYTES} bytes")
-    return source_bytes
 
 
 def _scenario(raw: Any, scenario_path: Path, source_sha256: str) -> Scenario:
@@ -157,109 +158,3 @@ def _radio_link(raw: Any) -> RadioLink:
             data["miscellaneous_loss_db"], "radio_link.miscellaneous_loss_db"
         ),
     )
-
-
-def _object(raw: Any, expected: frozenset[str], path: str) -> Mapping[str, Any]:
-    if not isinstance(raw, Mapping):
-        raise TypeError(f"{path} must be a JSON object")
-    actual = set(raw)
-    missing = expected - actual
-    unknown = actual - expected
-    if missing:
-        raise ValueError(f"{_field(path, min(missing))} is required")
-    if unknown:
-        raise ValueError(f"{_field(path, min(unknown))} is not allowed")
-    return raw
-
-
-def _field(path: str, name: str) -> str:
-    return name if path == "scenario" else f"{path}.{name}"
-
-
-def _string(value: Any, path: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{path} must be a non-empty string")
-    return value
-
-
-def _url(value: Any, path: str) -> str:
-    valid = False
-    if isinstance(value, str):
-        try:
-            parsed = urlsplit(value)
-            valid = (
-                bool(value.strip())
-                and parsed.scheme in {"http", "https"}
-                and bool(parsed.netloc)
-                and parsed.username is None
-                and parsed.password is None
-                and not any(char.isspace() for char in value)
-            )
-        except ValueError:
-            pass
-    if not valid:
-        raise ValueError(
-            f"{path}={_safe_repr(value)} must be an absolute HTTP or HTTPS URL "
-            "without credentials or whitespace"
-        )
-    return value
-
-
-def _utc(value: Any, path: str) -> datetime:
-    if not isinstance(value, str) or not value.endswith("Z"):
-        raise ValueError(f"{path} must be an ISO 8601 UTC timestamp ending in Z")
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError as exc:
-        raise ValueError(f"{path} must be a valid ISO 8601 UTC timestamp") from exc
-    if parsed.tzinfo is not UTC or parsed.utcoffset() != UTC.utcoffset(parsed):
-        raise ValueError(f"{path} must be timezone-aware UTC")
-    return parsed
-
-
-def _sha256(value: Any, path: str) -> str:
-    text = _string(value, path)
-    if len(text) != 64 or any(char not in "0123456789abcdef" for char in text):
-        raise ValueError(f"{path} must be exactly 64 lowercase hexadecimal characters")
-    return text
-
-
-def _finite_number(value: Any, path: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value):
-        raise ValueError(f"{path}={_safe_repr(value)} must be finite")
-    return float(value)
-
-
-def _positive_number(value: Any, path: str) -> float:
-    number = _finite_number(value, path)
-    if number <= 0.0:
-        raise ValueError(f"{path}={_safe_repr(value)} must be positive and finite")
-    return number
-
-
-def _non_negative_number(value: Any, path: str) -> float:
-    number = _finite_number(value, path)
-    if number < 0.0:
-        raise ValueError(f"{path}={_safe_repr(value)} must be finite and non-negative")
-    return number
-
-
-def _range(
-    value: Any,
-    path: str,
-    lower: float,
-    upper: float,
-    *,
-    upper_inclusive: bool = True,
-) -> float:
-    number = _finite_number(value, path)
-    too_high = number > upper or (number == upper and not upper_inclusive)
-    if number < lower or too_high:
-        bracket = "]" if upper_inclusive else ")"
-        raise ValueError(f"{path}={_safe_repr(value)} must be in [{lower}, {upper}{bracket}")
-    return number
-
-
-def _safe_repr(value: Any, limit: int = 120) -> str:
-    text = repr(value)
-    return text if len(text) <= limit else f"{text[: limit - 3]}..."

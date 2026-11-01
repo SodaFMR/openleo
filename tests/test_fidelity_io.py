@@ -212,8 +212,8 @@ def test_loader_rejects_rehashed_forged_child_statistics(completed_study, tmp_pa
 
 
 def test_loader_rejects_rehashed_uniform_timestamp_shift(completed_study, tmp_path):
+    from openleo._validation import _utc
     from openleo.fidelity_io import load_fidelity_result
-    from openleo.input import _utc
 
     output = tmp_path / "study"
     copytree(completed_study[0], output)
@@ -233,8 +233,8 @@ def test_loader_rejects_rehashed_uniform_timestamp_shift(completed_study, tmp_pa
 
 
 def test_run_loader_rejects_rehashed_interior_time_on_short_final_grid(tmp_path):
+    from openleo._validation import _utc
     from openleo.fidelity_io import _load_run
-    from openleo.input import _utc
 
     output, summary = _completed_study(
         tmp_path / "input", stop="2026-09-10T12:01:05Z", steps=(30, 60)

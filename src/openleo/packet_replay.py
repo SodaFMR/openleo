@@ -18,7 +18,7 @@ from io import StringIO
 from math import ceil, floor, isfinite
 from pathlib import Path
 
-from openleo.input import _utc
+from openleo._validation import _utc
 from openleo.workbench import (
     ARTIFACT_NAMES,
     MAX_ARTIFACT_BYTES,

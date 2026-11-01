@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from math import isfinite
 
-from openleo.input import _finite_number, _non_negative_number, _positive_number, _range
+from openleo._validation import _finite_number, _non_negative_number, _positive_number, _range
 
 ETSI_SOURCE_URL = (
     "https://www.etsi.org/deliver/etsi_en/302300_302399/30230701/"

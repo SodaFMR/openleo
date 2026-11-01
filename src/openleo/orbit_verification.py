@@ -22,8 +22,8 @@ from sgp4.io import twoline2rv, verify_checksum
 from skyfield.api import load
 from skyfield.sgp4lib import TEME
 
+from openleo._validation import _finite_number, _object, _positive_number, _string, _url
 from openleo.catalog import _epoch, load_catalog
-from openleo.input import _finite_number, _object, _positive_number, _string, _url
 from openleo.model import OrbitSource, Provenance
 from openleo.workbench import _read, _unique_object
 

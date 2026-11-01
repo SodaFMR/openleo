@@ -18,18 +18,9 @@ import numpy as np
 from skyfield.api import load, wgs84
 from skyfield.framelib import itrs
 
+from openleo._validation import _finite_number, _object, _read_scenario_bytes, _sha256, _string
 from openleo.catalog import load_catalog
-from openleo.input import (
-    _finite_number,
-    _ground_station,
-    _object,
-    _orbit,
-    _radio_link,
-    _read_scenario_bytes,
-    _sha256,
-    _string,
-    _time_window,
-)
+from openleo.input import _ground_station, _orbit, _radio_link, _time_window
 from openleo.model import GroundStation, OrbitSource, RadioLink, TimeWindow
 from openleo.network import NetworkConfig, parse_network
 from openleo.physics.adaptation import ETSI_SOURCE_URL, MODCODS, AdaptationConfig, select_modcod

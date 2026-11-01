@@ -7,8 +7,8 @@ import re
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
 
+from openleo._validation import _positive_number, _sha256, _string, _utc
 from openleo.constellation import _bounded_grid, parse_constellation
-from openleo.input import _positive_number, _sha256, _string, _utc
 from openleo.propagation_study import CASE_NAMES, _comparison
 from openleo.simulation import _timestamps
 from openleo.workbench import (

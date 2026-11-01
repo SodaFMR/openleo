@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from openleo.input import _object, _range, _string
+from openleo._validation import _object, _range, _string
 from openleo.physics.gases import MAX_FREQUENCY_HZ, MIN_FREQUENCY_HZ
 from openleo.physics.hydrometeor_path import (
     HydrometeorConfig,
