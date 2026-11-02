@@ -540,7 +540,9 @@ def _execute_network_replay(prepared, source, backend, output_dir, limitations) 
             **results,
             "limitations": list(limitations),
         }
-        (temporary / "network-summary.json").write_text(_json_text(summary), encoding="utf-8")
+        (temporary / "network-summary.json").write_text(
+            _json_text(summary), encoding="utf-8", newline="\n"
+        )
         names = ("edges.csv", "routes.csv", "packets.csv", "hops.csv", "network-summary.json")
         unexpected = {path.name for path in temporary.iterdir()} - set(names)
         if unexpected:
@@ -550,7 +552,9 @@ def _execute_network_replay(prepared, source, backend, output_dir, limitations) 
             "kind": "openleo.network-replay.bundle",
             "files": {name: _file_sha256(temporary / name) for name in names},
         }
-        (temporary / "manifest.json").write_text(_json_text(manifest), encoding="utf-8")
+        (temporary / "manifest.json").write_text(
+            _json_text(manifest), encoding="utf-8", newline="\n"
+        )
         _check_output_target(target)
         if target.exists():
             target.rmdir()

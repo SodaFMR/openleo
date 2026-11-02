@@ -329,6 +329,9 @@ def test_atomic_wrapper_generates_hashed_evidence_without_private_paths(tmp_path
         "packets.csv",
         "routes.csv",
     }
+    for name in ("manifest.json", "network-summary.json"):  # LF on every OS, as hashed
+        payload = (output / name).read_bytes()
+        assert payload.endswith(b"}\n") and b"\r" not in payload, name
 
 
 def test_run_publishes_v2_evidence_for_a_disconnected_window(tmp_path, monkeypatch, global_on):
