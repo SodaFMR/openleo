@@ -121,7 +121,7 @@ jobs:
                       and path.parts[1].startswith(".")
                       and path.parts[1] != ".gitignore"
                   )
-                  or forbidden.intersection(path.parts)
+                  or (len(path.parts) > 1 and path.parts[1] in forbidden)
               ]
           if invalid:
               raise SystemExit(f"invalid sdist members: {invalid}")
