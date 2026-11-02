@@ -120,6 +120,13 @@ openleo hydrometeors examples/atmosphere/hydrometeors_reference.json --output <D
 Their output does not depend on the output path (checked by running them from different
 directories).
 
+`calc/hydrometeors.json` is the `hydrometeors.json` file itself: its SHA-256 equals
+`calc_outputs.hydrometeors["hydrometeors.json"]` (`tests/test_calc.py` checks this). It holds
+full-precision floats, and Windows' C runtime rounds `exp`, `log10`, `pow` and `cos` differently
+from glibc and macOS in the last bit, so on Windows `tests/test_calc.py` compares its values to
+this file (relative 1e-12) instead of its hash. Every other calculator file, including both
+CSV files and the HTML report, is still compared by hash on every OS.
+
 ## Other frozen v1 inputs
 
 * `examples/`: byte copies of the v1.0.0 example inputs that the 2.0 tree replaced:
