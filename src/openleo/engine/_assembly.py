@@ -523,10 +523,16 @@ def scenario_block(scenario: Scenario) -> dict[str, Any]:
 
 
 def archive_names(catalogs: Sequence[CatalogSource]) -> list[str]:
-    """``<basename>`` per catalog; ``<index>-<basename>`` for basenames shared by several."""
+    """``<basename>`` per catalog; ``<index>-<basename>`` for basenames shared by several.
+
+    Basenames are compared ignoring case: ``gp.csv`` and ``GP.csv`` would be one file on the
+    case-insensitive file systems of Windows and macOS.
+    """
     names = [catalog.path.name for catalog in catalogs]
+    folded = [name.casefold() for name in names]
     return [
-        name if names.count(name) == 1 else f"{index}-{name}" for index, name in enumerate(names)
+        name if folded.count(key) == 1 else f"{index}-{name}"
+        for index, (name, key) in enumerate(zip(names, folded, strict=True))
     ]
 
 

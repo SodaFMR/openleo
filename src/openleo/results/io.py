@@ -384,11 +384,12 @@ def _archive_names(input_files: Sequence[tuple[Path, str]]) -> list[tuple[Path, 
             raise ValueError(
                 f"invalid archive name {name!r}: use a relative name with at most one directory"
             )
-        if name in seen:
-            raise ValueError(f"duplicate archive name {name!r}")
-        seen.add(name)
+        key = name.casefold()  # one file on case-insensitive file systems (Windows, macOS)
+        if key in seen:
+            raise ValueError(f"duplicate archive name {name!r} (names are compared ignoring case)")
+        seen.add(key)
         if len(parts) == 2:
-            directories.add(parts[0])
+            directories.add(parts[0].casefold())
         source = Path(source)
         if not source.is_file():
             raise ValueError(f"input file {source} is not a file")

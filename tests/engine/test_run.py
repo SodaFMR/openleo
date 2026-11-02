@@ -706,6 +706,9 @@ def test_archive_names_disambiguate_shared_basenames(tmp_path):
     second = replace(source, path=tmp_path / "b" / "gp.csv")
     third = replace(source, path=tmp_path / "c.csv")
     assert run_module._archive_names((first, second, third)) == ["0-gp.csv", "1-gp.csv", "c.csv"]
+    # Basenames differing only by case would be one file on Windows and macOS.
+    upper = replace(source, path=tmp_path / "d" / "GP.csv")
+    assert run_module._archive_names((upper, third, first)) == ["0-GP.csv", "c.csv", "2-gp.csv"]
 
 
 def test_a_decision_effective_at_the_pass_end_is_dropped_everywhere():
