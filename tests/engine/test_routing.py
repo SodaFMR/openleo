@@ -270,7 +270,13 @@ def test_isl_edges_are_v1_edges_at_range_and_tangency_thresholds():
     expected = json.loads(V1_ISL_EDGES.read_text(encoding="utf-8"))
     edges = routing._isl_edges(positions, 3_000_000.0)
     assert len(expected) == 92
-    assert [list(edge) for edge in edges] == expected
+    # Edge membership and order must match v1 exactly; delays are range / c, so a platform's
+    # libm may differ in the last bit (seen on macOS). Hold them to 1e-13 s, the agreed v1 delay
+    # tolerance.
+    assert [edge[:2] for edge in edges] == [tuple(edge[:2]) for edge in expected]
+    np.testing.assert_allclose(
+        [edge[2] for edge in edges], [edge[2] for edge in expected], rtol=0, atol=1e-13
+    )
     assert (0, 1) in {edge[:2] for edge in edges}
     assert (2, 3) not in {edge[:2] for edge in edges}
     assert (0, 4) not in {edge[:2] for edge in edges}
