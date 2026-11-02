@@ -9,6 +9,10 @@ examples/sweeps/** text eol=lf
 examples/validation/** text eol=lf
 tests/fixtures/v1/**/*.json text eol=lf
 tests/fixtures/ci/** text eol=lf
+tests/scenario/fixtures/** text eol=lf
+# OLC goldens are compared byte for byte with what make_goldens.py writes (LF JSON, binary OLC).
+tests/fixtures/olc/*.json text eol=lf
+tests/fixtures/olc/*.olc binary
 # The published JSON Schema is compared byte for byte with its regenerated text.
 docs/schemas/** text eol=lf
 # Preserve the exact archived CelesTrak responses, including their original CRLF bytes.
