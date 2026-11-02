@@ -4,6 +4,7 @@ import copy
 import dataclasses
 import json
 import math
+import re
 import types
 import typing
 from hashlib import sha256
@@ -350,24 +351,24 @@ def test_terminal_for_rejects_a_station_from_another_scenario() -> None:
 
 def test_load_scenario_reports_file_level_errors_with_the_file_path(tmp_path: Path) -> None:
     missing = tmp_path / "missing.json"
-    with pytest.raises(ValueError, match=f"^{missing}: could not load scenario"):
+    with pytest.raises(ValueError, match=f"^{re.escape(str(missing))}: could not load scenario"):
         load_scenario(missing)
 
     path = tmp_path / "bad.json"
     path.write_bytes(b"\xff\xfe{")
-    with pytest.raises(ValueError, match=f"^{path}: scenario JSON must be UTF-8"):
+    with pytest.raises(ValueError, match=f"^{re.escape(str(path))}: scenario JSON must be UTF-8"):
         load_scenario(path)
 
     path.write_text("{", encoding="utf-8")
-    with pytest.raises(ValueError, match=f"^{path}: invalid JSON"):
+    with pytest.raises(ValueError, match=f"^{re.escape(str(path))}: invalid JSON"):
         load_scenario(path)
 
     path.write_text("[" * 100_000, encoding="utf-8")
-    with pytest.raises(ValueError, match=f"^{path}: invalid JSON"):
+    with pytest.raises(ValueError, match=f"^{re.escape(str(path))}: invalid JSON"):
         load_scenario(path)
 
     path.write_text("1" * 5000, encoding="utf-8")  # beyond Python's integer-digit limit
-    with pytest.raises(ValueError, match=f"^{path}: invalid JSON"):
+    with pytest.raises(ValueError, match=f"^{re.escape(str(path))}: invalid JSON"):
         load_scenario(path)
 
 
@@ -376,7 +377,9 @@ def test_load_scenario_rejects_files_over_one_megabyte(tmp_path: Path) -> None:
     document["description"] = "x" * 1_000_000
     path = _write(tmp_path, document)
     assert path.stat().st_size > 1_000_000
-    with pytest.raises(ValueError, match=f"^{path}: scenario JSON exceeds 1000000 bytes"):
+    with pytest.raises(
+        ValueError, match=f"^{re.escape(str(path))}: scenario JSON exceeds 1000000 bytes"
+    ):
         load_scenario(path)
 
 

@@ -221,7 +221,7 @@ def test_load_results_rejects_bad_csv(sample_results: Results, tmp_path: Path) -
         (original.replace(",true\n", ",maybe\n", 1), "boolean"),
         ("", "header"),
     ):
-        (run / "tables/events.csv").write_text(text, encoding="utf-8")
+        (run / "tables/events.csv").write_bytes(text.encode())  # LF, as hashed, on every OS
         meta_path = run / "results.json"
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         meta["tables"]["events"]["files"]["csv"]["sha256"] = hashlib.sha256(
@@ -302,6 +302,11 @@ def test_input_file_problems_are_rejected(sample_results: Results, tmp_path: Pat
     source.write_bytes(b"x")
     with pytest.raises(ValueError, match="duplicate"):
         _write(sample_results, tmp_path / "r1", inputs=[(source, "a"), (source, "a")])
+    # One file on the case-insensitive file systems of Windows and macOS.
+    with pytest.raises(ValueError, match="duplicate archive name 'C/GP.csv'"):
+        _write(sample_results, tmp_path / "r3", inputs=[(source, "c/gp.csv"), (source, "C/GP.csv")])
+    with pytest.raises(ValueError, match="both a file and a directory"):
+        _write(sample_results, tmp_path / "r4", inputs=[(source, "Cat"), (source, "cat/x")])
     with pytest.raises(ValueError, match="not a file"):
         _write(sample_results, tmp_path / "r2", inputs=[(tmp_path / "missing", "a")])
 
