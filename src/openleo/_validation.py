@@ -6,8 +6,9 @@ check untrusted JSON through these helpers, so each bound has exactly one implem
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from math import isfinite
 from numbers import Real
 from pathlib import Path
@@ -104,13 +105,20 @@ def _url(value: Any, path: str) -> str:
     return value
 
 
+_HOUR_24 = re.compile(r"(?<=\D)24(?::?00){0,2}(?:[.,]0+)?Z$")
+
+
 def _utc(value: Any, path: str) -> datetime:
     if not isinstance(value, str) or not value.endswith("Z"):
         raise ValueError(f"{path} must be an ISO 8601 UTC timestamp ending in Z")
+    # Python 3.14 reads hour 24 as midnight of the next day; earlier versions reject it.
+    # Reject it everywhere so the accepted timestamps do not depend on the interpreter.
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError as exc:
         raise ValueError(f"{path} must be a valid ISO 8601 UTC timestamp") from exc
+    if parsed.time() == time() and _HOUR_24.search(value):
+        raise ValueError(f"{path} must be a valid ISO 8601 UTC timestamp (hour 24 is not accepted)")
     if parsed.tzinfo is not UTC or parsed.utcoffset() != UTC.utcoffset(parsed):
         raise ValueError(f"{path} must be timezone-aware UTC")
     return parsed

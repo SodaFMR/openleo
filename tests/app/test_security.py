@@ -321,9 +321,11 @@ def _raw_exchange(port, data):
 
 
 def test_malformed_requests_get_json_errors(client):
-    # An unsupported version is answered HTTP/0.9-style by the standard library: body only.
+    # An unsupported version is answered HTTP/0.9-style (body only) by Python up to 3.13.x;
+    # newer patch releases send a status line and headers first. The JSON body is the same.
     response = _raw_exchange(client.port, b"GET / HTTP/9.9\r\nHost: x\r\n\r\n")
-    assert json.loads(response) == {"error": "HTTP Version Not Supported."}
+    body = response.split(b"\r\n\r\n", 1)[1] if response.startswith(b"HTTP/") else response
+    assert json.loads(body) == {"error": "HTTP Version Not Supported."}
     headers = b"".join(b"X-%d: 1\r\n" % i for i in range(101))
     response = _raw_exchange(client.port, b"GET / HTTP/1.1\r\n" + headers + b"\r\n")
     head, body = response.split(b"\r\n\r\n", 1)

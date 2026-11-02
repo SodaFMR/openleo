@@ -808,3 +808,27 @@ def test_malformed_values_only_raise_pointer_prefixed_value_errors(pointer: str)
         except ValueError as error:
             assert type(error) is ValueError
             assert str(error).startswith("/"), (pointer, wrong, str(error))
+
+
+@pytest.mark.parametrize(
+    "stamp", ["2026-09-10T24:00:00Z", "2026-09-10T24:00Z", "2026-09-10T24Z", "20260910T240000Z"]
+)
+def test_hour_24_is_rejected_on_every_python(stamp: str) -> None:
+    from openleo._validation import _utc
+
+    with pytest.raises(ValueError, match="valid ISO 8601 UTC timestamp"):
+        _utc(stamp, "/time/start_utc")
+
+
+def test_hour_24_lookalikes_are_not_rejected() -> None:
+    from openleo._validation import _utc
+
+    assert _utc("2026-09-24T10:00:00Z", "/x").day == 24
+    assert _utc("2026-09-10T10:24:00Z", "/x").minute == 24
+
+
+def test_hour_24_check_does_not_touch_minute_24() -> None:
+    from openleo._validation import _utc
+
+    assert _utc("2026-08-30T06:24:00Z", "/x").minute == 24
+    assert _utc("2026-09-10T00:00:00Z", "/x").hour == 0

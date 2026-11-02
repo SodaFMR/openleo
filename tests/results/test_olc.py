@@ -314,5 +314,7 @@ def test_olc_accepts_a_spec_exact_header_without_description() -> None:
 def test_olc_deeply_nested_header_is_a_value_error() -> None:
     body = b"[" * 100_000 + b"]" * 100_000
     padded = body + b" " * (-(8 + len(body)) % 8)
-    with pytest.raises(ValueError, match="JSON"):
+    # Python <= 3.13 overflows the recursion limit (reported as invalid JSON); 3.14 parses
+    # the nesting and the header is then rejected as not an object. Both are ValueErrors.
+    with pytest.raises(ValueError, match="JSON|must be an object"):
         decode_table(b"OLC1" + struct.pack("<I", len(padded)) + padded)
