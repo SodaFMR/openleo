@@ -10,6 +10,7 @@ import pytest
 from openleo import reproduce, sweep
 from openleo.results import verify_manifest
 from openleo.scenario import load_scenario, scenario_document
+from openleo.scenario.parse import _relative_posix
 
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = ROOT / "examples" / "validation" / "vallado_06251.json"
@@ -55,7 +56,7 @@ def _small_base(directory: Path) -> Path:
     document["time"]["convergence"]["mode"] = "off"
     path = directory / "base" / "scenario.json"
     path.parent.mkdir()
-    document["space_segment"]["catalogs"][0]["path"] = os.path.relpath(catalog, path.parent)
+    document["space_segment"]["catalogs"][0]["path"] = _relative_posix(catalog, path.parent)
     path.write_text(json.dumps(document), encoding="utf-8")
     return path
 
@@ -64,7 +65,7 @@ def _config(directory: Path, replay) -> Path:
     spec = {
         "schema": "openleo.sweep/2",
         "name": "small release sweep",
-        "base_scenario": os.path.relpath(_small_base(directory), directory),
+        "base_scenario": _relative_posix(_small_base(directory), directory),
         "mode": "variants",
         "variants": [
             {"id": "a", "patch": []},

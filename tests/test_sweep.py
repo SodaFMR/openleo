@@ -13,6 +13,7 @@ import pytest
 from openleo import sweep
 from openleo.results import load_results, verify_manifest
 from openleo.scenario import load_scenario, scenario_document
+from openleo.scenario.parse import _relative_posix
 
 ROOT = Path(__file__).resolve().parents[1]
 V1_FIXTURES = ROOT / "tests" / "fixtures" / "v1"
@@ -32,7 +33,7 @@ def _write(directory: Path, spec: dict, name: str = "sweep.json", base: Path = I
     document = {
         "schema": "openleo.sweep/2",
         "name": "test sweep",
-        "base_scenario": os.path.relpath(base, directory),
+        "base_scenario": _relative_posix(base, directory),
         **spec,
     }
     path = directory / name
@@ -127,6 +128,51 @@ def test_patch_errors_carry_pointers(operations, message):
 
 
 # --- the spec ------------------------------------------------------------------------------------
+
+
+def test_a_sweep_and_its_inputs_on_different_drives(tmp_path, monkeypatch):
+    """Windows cannot relate paths on two drives: they are written absolute, and still work.
+
+    The sweep, its base scenario and the catalog each sit on a different "drive":
+    ``os.path.relpath`` raises as on Windows, so the base scenario's catalog path and the
+    sweep's ``base_scenario`` are absolute POSIX paths. The sweep loads, expands and runs.
+    """
+
+    def across_drives(path, start):
+        raise ValueError("path is on mount 'D:', start on mount 'C:'")
+
+    monkeypatch.setattr("openleo.scenario.parse.relpath", across_drives)
+    catalog = load_scenario(ISS).space_segment.catalogs[0].path
+    document = _document(ISS)
+    assert document["space_segment"]["catalogs"][0]["path"] == catalog.as_posix()
+    base = tmp_path / "scenarios" / "base.json"
+    base.parent.mkdir()
+    base.write_text(json.dumps(document), encoding="utf-8")
+    (tmp_path / "sweeps").mkdir()
+    path = _write(
+        tmp_path / "sweeps",
+        {
+            "mode": "variants",
+            "variants": [
+                {"id": "a", "patch": []},
+                {"id": "b", "patch": [{"op": "replace", "path": "/radio/eirp_dbw", "value": 18.0}]},
+            ],
+            "window": {"start_offset_s": 0, "duration_s": 120},
+        },
+        base=base,
+    )
+    assert json.loads(path.read_text(encoding="utf-8"))["base_scenario"] == base.as_posix()
+    spec = sweep.load_sweep(path)
+    assert spec["base_scenario_path"] == str(base.resolve())
+    output = tmp_path / "out"
+    summary = sweep.run_sweep(path, output)
+    assert [run["id"] for run in summary["runs"]] == ["variant%3Aa", "variant%3Ab"]
+    verify_manifest(output)
+    archived = json.loads(
+        (output / "runs" / "variant%3Ab" / "inputs" / "scenario.json").read_text()
+    )
+    assert archived["space_segment"]["catalogs"][0]["path"] == f"catalogs/{catalog.name}"
+    assert archived["radio"]["eirp_dbw"] == 18.0
 
 
 def test_load_sweep_normalises_the_spec(tmp_path):
@@ -792,7 +838,7 @@ def test_sweep_output_layout_and_labels(eirp_sweep):
     assert "uncertainty" in " ".join(document["limitations"]).lower()
     assert document["mode"] == "oat"
     assert "base_scenario_path" not in document["spec"]
-    assert document["spec"]["base_scenario"] == os.path.relpath(ISS, spec_path.parent)
+    assert document["spec"]["base_scenario"] == _relative_posix(ISS, spec_path.parent)
     base = load_scenario(ISS)
     assert document["base"]["source_sha256"] == base.source_sha256
     assert document["base"]["normalised_sha256"] == sweep.document_sha256(scenario_document(base))
@@ -949,7 +995,7 @@ def _scenario_with_network(directory: Path) -> Path:
     path = directory / "base" / "scenario.json"
     path.parent.mkdir()
     catalog = load_scenario(GLOBAL).space_segment.catalogs[0].path
-    document["space_segment"]["catalogs"][0]["path"] = os.path.relpath(catalog, path.parent)
+    document["space_segment"]["catalogs"][0]["path"] = _relative_posix(catalog, path.parent)
     path.write_text(json.dumps(document), encoding="utf-8")
     return path
 

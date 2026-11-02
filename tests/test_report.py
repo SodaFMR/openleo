@@ -2,7 +2,6 @@
 
 import csv
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -13,6 +12,7 @@ from openleo.export import export_results
 from openleo.report import write_report
 from openleo.results import load_results, manifest_digest, read_parquet, verify_manifest
 from openleo.scenario import load_scenario, parse_scenario, scenario_document
+from openleo.scenario.parse import _relative_posix
 
 ROOT = Path(__file__).resolve().parents[1]
 GLOBAL = ROOT / "examples" / "constellations" / "iridium_global.json"
@@ -36,7 +36,7 @@ def sweep_dir(tmp_path_factory):
     spec = {
         "schema": "openleo.sweep/2",
         "name": "report sweep",
-        "base_scenario": os.path.relpath(ISS, directory),
+        "base_scenario": _relative_posix(ISS, directory),
         "mode": "oat",
         "parameters": [{"path": "/radio/eirp_dbw", "values": [7.0, 10.0], "nominal": 10.0}],
     }

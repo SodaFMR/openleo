@@ -15,6 +15,7 @@ from openleo.engine.run import run, save_run
 from openleo.report import write_report
 from openleo.results import load_results
 from openleo.scenario import load_scenario, parse_scenario, scenario_document
+from openleo.scenario.parse import _relative_posix
 
 ROOT = Path(__file__).resolve().parents[1]
 ISS = ROOT / "examples" / "scenarios" / "iss_cartagena.json"
@@ -67,7 +68,7 @@ def _sweep_spec(directory: Path) -> Path:
     spec = {
         "schema": "openleo.sweep/2",
         "name": "cli sweep",
-        "base_scenario": os.path.relpath(ISS, directory),
+        "base_scenario": _relative_posix(ISS, directory),
         "mode": "oat",
         "parameters": [{"path": "/radio/eirp_dbw", "values": [7.0, 10.0], "nominal": 10.0}],
     }
