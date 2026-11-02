@@ -1,42 +1,54 @@
 # OpenLEO
 
+> **OpenLEO 2.0 is in development; v1.0.0 remains available at tag
+> [`v1.0.0`](https://github.com/SodaFMR/openleo/tree/v1.0.0).** This branch carries the 2.0
+> engine (scenario v2, exact events, results v2, sweeps). The local browser workbench of v1 is
+> retired here; its successor arrives later in the 2.0 programme. See
+> [Migration from 1.x](docs/MIGRATION.md).
+
 OpenLEO is an open Python tool for reproducible studies of time-varying
-low-Earth-orbit links and networks. It combines archived GP orbital data,
-declared station and RF inputs, reference atmospheric propagation, adaptive
-reference rates, snapshot routing, and optional native ns-3 packet experiments.
+low-Earth-orbit satellite-to-ground links and snapshot routes. It combines archived GP
+orbital data, declared station, terminal and RF inputs, an idealized reference atmosphere with
+optional declared rain and cloud, DVB-S2 reference rates, snapshot routing, and optional native
+ns-3 packet replays.
 
-Researchers can compare free space, reference gases, and declared uniform rain
-and cloud conditions in one aligned experiment, inspect the results locally,
-and export portable scientific artifacts. The models do not reconstruct an
-operational network or infer local weather.
+The 2.0 engine evaluates one scenario of 1 to N satellites and 1 to M stations with exact event
+times: acquisition and loss of signal (AOS/LOS) are root-found mask crossings, culminations are
+refined maxima, and MODCOD switches are found in continuous time. Every duration, fraction and
+integral uses one time-measure convention, and a grid-convergence gate checks every exported
+integrated metric. The models do not reconstruct an operational network or infer local weather.
 
-![OpenLEO scientific workbench](docs/images/workbench.png)
+## Workflows
 
-## Choose a workflow
-
-| Goal | Command or entry point |
+| Goal | Command |
 | --- | --- |
-| Inspect, configure, and compare experiments locally | `openleo app CONSTELLATION.json` |
-| Export an interactive constellation report | `openleo constellation CONSTELLATION.json --output DIRECTORY` |
-| Compare propagation with optional link or network packets | `openleo experiment CONSTELLATION.json --settings SETTINGS.json --output DIRECTORY` |
-| Replay selected multi-hop routes with shared queues | `openleo network-replay BUNDLE --backend EXECUTABLE --output DIRECTORY` |
-| Run the frozen research matrix | `openleo benchmark CONFIG.json --output DIRECTORY` |
-| Reproduce numerical and native packet evidence | `openleo reproduce CONFIG.json --reference REFERENCE.json --network-backend EXECUTABLE --output DIRECTORY` |
-| Check published Vallado TEME states | `openleo verify-orbit REFERENCE.json` |
-| Compare gas grids and sampling | `openleo fidelity-study STUDY.json --output DIRECTORY` |
-| Generate a single visible-pass trace | `openleo run SCENARIO.json --output DIRECTORY` |
-| Run a deterministic one-at-a-time study | `openleo sensitivity SCENARIO.json SENSITIVITY.json --output DIRECTORY` |
-| Check homogeneous gas attenuation | `openleo gases CONFIG.json --output DIRECTORY` |
-| Calculate standalone rain and cloud cases | `openleo hydrometeors CONFIG.json --output DIRECTORY` |
-| Replay one full-duplex ground link | [`openleo packet-replay`](docs/PACKET_REPLAY.md) |
+| Write a commented starter scenario | `openleo scenario new [--preset single-pass\|constellation] [-o FILE]` |
+| Check a scenario (JSON-pointer errors) | `openleo scenario validate SCENARIO.json` |
+| List every assumption, its evidence class and the limitations | `openleo scenario explain SCENARIO.json` |
+| Convert an OpenLEO 1.x scenario | `openleo scenario upgrade V1.json [-o OUT.json]` |
+| Simulate a scenario and save its results | `openleo run SCENARIO.json --output DIR [--formats csv,olc,parquet] [--workers N] [--memory-budget GiB]` |
+| Vary a scenario (one at a time, grid or variants) | `openleo sweep SWEEP.json --output DIR [--workers N]` |
+| Replay one ground link through ns-3 | `openleo replay link RESULTS --station NAME --satellite NORAD --backend EXE --output DIR` |
+| Replay one routed station pair through ns-3 | `openleo replay network RESULTS --pair SRC:DST --model MODEL --backend EXE --output DIR` |
+| Reproduce the frozen release evidence | `openleo reproduce CONFIG.json --reference ORBIT_REF.json --network-backend EXE --output DIR` |
+| Check published Vallado TEME states | `openleo verify orbit REFERENCE.json` |
+| Homogeneous P.676-13 gaseous attenuation | `openleo calc gases CONFIG.json --output DIR` |
+| Standalone P.838-3 rain and P.840-9 cloud cases | `openleo calc hydrometeors CONFIG.json --output DIR` |
+| Markdown and CSV report (optional figures) | `openleo report RESULTS_OR_SWEEP --output DIR [--figures]` |
+| Re-export a results directory | `openleo export RESULTS --to csv\|parquet --output DIR` |
+| Serve the local run and sweep API | `openleo app SCENARIO.json [--port N] [--no-browser] [--packet-backend EXE] [--network-backend EXE] [--artifact-limit MiB]` |
 
-The [scope](docs/SCOPE.md) and [validation evidence](docs/VALIDATION.md) define
-what these workflows can establish.
+The retired 1.x commands (`constellation`, `experiment`, `fidelity-study`, `propagation-study`,
+`sensitivity`, `benchmark`, `gases`, `hydrometeors`, `verify-orbit`, `plot*`, `packet-replay`,
+`network-replay`) print one line naming their replacement and exit with status 2. User-input
+errors print `error: <json-pointer>: <message>` and exit with status 1, without a traceback.
+
+The [scope](docs/SCOPE.md) and [validation evidence](docs/VALIDATION.md) define what these
+workflows can establish.
 
 ## Install from the repository
 
-OpenLEO requires Python 3.12 or newer. Install using
-[`uv`](https://docs.astral.sh/uv/):
+OpenLEO requires Python 3.12 or newer. Install it with [`uv`](https://docs.astral.sh/uv/):
 
 ```bash
 git clone https://github.com/SodaFMR/openleo.git
@@ -44,209 +56,137 @@ cd openleo
 uv sync --locked --no-dev
 ```
 
-The Python core runs on Linux, macOS, and Windows. Optional packet replay
-requires a separately built ns-3.48 backend on Linux or macOS; on Windows,
-run the backend and its Python caller inside WSL2. See the
-[backend setup](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/README.md).
-
-Commands below use `uv run --no-dev`. Static figures additionally require
-the plotting extra:
+Optional extras: `plot` (matplotlib, for `report --figures`) and `parquet` (pyarrow, for
+Parquet tables):
 
 ```bash
-uv sync --locked --no-dev --extra plot
+uv sync --locked --no-dev --extra plot --extra parquet
 ```
 
-Contributor dependencies are separate; see [Contributing](CONTRIBUTING.md).
+The Python core runs on Linux, macOS and Windows. The optional packet replays need separately
+built ns-3.48 backends on Linux or macOS; on Windows, run the backends and their Python caller
+inside WSL2. See the [backend setup](adapters/ns3/README.md). Contributor dependencies are
+separate; see [Contributing](CONTRIBUTING.md).
 
-## Quick start: scientific workbench
+## Quick start
 
-Launch the example with explicitly declared rain and cloud:
+Every command below runs from the repository root.
 
 ```bash
-uv run --no-dev openleo app \
-  examples/constellations/iridium_global_hydrometeors.json
+uv run --no-dev openleo scenario explain examples/constellations/iridium_global_hydrometeors.json
+uv run --no-dev openleo run examples/constellations/iridium_global_hydrometeors.json --output runs/coupled
+uv run --no-dev --extra plot openleo report runs/coupled --output runs/coupled-report --figures
 ```
 
-The application opens at `http://127.0.0.1:8765/`. Select stations and satellites,
-move through UTC samples, inspect budgets and routes, edit declared propagation
-inputs, and run an aligned comparison. Export its complete report and inputs
-as a ZIP. The display replays computed samples from archived elements; it is
-not live telemetry.
+`runs/coupled` holds `results.json` (metadata, models, provenance, warnings, limitations,
+convergence and headline `summary`), `tables/*.csv` and `tables/*.olc` (samples, events,
+passes, rate segments, pair, station and route metrics, routes, positions, convergence), the
+archived `inputs/` and a `manifest.json` of SHA-256 hashes. See [Schemas](docs/SCHEMAS.md).
 
-For packet comparisons, configure trusted executables when starting the server:
+The example uses 80 archived public CelesTrak GP records and four approximate station
+locations. RF parameters, terminal settings, inter-satellite links, rain rate and cloud water
+are declared research inputs, not descriptions of Iridium hardware, service or observed
+weather; the scenario marks this with `space_segment.synthetic_rf: true`.
+
+Shipped examples:
+
+| Path | Content |
+| --- | --- |
+| `examples/scenarios/iss_cartagena.json` | One ISS pass over Cartagena, free space, 10 s grid |
+| `examples/constellations/iridium_global.json` | 80 Iridium NEXT satellites, 4 stations, 2 h, free space, Madrid-Tromso routes |
+| `examples/constellations/iridium_global_reference.json` | the same with the ITU-R reference gaseous atmosphere |
+| `examples/constellations/iridium_global_hydrometeors.json` | the same with declared uniform rain and cloud |
+| `examples/sweeps/*.json` | an EIRP one-at-a-time sweep, the aligned propagation cases, the sampling-fidelity grid, the release matrix |
+| `examples/reproduce/release_benchmark.json` | the frozen release benchmark (`openleo reproduce`) |
+| `examples/performance/starlink_1000_24h.json` | the 1000-satellite 24-hour performance scenario |
+
+## Sweeps and reproduction
 
 ```bash
-uv run --no-dev openleo app \
-  examples/constellations/iridium_global_hydrometeors.json \
-  --network-backend ../ns-3.48/build/scratch/ns3.48-openleo-network-replay
+uv run --no-dev openleo sweep examples/sweeps/propagation_cases.json --output runs/cases
+uv run --no-dev openleo report runs/cases --output runs/cases-report
 ```
 
-Use `--packet-backend` for the separate single-link executable. Browser requests
-cannot select executable or output paths. The server binds to loopback, pins
-the archived catalog, checks Host and Origin headers, requires a session token
-for computations, limits matching local requests to 60 per second, and bounds
-study artifacts to 64 MB. Larger studies use the CLI.
+A sweep varies a base scenario one parameter at a time (`oat`), over a Cartesian grid (`grid`)
+or through an explicit list of JSON patches (`variants`), and writes every run plus a
+deterministic comparison table (value, baseline, delta and ratio per metric). Optional `replay`
+blocks replay every run through the trusted ns-3 backends. See [Sweeps](docs/SWEEPS.md).
 
-Export a standalone constellation bundle without a server:
-
-```bash
-uv run --no-dev openleo constellation \
-  examples/constellations/iridium_global_hydrometeors.json \
-  --output runs/global
-```
-
-Open `runs/global/explorer.html` directly. The bundle also includes
-`experiment.json`, `links.csv`, `routes.csv`, and `manifest.json`.
-
-The example uses 80 archived public CelesTrak GP records and four approximate
-station locations. RF parameters, terminal settings, inter-satellite links,
-rain rate, and cloud water are declared research inputs, not descriptions of
-Iridium hardware, service, or observed weather.
-
-## Integrated experiments
-
-Run an aligned model comparison over a bounded window:
-
-```bash
-uv run --no-dev openleo experiment \
-  examples/constellations/iridium_global_hydrometeors.json \
-  --duration-s 300 --output runs/comparison
-```
-
-The source determines which cases exist: free space, reference gases when
-configured, and gases plus declared hydrometeors when configured. Every case
-recomputes the same selected UTC window with the same sampling, station, RF,
-and network inputs. The window must fit wholly inside the source scenario,
-span at least one sampling interval, and be at most 3600 seconds.
-
-After building the optional network backend, include actual multi-hop UDP:
-
-```bash
-uv run --no-dev openleo experiment \
-  examples/constellations/iridium_global_hydrometeors.json \
-  --packet-mode network --duration-s 300 \
-  --offered-load-bps 10000 --flows-per-direction 2 \
-  --acquisition-delay-s 0.1 \
-  --network-backend ../ns-3.48/build/scratch/ns3.48-openleo-network-replay \
-  --output runs/comparison-network
-```
-
-Each propagation case replays minimum-delay, maximum-rate, and fixed-capacity
-routes. The native simulator uses the union of edges selected during the window,
-actual IPv4 forwarding, shared per-device FIFO queues, and declared endpoint
-acquisition time. Payload goodput and delay come from validated receive events;
-reference rates and route bottlenecks remain model quantities.
-
-Open `runs/comparison-network/index.html`. Child workbench and packet bundles,
-CSV metrics, portable inputs, source and derived configuration hashes, and a
-recursive manifest accompany the report. `--settings SETTINGS.json` stores
-the same experiment controls in a JSON file; explicit CLI options override it.
-See [Integrated experiments](docs/EXPERIMENTS.md).
-
-## Reproduce the frozen matrix
-
-After the [backend build](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/README.md),
-run from the repository root:
-
-```bash
-uv run --no-dev openleo reproduce \
-  examples/studies/release_benchmark.json \
-  --reference examples/validation/vallado_06251.json \
-  --network-backend ../ns-3.48/build/scratch/ns3.48-openleo-network-replay \
-  --output runs/reproduction
-```
-
-The frozen configuration requests 16 experiments and 144 native replays across
-12/20 GHz, 30/60 s sampling, two gas grids, two UDP loads, three propagation
-cases, and three routing models. Both frequencies use identical declared gains
-and EIRP; this is a controlled frequency comparison, not a hardware study.
-These counts describe the configured matrix, not a claim that a particular
-release execution has already completed.
-
-Reproduction requires the native backend and a passing published numerical
-TEME reference. `benchmark` without `--network-backend` computes eight
-model-only experiments and explicitly records missing packet evidence.
-See [Reproducibility](docs/REPRODUCIBILITY.md) and the
-[frozen benchmark contract](docs/BENCHMARK.md).
+`openleo reproduce` runs the frozen release benchmark: a sweep with native network replays,
+gated on a passing published orbit reference and complete native evidence. See
+[Reproducibility](docs/REPRODUCIBILITY.md) and [Benchmark](docs/BENCHMARK.md).
 
 ## Python API
 
-Use the same runner directly:
-
 ```python
-from openleo import load_constellation
-from openleo.experiment import ExperimentConfig, run_experiment
+from pathlib import Path
 
-scenario = load_constellation(
-    "examples/constellations/iridium_global_hydrometeors.json"
-)
-summary = run_experiment(
-    scenario,
-    ExperimentConfig(duration_s=300),
-    "runs/comparison-python",
-)
+from openleo import load_results, load_scenario, run, run_sweep, save_run
+
+scenario = load_scenario(Path("examples/constellations/iridium_global_reference.json"))
+results = run(scenario, workers=4)
+print(results.metadata["summary"]["stations"]["Tromso"]["rf_usable_fraction"])
+save_run(scenario, results, Path("runs/reference"))
+
+again = load_results(Path("runs/reference"))  # verifies the manifest and every table hash
+summary = run_sweep(Path("examples/sweeps/eirp_oat.json"), Path("runs/eirp"))
 ```
 
-The stable core workflow remains available:
-
-```python
-from openleo import add_network, load_constellation, simulate_constellation, write_workbench
-
-scenario = load_constellation("examples/constellations/iridium_global_reference.json")
-document = add_network(simulate_constellation(scenario))
-write_workbench(document, "runs/global-python")
-```
-
-Public paths accept strings or `pathlib.Path`. Unsupported domains, non-finite
-inputs, schema errors, source-hash mismatches, and inconsistent artifacts raise
-errors. Public units and UTC conventions are explicit. Workbench schemas
-`1`, `2`, and `3` cover free space, reference gases, and declared hydrometeors;
-integrated result kinds each use their own schema `1`.
-The [schema contracts](docs/SCHEMAS.md) define compatibility: supported
-v1.0 contracts remain stable, compatible evolution is additive, and breaking
-changes require a new schema version and a future major software release.
+`run` never mutates its inputs and raises `ValueError` for invalid inputs. Tables are numpy
+columns with units in their names (`_s`, `_m`, `_deg`, `_db`, `_bps`, `_bits`, ...) and in
+`results.json`.
 
 ## Models and evidence
 
-- [Methods](docs/METHODS.md): frames, time, geometry, budgets, adaptation, and routing.
-- [Workbench](docs/WORKBENCH.md): configuration, exports, UI, and security.
-- [Reference propagation](docs/REFERENCE_PROPAGATION.md): gas profile, refraction, delay.
-- [Coupled hydrometeors](docs/COUPLED_PROPAGATION.md): declared cloud/rain loss and schema 3.
-- [Hydrometeors](docs/HYDROMETEORS.md): standalone equations and workbook checks.
-- [Network replay](docs/NETWORK_REPLAY.md): multi-hop queues, routes, acquisition, accounting.
-- [Packet replay](docs/PACKET_REPLAY.md): single-link UDP service model.
-- [Fidelity studies](docs/FIDELITY_STUDIES.md): gas-grid and sampling comparisons.
-- [Sensitivity](docs/SENSITIVITY.md): deterministic one-at-a-time comparisons.
-- [Gases](docs/GASES.md): homogeneous P.676-13 attenuation and official cases.
-- [Orbit verification](docs/ORBIT_VERIFICATION.md): published numerical TEME comparison.
-- [Validation](docs/VALIDATION.md): checks performed and physical validation still needed.
+- [Methods](docs/METHODS.md): frames, geometry, link budget, events, the MODCOD state machine,
+  integration, routing and the convergence gate.
+- [Schemas](docs/SCHEMAS.md): scenario v2, results v2, OLC v1 and sweep v2.
+- [Migration from 1.x](docs/MIGRATION.md): commands, fields, conventions and re-derived numbers.
+- [Validation](docs/VALIDATION.md): the checks performed and the physical validation still needed.
+- [Scope](docs/SCOPE.md): the scientific claim boundary.
+- [Reference propagation](docs/REFERENCE_PROPAGATION.md) and
+  [coupled hydrometeors](docs/COUPLED_PROPAGATION.md): the atmosphere models.
+- [Gases](docs/GASES.md) and [Hydrometeors](docs/HYDROMETEORS.md): the standalone calculators.
+- [Packet replay](docs/PACKET_REPLAY.md) and [Network replay](docs/NETWORK_REPLAY.md): the ns-3
+  bridges.
+- [Orbit verification](docs/ORBIT_VERIFICATION.md), [Sweeps](docs/SWEEPS.md),
+  [Reproducibility](docs/REPRODUCIBILITY.md), [Benchmark](docs/BENCHMARK.md) and
+  [App API](docs/WORKBENCH.md).
 
 ## Scientific limits
 
-Declared rain/cloud conditions are constant sensitivity inputs. They do not
-infer local weather or provide P.618 exceedance probabilities or availability.
-The reference atmosphere is idealized; receiver noise stays fixed and
-atmospheric emission is omitted. Masks and Doppler retain geometric conventions.
+Declared rain and cloud conditions are constant sensitivity inputs. They do not infer local
+weather or provide P.618 exceedance probabilities or availability. The reference atmosphere is
+idealized; receiver noise stays fixed and atmospheric emission is omitted. Visibility masks and
+Doppler use geometric (not refracted) elevation and range rate.
 
-OpenLEO does not model antenna patterns, interference, beam scheduling,
-waveforms, decoding, satellite MAC/PHY, TCP, or retransmissions. Endpoint
-acquisition is a declared timing interval rather than a modem simulation.
-Snapshot routing has no traffic contention; optional native replay adds
-contention only within its bounded synthetic UDP topology.
+OpenLEO does not model antenna patterns, interference, beam scheduling, waveforms, decoding,
+satellite MAC/PHY, TCP or retransmissions. Endpoint acquisition in network replays is a
+declared timing interval rather than a modem simulation. Snapshot routing has no traffic
+contention; the optional native replays add contention only within their bounded synthetic UDP
+topology.
 
-Shannon-Hartley capacity is an upper bound and DVB-S2 rates are ideal AWGN
-references. Neither is measured throughput. Native packet goodput is simulated
-payload delivery. Fitted orbital elements are not exact trajectories; numerical
-Vallado agreement is not observation-based orbit or RF validation. Refinement
-and sampling differences do not establish probabilistic uncertainty.
+Shannon-Hartley capacity is an upper bound and DVB-S2 rates are ideal AWGN references; neither
+is measured throughput. Native packet goodput is simulated payload delivery. Fitted orbital
+elements are not exact trajectories; numerical Vallado agreement is not observation-based orbit
+or RF validation. Grid refinement and sweep differences are deterministic comparisons, not
+probabilistic uncertainty.
 
-## Citation, license, and data terms
+In the 2.0 engine, routes are re-evaluated at event-aware breakpoints and held between them:
+inter-satellite range and occlusion changes between breakpoints are not resolved, so route
+metrics are reported in the convergence table but not gated. The `fixed_capacity` baseline
+assigns its capacity to every geometrically visible ground link of the route endpoints, with or
+without MODCOD lock. `results.json` states the route-convergence line whenever the scenario has
+a `network` (events enabled or not), the route-breakpoint line only when it has a `network` and
+events are enabled, the fixed-capacity line only when `network.route_models` lists
+`fixed_capacity`, and the event-time accuracy line whenever events are enabled; see [Scope](docs/SCOPE.md#openleo-20-s1-limitations).
 
-Cite the software using [`CITATION.cff`](CITATION.cff). No DOI, PyPI publication,
-or journal acceptance is claimed. The Python core is [MIT licensed](LICENSE).
-Both separately built C++ adapters and their shared header are
-[GPL-2.0-only](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/LICENSE)
-and excluded from the core wheel and source distribution.
+## Citation, license and data terms
+
+Cite the software using [`CITATION.cff`](CITATION.cff). No DOI, PyPI publication or journal
+acceptance is claimed. The Python core is [MIT licensed](LICENSE). The separately built C++
+adapters and their shared header are [GPL-2.0-only](adapters/ns3/LICENSE) and excluded from the
+core wheel and source distribution.
 
 Archived input provenance and terms are in [`THIRD_PARTY_DATA.md`](THIRD_PARTY_DATA.md).
 Implementation notices are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

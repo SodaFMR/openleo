@@ -39,6 +39,25 @@ ITU-R P.835-7 global reference profile, not collected weather observations.
 Source versions, PDF hashes, official numerical reference cases and model limits
 are documented in [Reference propagation](docs/REFERENCE_PROPAGATION.md).
 
+## Starlink performance catalog
+
+- Archived response: `examples/data/starlink_2026-11-01.csv`, 11,156 GP records
+  (1,672,433 bytes, within the 2.0 engine's 10 MB and 20,000-record catalog limits).
+- Source: https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=csv
+- Retrieved: 2026-11-01T20:43:43Z, in one request.
+- Usage policy: https://celestrak.org/usage-policy.php
+- SHA-256: `8f07bb7e1a70ef10f511ed9b5aebdee3fbd4b3b3d29b0198c7684ac00e438383`.
+- Original response bytes, including CRLF line endings, are preserved.
+
+`examples/performance/starlink_1000_24h.json` selects the first 1,000 NORAD ids of
+this catalog in ascending order for the engine's performance acceptance benchmark
+(design spec section 11.6). The stations, terminals, Ku-band radio and DVB-S2
+adaptation settings are the OpenLEO Iridium example assumptions; they do not describe
+Starlink's payload, user terminals, gateways, spectrum or measured performance. The
+24-hour window (2026-11-02T00:00:00Z to 2026-11-03T00:00:00Z) starts the day after
+retrieval, so it is a short-term prediction from the fitted elements, not a record of
+where the satellites were.
+
 ## Vallado published numerical orbit reference
 
 - Fixture: `examples/validation/vallado_06251.json`; two TLE lines and five
@@ -77,5 +96,6 @@ the exact verification procedure are in
 - SHA-256: `851f581ff5ffb844deed8ae1a9ce22e3c4bb3d74fa342cadb5d8e39b41ae7c3c`.
 - Terms: https://www.naturalearthdata.com/about/terms-of-use/ (public domain).
 
-This generalized 1:110 million cartography supplies visual geographic context only.
+It is packaged for the workbench that ships in a later 2.0 milestone; the S1 engine and API do
+not read it. This generalized 1:110 million cartography supplies visual geographic context only.
 It is not a terrain, elevation, horizon-obstruction or station-location dataset.

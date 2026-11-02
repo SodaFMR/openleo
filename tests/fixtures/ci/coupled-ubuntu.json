@@ -1,0 +1,1480 @@
+{
+ "event_tolerance_s": 0.001,
+ "kind": "openleo.results-digest",
+ "scenario_name": "Global LEO declared hydrometeor sensitivity experiment",
+ "scenario_sha256": "ae82fc63e4878b04ec368378b681f5d00cae6f84046a69a6496b0e04e3681447",
+ "schema_version": "1",
+ "software": {
+  "numpy": "2.5.2",
+  "openleo": "2.0.0.dev0",
+  "platform": "Linux-7.2.11-arch1-1-x86_64-with-glibc2.44",
+  "python": "3.13.14",
+  "sgp4": "2.27",
+  "skyfield": "1.55"
+ },
+ "tables": {
+  "convergence": {
+   "column_order": [
+    "metric",
+    "class",
+    "primary",
+    "refined",
+    "absolute_difference",
+    "relative_difference",
+    "passed",
+    "gated",
+    "recomputed"
+   ],
+   "columns": {
+    "absolute_difference": {
+     "abs_sum": 19742.909826411782,
+     "dtype": "f64",
+     "finite": 3341,
+     "max": 2832.525077819824,
+     "min": 0.0,
+     "nan": 215,
+     "sum": 19742.909826411782,
+     "unit": "metric unit"
+    },
+    "class": {
+     "dtype": "str",
+     "sha256": "7e3044f5cd382bfd6ac156e8ee985ede326ef69f597921b1214b8290d6290a97",
+     "unit": ""
+    },
+    "gated": {
+     "abs_sum": 3544.0,
+     "dtype": "u8",
+     "finite": 3556,
+     "max": 1.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 3544.0,
+     "unit": "bool"
+    },
+    "metric": {
+     "dtype": "str",
+     "sha256": "fe2216800e59a2a29e4c6d2cfd0aa3394e6553b507f0f6d5e2be34df5494b32e",
+     "unit": ""
+    },
+    "passed": {
+     "abs_sum": 3555.0,
+     "dtype": "u8",
+     "finite": 3556,
+     "max": 1.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 3555.0,
+     "unit": "bool"
+    },
+    "primary": {
+     "abs_sum": 120450241149.83879,
+     "dtype": "f64",
+     "finite": 3341,
+     "max": 16042492800.0,
+     "min": 0.0,
+     "nan": 215,
+     "sum": 120450241149.83879,
+     "unit": "metric unit"
+    },
+    "recomputed": {
+     "abs_sum": 3556.0,
+     "dtype": "u8",
+     "finite": 3556,
+     "max": 1.0,
+     "min": 1.0,
+     "nan": 0,
+     "sum": 3556.0,
+     "unit": "bool"
+    },
+    "refined": {
+     "abs_sum": 120450231160.98448,
+     "dtype": "f64",
+     "finite": 3341,
+     "max": 16042492800.0,
+     "min": 0.0,
+     "nan": 215,
+     "sum": 120450231160.98448,
+     "unit": "metric unit"
+    },
+    "relative_difference": {
+     "abs_sum": 0.026478453470744432,
+     "dtype": "f64",
+     "finite": 3341,
+     "max": 0.018518518518518517,
+     "min": 0.0,
+     "nan": 215,
+     "sum": 0.026478453470744432,
+     "unit": "1"
+    }
+   },
+   "rows": 3556
+  },
+  "events": {
+   "column_order": [
+    "station_index",
+    "satellite_index",
+    "t_offset_s",
+    "type",
+    "modcod_from",
+    "modcod_to",
+    "elevation_deg",
+    "decision_offset_s"
+   ],
+   "columns": {
+    "decision_offset_s": {
+     "abs_sum": 772857.8321332157,
+     "dtype": "f64",
+     "finite": 228,
+     "max": 7125.438938611984,
+     "min": 0.0,
+     "nan": 353,
+     "sum": 772857.8321332157,
+     "unit": "s"
+    },
+    "elevation_deg": {
+     "abs_sum": 4327.228965141563,
+     "dtype": "f64",
+     "finite": 116,
+     "max": 87.77449509867361,
+     "min": 10.065247970398998,
+     "nan": 465,
+     "sum": 4327.228965141563,
+     "unit": "deg"
+    },
+    "modcod_from": {
+     "dtype": "str",
+     "sha256": "1b0c7266043ceca6f6d49f63ed863c87901c717420c49fe4bec4e5fa1868a77b",
+     "unit": ""
+    },
+    "modcod_to": {
+     "dtype": "str",
+     "sha256": "c93ac951cae0fc27a23c7b7bd8168b1ed244dff1914327c1657664207331ce0a",
+     "unit": ""
+    },
+    "satellite_index": {
+     "abs_sum": 21469.0,
+     "dtype": "i64",
+     "finite": 581,
+     "max": 79.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 21469.0,
+     "unit": "1"
+    },
+    "station_index": {
+     "abs_sum": 739.0,
+     "dtype": "i64",
+     "finite": 581,
+     "max": 3.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 739.0,
+     "unit": "1"
+    },
+    "t_offset_s": {
+     "abs_sum": 2097866.6857156605,
+     "dtype": "f64",
+     "finite": 581,
+     "max": 7186.09775709764,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 2097866.6857156605,
+     "unit": "s"
+    },
+    "type": {
+     "dtype": "str",
+     "sha256": "156ff3d7dcd3dbb508c6510e8732afe516f569b1a0990453c4a1d6cfd195dcae",
+     "unit": ""
+    }
+   },
+   "rows": 581
+  },
+  "pair_metrics": {
+   "column_order": [
+    "station_index",
+    "satellite_index",
+    "norad_id",
+    "pass_count",
+    "visible_duration_s",
+    "rf_usable_duration_s",
+    "integrated_rate_bits",
+    "integrated_shannon_upper_bound_bits",
+    "max_elevation_deg",
+    "min_range_m",
+    "mean_rate_visible_bps",
+    "residence_qpsk_1_4_s",
+    "residence_qpsk_1_2_s",
+    "residence_qpsk_3_4_s",
+    "residence_8psk_2_3_s",
+    "residence_8psk_3_4_s"
+   ],
+   "columns": {
+    "integrated_rate_bits": {
+     "abs_sum": 5704805662.154817,
+     "dtype": "f64",
+     "finite": 320,
+     "max": 331054964.5939801,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 5704805662.154817,
+     "unit": "bit"
+    },
+    "integrated_shannon_upper_bound_bits": {
+     "abs_sum": 30415086095.37119,
+     "dtype": "f64",
+     "finite": 320,
+     "max": 1208208590.2432895,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 30415086095.37119,
+     "unit": "bit"
+    },
+    "max_elevation_deg": {
+     "abs_sum": 4153.211952130006,
+     "dtype": "f64",
+     "finite": 105,
+     "max": 87.77449509867361,
+     "min": 10.065247970398998,
+     "nan": 215,
+     "sum": 4153.211952130006,
+     "unit": "deg"
+    },
+    "mean_rate_visible_bps": {
+     "abs_sum": 8264416.65895937,
+     "dtype": "f64",
+     "finite": 105,
+     "max": 362417.9208656477,
+     "min": 0.0,
+     "nan": 215,
+     "sum": 8264416.65895937,
+     "unit": "bit/s"
+    },
+    "min_range_m": {
+     "abs_sum": 140852791.46076143,
+     "dtype": "f64",
+     "finite": 105,
+     "max": 2289188.1436176295,
+     "min": 683495.7996827735,
+     "nan": 215,
+     "sum": 140852791.46076143,
+     "unit": "m"
+    },
+    "norad_id": {
+     "abs_sum": 14064820.0,
+     "dtype": "i64",
+     "finite": 320,
+     "max": 56730.0,
+     "min": 41917.0,
+     "nan": 0,
+     "sum": 14064820.0,
+     "unit": "1"
+    },
+    "pass_count": {
+     "abs_sum": 125.0,
+     "dtype": "i64",
+     "finite": 320,
+     "max": 2.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 125.0,
+     "unit": "1"
+    },
+    "residence_8psk_2_3_s": {
+     "abs_sum": 0.0,
+     "dtype": "f64",
+     "finite": 320,
+     "max": 0.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 0.0,
+     "unit": "s"
+    },
+    "residence_8psk_3_4_s": {
+     "abs_sum": 0.0,
+     "dtype": "f64",
+     "finite": 320,
+     "max": 0.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 0.0,
+     "unit": "s"
+    },
+    "residence_qpsk_1_2_s": {
+     "abs_sum": 1602.384183327567,
+     "dtype": "f64",
+     "finite": 320,
+     "max": 146.0815257932718,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 1602.384183327567,
+     "unit": "s"
+    },
+    "residence_qpsk_1_4_s": {
+     "abs_sum": 8404.557012334466,
+     "dtype": "f64",
+     "finite": 320,
+     "max": 382.17968536505487,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 8404.557012334466,
+     "unit": "s"
+    },
+    "residence_qpsk_3_4_s": {
+     "abs_sum": 0.0,
+     "dtype": "f64",
+     "finite": 320,
+     "max": 0.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 0.0,
+     "unit": "s"
+    },
+    "rf_usable_duration_s": {
+     "abs_sum": 10006.941195662033,
+     "dtype": "f64",
+     "finite": 320,
+     "max": 527.4928133384944,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 10006.941195662033,
+     "unit": "s"
+    },
+    "satellite_index": {
+     "abs_sum": 12640.0,
+     "dtype": "i64",
+     "finite": 320,
+     "max": 79.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 12640.0,
+     "unit": "1"
+    },
+    "station_index": {
+     "abs_sum": 480.0,
+     "dtype": "i64",
+     "finite": 320,
+     "max": 3.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 480.0,
+     "unit": "1"
+    },
+    "visible_duration_s": {
+     "abs_sum": 56820.62074804288,
+     "dtype": "f64",
+     "finite": 320,
+     "max": 1197.0238540258565,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 56820.62074804288,
+     "unit": "s"
+    }
+   },
+   "rows": 320
+  },
+  "passes": {
+   "column_order": [
+    "station_index",
+    "satellite_index",
+    "pass_index",
+    "aos_offset_s",
+    "los_offset_s",
+    "culmination_offset_s",
+    "truncated_start",
+    "truncated_end",
+    "duration_s",
+    "rf_usable_duration_s",
+    "integrated_rate_bits",
+    "integrated_shannon_upper_bound_bits",
+    "max_elevation_deg"
+   ],
+   "columns": {
+    "aos_offset_s": {
+     "abs_sum": 437281.26618053275,
+     "dtype": "f64",
+     "finite": 125,
+     "max": 7162.400519911268,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 437281.26618053275,
+     "unit": "s"
+    },
+    "culmination_offset_s": {
+     "abs_sum": 465625.70047333627,
+     "dtype": "f64",
+     "finite": 125,
+     "max": 7200.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 465625.70047333627,
+     "unit": "s"
+    },
+    "duration_s": {
+     "abs_sum": 56820.62074804288,
+     "dtype": "f64",
+     "finite": 125,
+     "max": 631.8007264780441,
+     "min": 15.135236101549243,
+     "nan": 0,
+     "sum": 56820.62074804288,
+     "unit": "s"
+    },
+    "integrated_rate_bits": {
+     "abs_sum": 5704805662.154817,
+     "dtype": "f64",
+     "finite": 125,
+     "max": 237417441.7005632,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 5704805662.154817,
+     "unit": "bit"
+    },
+    "integrated_shannon_upper_bound_bits": {
+     "abs_sum": 30415086095.37119,
+     "dtype": "f64",
+     "finite": 125,
+     "max": 743643251.4699525,
+     "min": 6.979914685492421,
+     "nan": 0,
+     "sum": 30415086095.37119,
+     "unit": "bit"
+    },
+    "los_offset_s": {
+     "abs_sum": 494101.88692857564,
+     "dtype": "f64",
+     "finite": 125,
+     "max": 7200.0,
+     "min": 15.135236101549243,
+     "nan": 0,
+     "sum": 494101.88692857564,
+     "unit": "s"
+    },
+    "max_elevation_deg": {
+     "abs_sum": 4538.752804550281,
+     "dtype": "f64",
+     "finite": 125,
+     "max": 87.77449509867361,
+     "min": 10.065247970398998,
+     "nan": 0,
+     "sum": 4538.752804550281,
+     "unit": "deg"
+    },
+    "pass_index": {
+     "abs_sum": 20.0,
+     "dtype": "i64",
+     "finite": 125,
+     "max": 1.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 20.0,
+     "unit": "1"
+    },
+    "rf_usable_duration_s": {
+     "abs_sum": 10006.941195662033,
+     "dtype": "f64",
+     "finite": 125,
+     "max": 335.7090294346905,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 10006.941195662033,
+     "unit": "s"
+    },
+    "satellite_index": {
+     "abs_sum": 4565.0,
+     "dtype": "i64",
+     "finite": 125,
+     "max": 79.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 4565.0,
+     "unit": "1"
+    },
+    "station_index": {
+     "abs_sum": 155.0,
+     "dtype": "i64",
+     "finite": 125,
+     "max": 3.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 155.0,
+     "unit": "1"
+    },
+    "truncated_end": {
+     "abs_sum": 6.0,
+     "dtype": "u8",
+     "finite": 125,
+     "max": 1.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 6.0,
+     "unit": "bool"
+    },
+    "truncated_start": {
+     "abs_sum": 7.0,
+     "dtype": "u8",
+     "finite": 125,
+     "max": 1.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 7.0,
+     "unit": "bool"
+    }
+   },
+   "rows": 125
+  },
+  "positions": {
+   "column_order": [
+    "satellite_index",
+    "time_index",
+    "t_offset_s",
+    "x_ecef_m",
+    "y_ecef_m",
+    "z_ecef_m"
+   ],
+   "columns": {
+    "satellite_index": {
+     "abs_sum": 382360.0,
+     "dtype": "i64",
+     "finite": 9680,
+     "max": 79.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 382360.0,
+     "unit": "1"
+    },
+    "t_offset_s": {
+     "abs_sum": 34848000.0,
+     "dtype": "f64",
+     "finite": 9680,
+     "max": 7200.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 34848000.0,
+     "unit": "s"
+    },
+    "time_index": {
+     "abs_sum": 580800.0,
+     "dtype": "i64",
+     "finite": 9680,
+     "max": 120.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 580800.0,
+     "unit": "1"
+    },
+    "x_ecef_m": {
+     "abs_sum": 28069820079.479214,
+     "dtype": "f64",
+     "finite": 9680,
+     "max": 7156512.766758723,
+     "min": -7156146.251877191,
+     "nan": 0,
+     "sum": -333832652.62328124,
+     "unit": "m"
+    },
+    "y_ecef_m": {
+     "abs_sum": 28402704204.946014,
+     "dtype": "f64",
+     "finite": 9680,
+     "max": 7158928.999867821,
+     "min": -7154631.384758589,
+     "nan": 0,
+     "sum": -526365474.85044324,
+     "unit": "m"
+    },
+    "z_ecef_m": {
+     "abs_sum": 44118682722.46649,
+     "dtype": "f64",
+     "finite": 9680,
+     "max": 7132765.966041634,
+     "min": -7150741.773181933,
+     "nan": 0,
+     "sum": -944608845.4018524,
+     "unit": "m"
+    }
+   },
+   "rows": 9680
+  },
+  "rate_segments": {
+   "column_order": [
+    "station_index",
+    "satellite_index",
+    "start_offset_s",
+    "end_offset_s",
+    "modcod",
+    "rate_bps"
+   ],
+   "columns": {
+    "end_offset_s": {
+     "abs_sum": 880530.8029951835,
+     "dtype": "f64",
+     "finite": 237,
+     "max": 7200.0,
+     "min": 6.995661109520415,
+     "nan": 0,
+     "sum": 880530.8029951835,
+     "unit": "s"
+    },
+    "modcod": {
+     "dtype": "str",
+     "sha256": "6f48cece7fe2d7341e16a7e1dd147935d2909dca1290d7dd1f3b58adea318f3d",
+     "unit": ""
+    },
+    "rate_bps": {
+     "abs_sum": 42776721.0,
+     "dtype": "f64",
+     "finite": 237,
+     "max": 988858.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 42776721.0,
+     "unit": "bit/s"
+    },
+    "satellite_index": {
+     "abs_sum": 8790.0,
+     "dtype": "i64",
+     "finite": 237,
+     "max": 79.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 8790.0,
+     "unit": "1"
+    },
+    "start_offset_s": {
+     "abs_sum": 823710.1822471407,
+     "dtype": "f64",
+     "finite": 237,
+     "max": 7162.400519911268,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 823710.1822471407,
+     "unit": "s"
+    },
+    "station_index": {
+     "abs_sum": 306.0,
+     "dtype": "i64",
+     "finite": 237,
+     "max": 3.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 306.0,
+     "unit": "1"
+    }
+   },
+   "rows": 237
+  },
+  "route_metrics": {
+   "column_order": [
+    "pair_index",
+    "model_index",
+    "source",
+    "target",
+    "model",
+    "connected_fraction",
+    "integrated_bottleneck_bits",
+    "route_changes",
+    "mean_delay_connected_s"
+   ],
+   "columns": {
+    "connected_fraction": {
+     "abs_sum": 1.011468941252175,
+     "dtype": "f64",
+     "finite": 3,
+     "max": 1.0,
+     "min": 0.0057344706260874035,
+     "nan": 0,
+     "sum": 1.011468941252175,
+     "unit": "1"
+    },
+    "integrated_bottleneck_bits": {
+     "abs_sum": 16082975290.797287,
+     "dtype": "f64",
+     "finite": 3,
+     "max": 16042492800.0,
+     "min": 20241245.398643762,
+     "nan": 0,
+     "sum": 16082975290.797287,
+     "unit": "bit"
+    },
+    "mean_delay_connected_s": {
+     "abs_sum": 0.06091534850893595,
+     "dtype": "f64",
+     "finite": 3,
+     "max": 0.021174564822910535,
+     "min": 0.01856621886311488,
+     "nan": 0,
+     "sum": 0.06091534850893595,
+     "unit": "s"
+    },
+    "model": {
+     "dtype": "str",
+     "sha256": "2cbba17581a22107410244fa48c6c1e1f13f70c4860ae03e0e024dab03497787",
+     "unit": ""
+    },
+    "model_index": {
+     "abs_sum": 3.0,
+     "dtype": "i64",
+     "finite": 3,
+     "max": 2.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 3.0,
+     "unit": "1"
+    },
+    "pair_index": {
+     "abs_sum": 0.0,
+     "dtype": "i64",
+     "finite": 3,
+     "max": 0.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 0.0,
+     "unit": "1"
+    },
+    "route_changes": {
+     "abs_sum": 53.0,
+     "dtype": "i64",
+     "finite": 3,
+     "max": 53.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 53.0,
+     "unit": "1"
+    },
+    "source": {
+     "dtype": "str",
+     "sha256": "62ace21f44fbea170303be1840df129a1833adccb8e751a7805b24ed81cd392b",
+     "unit": ""
+    },
+    "target": {
+     "dtype": "str",
+     "sha256": "9ebef48a8ad7dbc2af889535012caff0a35baa81ecb59efaef2d4e033308b639",
+     "unit": ""
+    }
+   },
+   "rows": 3
+  },
+  "routes": {
+   "column_order": [
+    "pair_index",
+    "model_index",
+    "source",
+    "target",
+    "model",
+    "start_offset_s",
+    "end_offset_s",
+    "connected",
+    "nodes",
+    "delay_s",
+    "bottleneck_bps"
+   ],
+   "columns": {
+    "bottleneck_bps": {
+     "abs_sum": 844638026.0,
+     "dtype": "f64",
+     "finite": 390,
+     "max": 2228124.0,
+     "min": 490243.0,
+     "nan": 8,
+     "sum": 844638026.0,
+     "unit": "bit/s"
+    },
+    "connected": {
+     "abs_sum": 390.0,
+     "dtype": "u8",
+     "finite": 398,
+     "max": 1.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 390.0,
+     "unit": "bool"
+    },
+    "delay_s": {
+     "abs_sum": 7.164149136123005,
+     "dtype": "f64",
+     "finite": 390,
+     "max": 0.02527566654733077,
+     "min": 0.013198344573828177,
+     "nan": 8,
+     "sum": 7.164149136123005,
+     "unit": "s"
+    },
+    "end_offset_s": {
+     "abs_sum": 1399018.7323134548,
+     "dtype": "f64",
+     "finite": 398,
+     "max": 7200.0,
+     "min": 1.1737865996809405,
+     "nan": 0,
+     "sum": 1399018.7323134548,
+     "unit": "s"
+    },
+    "model": {
+     "dtype": "str",
+     "sha256": "9efe4133d049b587b192ce08bf9f0c8aad033bc88377d8007baff45f27b8a064",
+     "unit": ""
+    },
+    "model_index": {
+     "abs_sum": 763.0,
+     "dtype": "i64",
+     "finite": 398,
+     "max": 2.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 763.0,
+     "unit": "1"
+    },
+    "nodes": {
+     "dtype": "str",
+     "sha256": "184aee3ebe27a335619bef8120c0a15d16401d9b86c34049a20402311e5049ac",
+     "unit": ""
+    },
+    "pair_index": {
+     "abs_sum": 0.0,
+     "dtype": "i64",
+     "finite": 398,
+     "max": 0.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 0.0,
+     "unit": "1"
+    },
+    "source": {
+     "dtype": "str",
+     "sha256": "f6a8c2f6662cbd31a3413af68e219658dd7bbebeac418e1fa4c91cdee520bb91",
+     "unit": ""
+    },
+    "start_offset_s": {
+     "abs_sum": 1377418.7323134548,
+     "dtype": "f64",
+     "finite": 398,
+     "max": 7162.618591228111,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 1377418.7323134548,
+     "unit": "s"
+    },
+    "target": {
+     "dtype": "str",
+     "sha256": "c53d483357e8ec0f1a2c535871a65f1b4321e0c893240108ba426e6d29678dde",
+     "unit": ""
+    }
+   },
+   "rows": 398
+  },
+  "samples": {
+   "column_order": [
+    "station_index",
+    "satellite_index",
+    "time_index",
+    "t_offset_s",
+    "elevation_deg",
+    "azimuth_deg",
+    "range_m",
+    "range_rate_mps",
+    "doppler_hz",
+    "delay_s",
+    "cn0_db_hz",
+    "esn0_db",
+    "snr_db",
+    "shannon_upper_bound_bps",
+    "gaseous_dry_attenuation_db",
+    "gaseous_water_attenuation_db",
+    "gaseous_attenuation_db",
+    "free_space_cn0_db_hz",
+    "geometric_delay_s",
+    "atmospheric_excess_delay_s",
+    "apparent_elevation_deg",
+    "cloud_attenuation_db",
+    "rain_specific_attenuation_db_per_km",
+    "rain_path_length_m",
+    "rain_attenuation_db",
+    "hydrometeor_attenuation_db",
+    "total_atmospheric_attenuation_db",
+    "modcod",
+    "rate_bps",
+    "margin_db",
+    "remaining_contact_s",
+    "contact_truncated"
+   ],
+   "columns": {
+    "apparent_elevation_deg": {
+     "abs_sum": 23720.139294719083,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 81.90265262258048,
+     "min": 10.077314395664839,
+     "nan": 0,
+     "sum": 23720.139294719083,
+     "unit": "deg"
+    },
+    "atmospheric_excess_delay_s": {
+     "abs_sum": 2.1532940202956404e-05,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 4.450552967538414e-08,
+     "min": 5.56803625197344e-09,
+     "nan": 0,
+     "sum": 2.1532940202956404e-05,
+     "unit": "s"
+    },
+    "azimuth_deg": {
+     "abs_sum": 185825.50605014412,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 359.5879051183836,
+     "min": 0.11382472819373061,
+     "nan": 0,
+     "sum": 185825.50605014412,
+     "unit": "deg"
+    },
+    "cloud_attenuation_db": {
+     "abs_sum": 107.09012098300325,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 0.7055890518609035,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 107.09012098300325,
+     "unit": "dB"
+    },
+    "cn0_db_hz": {
+     "abs_sum": 47769.84329473821,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 64.66471234744564,
+     "min": -7.70037108010996,
+     "nan": 0,
+     "sum": 47702.320631497,
+     "unit": "dB-Hz"
+    },
+    "contact_truncated": {
+     "abs_sum": 19.0,
+     "dtype": "u8",
+     "finite": 954,
+     "max": 1.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 19.0,
+     "unit": "bool"
+    },
+    "delay_s": {
+     "abs_sum": 5.301679636795435,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 0.007831152787554698,
+     "min": 0.002368144316673263,
+     "nan": 0,
+     "sum": 5.301679636795435,
+     "unit": "s"
+    },
+    "doppler_hz": {
+     "abs_sum": 143939937.5656049,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 260356.74439510505,
+     "min": -261006.2741136552,
+     "nan": 0,
+     "sum": 924119.8913703954,
+     "unit": "Hz"
+    },
+    "elevation_deg": {
+     "abs_sum": 23675.74392239277,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 81.90090450330351,
+     "min": 10.000208552594614,
+     "nan": 0,
+     "sum": 23675.74392239277,
+     "unit": "deg"
+    },
+    "esn0_db": {
+     "abs_sum": 10093.96115324216,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 4.664712347445644,
+     "min": -67.70037108010996,
+     "nan": 0,
+     "sum": -9537.679368503002,
+     "unit": "dB"
+    },
+    "free_space_cn0_db_hz": {
+     "abs_sum": 55995.63040072813,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 65.77199974350782,
+     "min": 55.383667843219285,
+     "nan": 0,
+     "sum": 55995.63040072813,
+     "unit": "dB-Hz"
+    },
+    "gaseous_attenuation_db": {
+     "abs_sum": 150.31091965990896,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 0.3331244096415033,
+     "min": 0.027359575417536686,
+     "nan": 0,
+     "sum": 150.31091965990896,
+     "unit": "dB"
+    },
+    "gaseous_dry_attenuation_db": {
+     "abs_sum": 112.99223238149409,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 0.2423130955209501,
+     "min": 0.024306378911834594,
+     "nan": 0,
+     "sum": 112.99223238149409,
+     "unit": "dB"
+    },
+    "gaseous_water_attenuation_db": {
+     "abs_sum": 37.318687278414885,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 0.0908113141205532,
+     "min": 0.003053196505702091,
+     "nan": 0,
+     "sum": 37.318687278414885,
+     "unit": "dB"
+    },
+    "geometric_delay_s": {
+     "abs_sum": 5.301658103855232,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 0.007831108282025023,
+     "min": 0.0023681359680071236,
+     "nan": 0,
+     "sum": 5.301658103855232,
+     "unit": "s"
+    },
+    "hydrometeor_attenuation_db": {
+     "abs_sum": 8142.99884957122,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 62.822088742788814,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 8142.99884957122,
+     "unit": "dB"
+    },
+    "margin_db": {
+     "abs_sum": 9789.01857942922,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 3.8451258492092237,
+     "min": -67.35037108010997,
+     "nan": 0,
+     "sum": -9287.529368503003,
+     "unit": "dB"
+    },
+    "modcod": {
+     "dtype": "str",
+     "sha256": "2380240fd14c7bd830eb2d22df79fc14354979497ad45ae65c8ffce0865045fa",
+     "unit": ""
+    },
+    "rain_attenuation_db": {
+     "abs_sum": 8035.908728588217,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 62.11649969092791,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 8035.908728588217,
+     "unit": "dB"
+    },
+    "rain_path_length_m": {
+     "abs_sum": 12837803.13783522,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 28439.035104940165,
+     "min": 2171.65298256412,
+     "nan": 0,
+     "sum": 12837803.13783522,
+     "unit": "m"
+    },
+    "rain_specific_attenuation_db_per_km": {
+     "abs_sum": 597.2340547831061,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 2.189791621301995,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 597.2340547831061,
+     "unit": "dB/km"
+    },
+    "range_m": {
+     "abs_sum": 1589397114.4303792,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 2347707.200732439,
+     "min": 709949.3027270649,
+     "nan": 0,
+     "sum": 1589397114.4303792,
+     "unit": "m"
+    },
+    "range_rate_mps": {
+     "abs_sum": 3596008.9739299356,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 6520.6427058295385,
+     "min": -6504.415696590522,
+     "nan": 0,
+     "sum": -23087.014476718654,
+     "unit": "m/s"
+    },
+    "rate_bps": {
+     "abs_sum": 95316442.0,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 988858.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 95316442.0,
+     "unit": "bit/s"
+    },
+    "remaining_contact_s": {
+     "abs_sum": 248941.54212135056,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 620.92467944895,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 248941.54212135056,
+     "unit": "s"
+    },
+    "satellite_index": {
+     "abs_sum": 34714.0,
+     "dtype": "i64",
+     "finite": 954,
+     "max": 79.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 34714.0,
+     "unit": "1"
+    },
+    "shannon_upper_bound_bps": {
+     "abs_sum": 512651719.0404389,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 2138607.996254797,
+     "min": 0.24498381884948736,
+     "nan": 0,
+     "sum": 512651719.0404389,
+     "unit": "bit/s"
+    },
+    "snr_db": {
+     "abs_sum": 10642.103038838524,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 3.8728998869693925,
+     "min": -68.49218354058621,
+     "nan": 0,
+     "sum": -10293.068455797345,
+     "unit": "dB"
+    },
+    "station_index": {
+     "abs_sum": 1185.0,
+     "dtype": "i64",
+     "finite": 954,
+     "max": 3.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 1185.0,
+     "unit": "1"
+    },
+    "t_offset_s": {
+     "abs_sum": 3438480.0,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 7200.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 3438480.0,
+     "unit": "s"
+    },
+    "time_index": {
+     "abs_sum": 57308.0,
+     "dtype": "i64",
+     "finite": 954,
+     "max": 120.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 57308.0,
+     "unit": "1"
+    },
+    "total_atmospheric_attenuation_db": {
+     "abs_sum": 8293.30976923113,
+     "dtype": "f64",
+     "finite": 954,
+     "max": 63.154381784905354,
+     "min": 0.06029688737895881,
+     "nan": 0,
+     "sum": 8293.30976923113,
+     "unit": "dB"
+    }
+   },
+   "rows": 954
+  },
+  "satellites": {
+   "column_order": [
+    "index",
+    "name",
+    "norad_id",
+    "epoch_utc",
+    "max_abs_element_age_days"
+   ],
+   "columns": {
+    "epoch_utc": {
+     "dtype": "str",
+     "sha256": "d3ba017c69af7e47f190b1a771d27186934197e863d5a818271bb6fd9ddd3154",
+     "unit": ""
+    },
+    "index": {
+     "abs_sum": 3160.0,
+     "dtype": "i64",
+     "finite": 80,
+     "max": 79.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 3160.0,
+     "unit": "1"
+    },
+    "max_abs_element_age_days": {
+     "abs_sum": 10.295986916666667,
+     "dtype": "f64",
+     "finite": 80,
+     "max": 0.6786224033333333,
+     "min": 0.04188816,
+     "nan": 0,
+     "sum": 10.295986916666667,
+     "unit": "d"
+    },
+    "name": {
+     "dtype": "str",
+     "sha256": "e535f4fa8be9d8b6b092bbb039363ff14931b57562ad07fd4a1cd26720373b03",
+     "unit": ""
+    },
+    "norad_id": {
+     "abs_sum": 3516205.0,
+     "dtype": "i64",
+     "finite": 80,
+     "max": 56730.0,
+     "min": 41917.0,
+     "nan": 0,
+     "sum": 3516205.0,
+     "unit": "1"
+    }
+   },
+   "rows": 80
+  },
+  "station_metrics": {
+   "column_order": [
+    "station_index",
+    "name",
+    "visible_fraction",
+    "rf_usable_fraction",
+    "best_link_integrated_bits",
+    "best_link_handovers",
+    "best_link_mean_rate_bps",
+    "fixed_capacity_integrated_bits"
+   ],
+   "columns": {
+    "best_link_handovers": {
+     "abs_sum": 26.0,
+     "dtype": "i64",
+     "finite": 4,
+     "max": 25.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 26.0,
+     "unit": "1"
+    },
+    "best_link_integrated_bits": {
+     "abs_sum": 4814402077.480861,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 3825752800.2910876,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 4814402077.480861,
+     "unit": "bit"
+    },
+    "best_link_mean_rate_bps": {
+     "abs_sum": 668666.9552056752,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 531354.5555959844,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 668666.9552056752,
+     "unit": "bit/s"
+    },
+    "fixed_capacity_integrated_bits": {
+     "abs_sum": 63423961895.73432,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 16042492800.0,
+     "min": 15551640034.42553,
+     "nan": 0,
+     "sum": 63423961895.73432,
+     "unit": "bit"
+    },
+    "name": {
+     "dtype": "str",
+     "sha256": "7a87ec082520cc4c6b6b18cb8397bba86bef3cfd3833b2166c5cd9841561479c",
+     "unit": ""
+    },
+    "rf_usable_fraction": {
+     "abs_sum": 1.157130893355853,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 0.9129320762215629,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 1.157130893355853,
+     "unit": "1"
+    },
+    "station_index": {
+     "abs_sum": 6.0,
+     "dtype": "i64",
+     "finite": 4,
+     "max": 3.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 6.0,
+     "unit": "1"
+    },
+    "visible_fraction": {
+     "abs_sum": 3.953497918710883,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 1.0,
+     "min": 0.9694029617657381,
+     "nan": 0,
+     "sum": 3.953497918710883,
+     "unit": "1"
+    }
+   },
+   "rows": 4
+  },
+  "stations": {
+   "column_order": [
+    "index",
+    "name",
+    "latitude_deg",
+    "longitude_deg",
+    "height_ellipsoid_m",
+    "height_amsl_m",
+    "minimum_elevation_deg",
+    "terminal",
+    "x_ecef_m",
+    "y_ecef_m",
+    "z_ecef_m"
+   ],
+   "columns": {
+    "height_amsl_m": {
+     "abs_sum": 3500.0,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 2850.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 3500.0,
+     "unit": "m"
+    },
+    "height_ellipsoid_m": {
+     "abs_sum": 3500.0,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 2850.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 3500.0,
+     "unit": "m"
+    },
+    "index": {
+     "abs_sum": 6.0,
+     "dtype": "i64",
+     "finite": 4,
+     "max": 3.0,
+     "min": 0.0,
+     "nan": 0,
+     "sum": 6.0,
+     "unit": "1"
+    },
+    "latitude_deg": {
+     "abs_sum": 111.5988,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 69.6492,
+     "min": -0.1807,
+     "nan": 0,
+     "sum": 111.2374,
+     "unit": "deg"
+    },
+    "longitude_deg": {
+     "abs_sum": 204.9467,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 103.8198,
+     "min": -78.4678,
+     "nan": 0,
+     "sum": 40.603500000000004,
+     "unit": "deg"
+    },
+    "minimum_elevation_deg": {
+     "abs_sum": 40.0,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 10.0,
+     "min": 10.0,
+     "nan": 0,
+     "sum": 40.0,
+     "unit": "deg"
+    },
+    "name": {
+     "dtype": "str",
+     "sha256": "7a87ec082520cc4c6b6b18cb8397bba86bef3cfd3833b2166c5cd9841561479c",
+     "unit": ""
+    },
+    "terminal": {
+     "dtype": "str",
+     "sha256": "d3a4d0d59a372b63a6b0cbc50437b7a97b70d8a7172e753dcdb5fec86b7289df",
+     "unit": ""
+    },
+    "x_ecef_m": {
+     "abs_sum": 9755980.219405495,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 4853167.141145641,
+     "min": -1523118.1163436742,
+     "nan": 0,
+     "sum": 6709743.986718146,
+     "unit": "m"
+    },
+    "y_ecef_m": {
+     "abs_sum": 13480729.526342629,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 6191788.413452174,
+     "min": -6252139.976953998,
+     "nan": 0,
+     "sum": 348122.64750641095,
+     "unit": "m"
+    },
+    "z_ecef_m": {
+     "abs_sum": 10240777.809608027,
+     "dtype": "f64",
+     "finite": 4,
+     "max": 5957542.4933915,
+     "min": -19989.727526491984,
+     "nan": 0,
+     "sum": 10200798.354555044,
+     "unit": "m"
+    }
+   },
+   "rows": 4
+  }
+ }
+}

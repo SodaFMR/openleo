@@ -1,30 +1,82 @@
 {
+  "schema": "openleo.scenario/2",
   "name": "iss-cartagena-s-band-free-space",
-  "orbit": {
-    "path": "../data/iss_2026-08-30.csv",
-    "source_url": "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=CSV",
-    "retrieved_at_utc": "2026-08-30T22:01:11Z",
-    "terms_url": "https://celestrak.org/usage-policy.php",
-    "sha256": "ddb21d9a4a3a4812ee397751555b9d55d2767f30c33190afba90e4bbb8db13f9"
-  },
-  "ground_station": {
-    "name": "Cartagena",
-    "latitude_deg": 37.6057,
-    "longitude_deg": -0.9913,
-    "height_m": 20.0
-  },
-  "time_window": {
+  "description": "Upgraded from an OpenLEO 1.x single-pass scenario by `openleo scenario upgrade`. Upgrade defaults, not OpenLEO 1.x inputs: adaptation dvb-s2 with the v1-reference-subset table, symbol_rate_baud = channel_bandwidth_hz / 1.2, rolloff 0.2, implementation margin 0 dB, hysteresis 0 dB and feedback delay 0 s; events enabled (tolerance 0.001 s); convergence mode warn (refinement factor 4, relative tolerance 0.01, absolute tolerance 1 bit).",
+  "time": {
     "start_utc": "2026-08-30T06:14:00Z",
     "stop_utc": "2026-08-30T06:24:00Z",
     "step_s": 10.0,
-    "minimum_elevation_deg": 10.0
+    "events": {
+      "enabled": true,
+      "tolerance_s": 0.001
+    },
+    "convergence": {
+      "mode": "warn",
+      "refinement_factor": 4,
+      "relative_tolerance": 0.01,
+      "absolute_tolerance_bits": 1.0
+    }
   },
-  "radio_link": {
+  "space_segment": {
+    "catalogs": [
+      {
+        "path": "../data/iss_2026-08-30.csv",
+        "format": "celestrak_gp_csv",
+        "source_url": "https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=CSV",
+        "retrieved_at_utc": "2026-08-30T22:01:11Z",
+        "terms_url": "https://celestrak.org/usage-policy.php",
+        "sha256": "ddb21d9a4a3a4812ee397751555b9d55d2767f30c33190afba90e4bbb8db13f9"
+      }
+    ],
+    "select_norad_ids": null,
+    "synthetic_rf": false
+  },
+  "terminals": {
+    "default": {
+      "receive_gain_dbi": 20.0,
+      "system_noise_temperature_k": 300.0,
+      "miscellaneous_loss_db": 2.0
+    }
+  },
+  "ground_segment": {
+    "default_minimum_elevation_deg": 10.0,
+    "stations": [
+      {
+        "name": "Cartagena",
+        "latitude_deg": 37.6057,
+        "longitude_deg": -0.9913,
+        "height_ellipsoid_m": 20.0,
+        "height_amsl_m": null,
+        "terminal": "default",
+        "minimum_elevation_deg": 10.0
+      }
+    ]
+  },
+  "radio": {
     "carrier_frequency_hz": 2200000000.0,
     "channel_bandwidth_hz": 1000000.0,
-    "eirp_dbw": 10.0,
-    "receiver_gain_dbi": 20.0,
-    "system_noise_temperature_k": 300.0,
-    "miscellaneous_loss_db": 2.0
+    "eirp_dbw": 10.0
+  },
+  "adaptation": {
+    "standard": "dvb-s2",
+    "table": "v1-reference-subset",
+    "symbol_rate_baud": 833333.3333333334,
+    "rolloff": 0.2,
+    "implementation_margin_db": 0.0,
+    "hysteresis_db": 0.0,
+    "feedback_delay_s": 0.0
+  },
+  "propagation": {
+    "model": "free_space",
+    "refinement": 1,
+    "hydrometeors": null
+  },
+  "network": null,
+  "outputs": {
+    "formats": [
+      "csv",
+      "olc"
+    ],
+    "satellite_positions": "grid"
   }
 }

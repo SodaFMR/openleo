@@ -1,0 +1,56 @@
+{
+  "schema": "openleo.scenario/2",
+  "name": "Minimal free-space scenario",
+  "time": {
+    "start_utc": "2026-09-10T12:00:00Z",
+    "stop_utc": "2026-09-10T12:30:00Z",
+    "step_s": 30
+  },
+  "space_segment": {
+    "catalogs": [
+      {
+        "path": "../../../../examples/data/iridium_next_2026-09-10.csv",
+        "format": "celestrak_gp_csv",
+        "source_url": "https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-NEXT&FORMAT=CSV",
+        "retrieved_at_utc": "2026-09-10T22:00:25Z",
+        "terms_url": "https://celestrak.org/usage-policy.php",
+        "sha256": "e9dac20f80bb4d0ae0090996619827aab1abf16d448ed8b0edf47b965abf6273"
+      }
+    ],
+    "synthetic_rf": false
+  },
+  "terminals": {
+    "default": {
+      "receive_gain_dbi": 20,
+      "system_noise_temperature_k": 300,
+      "miscellaneous_loss_db": 0
+    }
+  },
+  "ground_segment": {
+    "default_minimum_elevation_deg": 10,
+    "stations": [
+      {
+        "name": "Cartagena",
+        "latitude_deg": 37.6057,
+        "longitude_deg": -0.9913,
+        "height_ellipsoid_m": 20
+      }
+    ]
+  },
+  "radio": {
+    "carrier_frequency_hz": 2200000000.0,
+    "channel_bandwidth_hz": 1000000.0,
+    "eirp_dbw": 10
+  },
+  "adaptation": {
+    "standard": "dvb-s2",
+    "table": "v1-reference-subset",
+    "symbol_rate_baud": 500000.0,
+    "rolloff": 0.25,
+    "implementation_margin_db": 1,
+    "hysteresis_db": 0
+  },
+  "propagation": {
+    "model": "free_space"
+  }
+}

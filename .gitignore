@@ -14,7 +14,7 @@ htmlcov/
 !.env.example
 
 build/
-dist/
+/dist/
 *.egg-info/
 
 runs/

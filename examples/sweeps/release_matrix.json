@@ -1,0 +1,55 @@
+{
+  "schema": "openleo.sweep/2",
+  "name": "OpenLEO frozen release benchmark",
+  "base_scenario": "../constellations/iridium_global_hydrometeors.json",
+  "mode": "grid",
+  "parameters": [
+    {"path": "/radio/carrier_frequency_hz", "values": [12000000000.0, 20000000000.0]},
+    {"path": "/time/step_s", "values": [30, 60]},
+    {
+      "path": "/propagation",
+      "values": [
+        {"model": "free_space"},
+        {"model": "itu_reference", "refinement": 1, "hydrometeors": null},
+        {"model": "itu_reference", "refinement": 2, "hydrometeors": null},
+        {
+          "model": "itu_reference",
+          "refinement": 1,
+          "hydrometeors": {
+            "model": "declared_uniform_layers",
+            "stations": {
+              "Madrid": {"liquid_water_kg_m2": 0.5, "rain_rate_mm_h": 25.0, "rain_top_height_amsl_m": 5000.0, "polarization_tilt_deg": 0.0},
+              "Tromso": {"liquid_water_kg_m2": 0.0, "rain_rate_mm_h": 0.0, "rain_top_height_amsl_m": 5000.0, "polarization_tilt_deg": 90.0},
+              "Singapore": {"liquid_water_kg_m2": 1.0, "rain_rate_mm_h": 50.0, "rain_top_height_amsl_m": 5000.0, "polarization_tilt_deg": 45.0},
+              "Quito": {"liquid_water_kg_m2": 0.25, "rain_rate_mm_h": 10.0, "rain_top_height_amsl_m": 5000.0, "polarization_tilt_deg": 0.0}
+            }
+          }
+        },
+        {
+          "model": "itu_reference",
+          "refinement": 2,
+          "hydrometeors": {
+            "model": "declared_uniform_layers",
+            "stations": {
+              "Madrid": {"liquid_water_kg_m2": 0.5, "rain_rate_mm_h": 25.0, "rain_top_height_amsl_m": 5000.0, "polarization_tilt_deg": 0.0},
+              "Tromso": {"liquid_water_kg_m2": 0.0, "rain_rate_mm_h": 0.0, "rain_top_height_amsl_m": 5000.0, "polarization_tilt_deg": 90.0},
+              "Singapore": {"liquid_water_kg_m2": 1.0, "rain_rate_mm_h": 50.0, "rain_top_height_amsl_m": 5000.0, "polarization_tilt_deg": 45.0},
+              "Quito": {"liquid_water_kg_m2": 0.25, "rain_rate_mm_h": 10.0, "rain_top_height_amsl_m": 5000.0, "polarization_tilt_deg": 0.0}
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "window": {"start_offset_s": 0, "duration_s": 300},
+  "replay": {
+    "network": {
+      "loads_bps": [10000, 300000],
+      "packet_size_bytes": 1200,
+      "queue_packets": 8,
+      "flows_per_direction": 2,
+      "acquisition_delay_s": 0.1,
+      "seed": 1
+    }
+  }
+}

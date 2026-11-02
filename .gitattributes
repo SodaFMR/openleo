@@ -1,11 +1,24 @@
 # Scientific input fingerprints cover raw bytes; keep them identical on every OS.
 examples/data/** text eol=lf
 examples/scenarios/** text eol=lf
-examples/sensitivity/** text eol=lf
 examples/atmosphere/** text eol=lf
 examples/constellations/** text eol=lf
-# Preserve the exact archived CelesTrak response, including its original CRLF bytes.
+examples/performance/** text eol=lf
+examples/reproduce/** text eol=lf
+examples/sweeps/** text eol=lf
+examples/validation/** text eol=lf
+tests/fixtures/v1/**/*.json text eol=lf
+tests/fixtures/ci/** text eol=lf
+tests/scenario/fixtures/** text eol=lf
+# OLC goldens are compared byte for byte with what make_goldens.py writes (LF JSON, binary OLC).
+tests/fixtures/olc/*.json text eol=lf
+tests/fixtures/olc/*.olc binary
+# The published JSON Schema is compared byte for byte with its regenerated text.
+docs/schemas/** text eol=lf
+# Preserve the exact archived CelesTrak responses, including their original CRLF bytes.
 examples/data/iridium_next_2026-09-10.csv -text
+examples/data/starlink_2026-11-01.csv -text
+tests/fixtures/v1/examples/data/*.csv -text -whitespace
 
 # Matplotlib-generated SVG path data uses trailing spaces for line continuations.
 docs/images/*.svg -whitespace

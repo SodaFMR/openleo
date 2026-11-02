@@ -4,31 +4,36 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openleo-link"
-version = "1.0.0"
-description = "Reproducible LEO propagation, constellation and packet experiments with a scientific 3D workbench"
+version = "2.0.0.dev0"
+description = "Reproducible LEO satellite link, constellation and packet-replay studies"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.12"
 dependencies = [
-    "skyfield>=1.55",
+    # The engine's fast geometry path reads Skyfield private APIs (Timescale._utc,
+    # Time._leap_seconds); the upper pin keeps a major release from changing them unseen.
+    # tests/engine/test_timegrid.py checks the fast times bit for bit against Skyfield's public
+    # API, and tests/engine/test_geometry.py checks the geometry against the v1 Skyfield chain.
+    "skyfield>=1.55,<2",
     "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
 plot = ["matplotlib>=3.11"]
+parquet = ["pyarrow>=21"]
 
 [project.scripts]
-openleo = "openleo.cli:main"
+openleo = "openleo._launcher:main"
 
 [dependency-groups]
 dev = [
     "build>=1.3",
+    "jsonschema>=4.25",
     "pytest>=8.4",
     "pytest-cov>=6.2",
     "ruff>=0.12",
 ]
-browser = ["playwright==1.58.0"]
 
 [tool.ruff]
 target-version = "py312"
@@ -48,3 +53,9 @@ exclude = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--import-mode=importlib -m 'not slow'"
+pythonpath = ["tests/replay", "tests/app"]
+markers = [
+    "slow: long-running tests, deselected by default; run them with -m slow",
+    "benchmark: the 1000-satellite 24-hour performance acceptance (also slow); CI runs -m 'slow and not benchmark'",
+]

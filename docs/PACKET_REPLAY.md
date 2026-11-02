@@ -1,7 +1,7 @@
 # Packet replay with ns-3
 
-`openleo packet-replay` consumes one verified ground-link experiment and runs
-synthetic UDP traffic through an optional, separately built ns-3.48 backend.
+`openleo replay link` reads one station-satellite link of a saved run (a results directory) and
+runs synthetic UDP traffic through an optional, separately built ns-3.48 backend.
 The experiment uses real ns-3 IPv4/UDP sockets, point-to-point devices, event
 scheduling and finite DropTail device queues. It does not simulate TCP, multi-hop
 constellation routing, a satellite MAC, RF decoding or real operator traffic.
@@ -12,13 +12,13 @@ Build and check the pinned backend using the
 [adapter instructions](https://github.com/SodaFMR/openleo/blob/main/adapters/ns3/README.md).
 Its source is in the Git repository, not in the MIT Python distributions; it is not
 a Python dependency.
-Then generate a normal workbench bundle and select a station and satellite:
+Then save a run and select a station and satellite:
 
 ```bash
-uv run --no-dev openleo constellation \
+uv run --no-dev openleo run \
   examples/constellations/iridium_global_reference.json --output runs/packet-source
-uv run --no-dev openleo packet-replay runs/packet-source \
-  --station Madrid --norad 42960 --start-offset-s 0 --duration-s 300 \
+uv run --no-dev openleo replay link runs/packet-source \
+  --station Madrid --satellite 42960 --start-offset-s 0 --duration-s 300 \
   --offered-load-bps 100000 --packet-size-bytes 512 --queue-packets 32 \
   --backend ../ns-3.48/build/scratch/ns3.48-openleo-replay --output runs/packets
 ```
@@ -29,17 +29,23 @@ binary hash are recorded, but a version string or checksum does not authenticate
 an arbitrary executable. The command does not expose backend execution through
 the local web application.
 
-The input bundle's hashes and structure are checked before replay. A missing
-selected link is unavailable, not a link carried forward from an earlier pass.
-The requested window must lie wholly within the source experiment. Inputs and
-the original source bundle remain unchanged; completed outputs are published
-atomically and existing nonempty output directories are refused.
+The run's manifest and archived inputs are verified before replay, and the engine's geometry and
+link evaluator are rebuilt from those inputs (`openleo.replay.ReplaySource`). A link outside its
+passes is unavailable, not carried forward from an earlier pass. The requested window must lie
+wholly within the run's window. The run directory remains unchanged; completed outputs
+(`link-trace.csv`, `packets.csv`, `packet-summary.json`, `manifest.json`) are published atomically
+and existing nonempty output directories are refused. The Python entry point is
+`openleo.replay.run_packet_replay(results_dir, ReplayConfig(station_name, norad_id, ...), backend,
+output_dir)`.
 
 ## Time and service model
 
-Source states are held constant on `[t_i, t_(i+1))`. A non-sample start uses the
-state at the most recent preceding source sample. The final trace row defines the
-exclusive stop and has no duration. No intermediate orbit or RF values are invented.
+The trace rows are the window start, every breakpoint of the pair strictly inside the window
+(grid times and the pair's pass and MODCOD switch times, root-found when the run had events
+enabled) and the window stop. Each row holds the link state at its time (rate from the run's
+`rate_segments`, delay from the link evaluator) on `[t_i, t_(i+1))`; the final row defines the
+exclusive stop and has no duration. With events disabled the states are v1's sampled states.
+Breakpoints that round to the same nanosecond keep the later state.
 
 The backend uses nanosecond time and integer bit/s service rates. Positive source
 rates are rounded down to whole bit/s; propagation delays are rounded to the nearest

@@ -1,7 +1,7 @@
 # Reference atmospheric propagation
 
 OpenLEO's optional `itu_reference` model adds gaseous attenuation and a refracted
-optical-path delay to constellation ground links. It combines the global reference
+optical-path delay to satellite-to-ground links. It combines the global reference
 atmosphere in ITU-R P.835-7, radio refractivity in P.453-14, and the line-by-line
 spectrum and layered slant-path method in P.676-13. The result is an idealized
 numerical experiment under declared RF assumptions, not a local weather estimate
@@ -11,28 +11,20 @@ or validation of an operational satellite network.
 
 The complete example is
 [`iridium_global_reference.json`](../examples/constellations/iridium_global_reference.json).
-Its top-level propagation configuration is:
+Its propagation configuration is `{"model": "itu_reference", "refinement": 1,
+"hydrometeors": null}`, and every station declares both heights:
 
 ```json
-{
-  "propagation": {
-    "model": "itu_reference",
-    "station_heights_amsl_m": {
-      "Madrid": 650.0,
-      "Tromso": 0.0,
-      "Singapore": 0.0,
-      "Quito": 2850.0
-    },
-    "refinement": 1
-  }
-}
+{"name": "Quito", "latitude_deg": -0.1807, "longitude_deg": -78.4678,
+ "height_ellipsoid_m": 2850.0, "height_amsl_m": 2850.0, "terminal": "default",
+ "minimum_elevation_deg": 10.0}
 ```
 
-Every configured station must appear exactly once in `station_heights_amsl_m`.
-These values are explicit geometric heights above mean sea level (AMSL), in
-metres. Station `height_m` remains the WGS84 ellipsoid height used for orbital
-geometry. No geoid model or automatic conversion connects the two fields; equal
-example values are declared assumptions, not a measured height conversion.
+Under `itu_reference` every station needs `height_amsl_m`, an explicit geometric height above
+mean sea level in metres (v1's `propagation.station_heights_amsl_m`). `height_ellipsoid_m`
+remains the WGS84 ellipsoid height used for orbital geometry. No geoid model or automatic
+conversion connects the two fields; equal example values are declared assumptions, not a
+measured height conversion.
 
 | Input or calculation | Supported domain |
 | --- | --- |
@@ -43,7 +35,7 @@ example values are declared assumptions, not a measured height conversion.
 | Direct slant-path column | `0 <= lower_height_km < upper_height_km <= 100` |
 | Direct apparent elevation | 0–90 degrees inclusive |
 | Ground endpoint solve | Geometric elevation 5–90 degrees; positive chord range; endpoint above 100 km |
-| Layer refinement | Integer 1, 2, or 4; a study starts at 1 or 2 |
+| Layer refinement | Integer 1, 2, or 4 |
 
 Inputs must be finite numbers, and booleans are rejected as numeric inputs.
 Invalid ascending rays, including an inverse-sine argument above one, raise an
@@ -143,8 +135,21 @@ r_t=\sqrt{r_0^2+s^2+2r_0s\sin E_g},\qquad
 $$
 
 where $r_0=R+h_{\rm AMSL}$ and all lengths in these equations use km.
-It solves $E_a\in[E_g,90^\circ]$ by bounded bisection so that the layered ray's
-central angle plus its vacuum continuation above 100 km equals $\theta_t$.
+It solves for $E_a\in[E_g,90^\circ]$ such that the layered ray's central angle plus its
+vacuum continuation above 100 km equals $\theta_t$.
+
+v1.0.0 solves this equation by 40 bisection steps on $[E_g,90^\circ]$, which leaves $E_a$
+within about $4\times10^{-11}$ degrees; that scalar kernel is kept as the test oracle. The 2.0
+engine's array kernel solves the same equation by a safeguarded Newton iteration on $E_a$, with
+the endpoint angle's analytic derivative $\sum_i d\arcsin(K/s_i)/dK = \sum_i 1/\sqrt{s_i^2-K^2}$
+over the layers ($K=n_0r_0\cos E_a$). A bracket is kept from the residual's sign, a step that
+leaves it is replaced by bisection, and a row stops once a step is at most $10^{-11}$ degrees.
+Convergence is quadratic (three or four trace evaluations instead of 41), and the result is within
+the residual's rounding floor (about $10^{-12}$ degrees) of the root, closer than the bisection.
+The kernel equivalence tests hold at 12, 20 and 30 GHz (1e-10 dB, 1e-9 deg, 1e-13 s against the
+scalar kernel). Above about 50 GHz, where the loss is large and steep near 5 degrees, the gaseous
+loss of a sample can differ from v1's by more than 1e-10 dB, because v1's bisection is the less
+precise solve ([Migration](MIGRATION.md)).
 The vacuum contribution is $\arcsin(K/r_{\rm top})-\arcsin(K/r_t)$.
 An endpoint solver therefore requires a full column ending at 100 km; a partial
 column ending at 8 km cannot be followed by an assumed vacuum segment.
@@ -163,8 +168,8 @@ excess and the bent ray's extra geometric distance. It uses P.453's
 near molecular lines. The total ground-link delay is $s/c+\Delta\tau$.
 
 The mean-sphere endpoint construction approximates the WGS84 topocentric geometry.
-It does not replace SGP4 propagation, the geometric elevation visibility mask,
-sampled contact boundaries, or geometric range-rate Doppler. Apparent elevation is
+It does not replace SGP4 propagation, the geometric elevation visibility mask, contact
+boundaries (root-found on the geometric elevation), or geometric range-rate Doppler. Apparent elevation is
 reported separately and does not extend a contact's visible interval.
 
 ## Link-budget effects and controlled study
@@ -191,44 +196,27 @@ Inter-satellite links retain their declared capacity and geometric delay. Rates 
 integrated reference bits remain model outputs without scheduling, protocol
 overhead, or measured-throughput interpretation.
 
-Run the three-case study with the same orbit, station geometry, time grid, RF,
-adaptation, and routing assumptions:
+Compare free space, the reference grid and a refined layer grid with the same orbit, station
+geometry, time grid, RF, adaptation and routing assumptions as a sweep, for example
+`examples/sweeps/propagation_cases.json` (free space, reference gases, declared hydrometeors) or a
+`variants` sweep that patches `/propagation/refinement`:
 
 ```bash
-uv run openleo propagation-study \
-  examples/constellations/iridium_global_reference.json \
-  --output runs/reference-propagation
+uv run openleo sweep examples/sweeps/propagation_cases.json --output runs/propagation-cases
 ```
 
-The cases are `free_space`, `reference`, and `refined`. `reference` uses the
-configuration's refinement; `refined` doubles it, so studies must start at 1 or 2.
-The output directory contains a complete workbench bundle per case,
-`propagation-study.json`, and `comparison.csv`. The summary records per-case
-configurations and fingerprints, statistics, and maximum differences in gaseous
-loss, apparent elevation, and excess delay, plus MODCOD disagreements between
-the two atmospheric grids. These differences describe numerical discretization;
-they are not measurement errors, uncertainty intervals, or service probabilities.
-
-The optional figure requires the `plot` extra:
-
-```bash
-uv run --extra plot openleo propagation-study \
-  examples/constellations/iridium_global_reference.json \
-  --output runs/reference-propagation \
-  --figure runs/reference-propagation/overview.svg
-```
-
-The cross-platform figure check requires identical SVG structure, labels, styling
-and non-marker attributes, with an absolute tolerance of 0.001 SVG point for marker
-coordinates. This accommodates invisible floating-point rendering differences;
-scientific outputs are not rounded or altered for the figure check.
+Every run is a complete results directory, and `comparisons.csv` holds the deterministic
+differences per metric. Layer-grid differences describe numerical discretization; they are not
+measurement errors, uncertainty intervals or service probabilities.
 
 ## Numerical checks and source provenance
 
 The complete bundled example covers 80 archived objects and 121 samples over two
 hours at 12 GHz, with 954 above-mask ground-link samples. Its base-grid gaseous
 loss ranges from 0.02736 to 0.33312 dB; atmospheric excess delay ranges from
-5.568 to 44.506 ns. The controlled study produces:
+5.568 to 44.506 ns. OpenLEO v1.0.0's controlled study (sample-held integrals, which the 2.0
+engine reproduces exactly with events disabled; [Migration](MIGRATION.md) lists the events-on
+values) produced:
 
 | Station | Free-space best-link Gbit | Reference-atmosphere Gbit | Refined-grid Gbit |
 | --- | ---: | ---: | ---: |
@@ -242,8 +230,6 @@ apparent elevation by $6.1053\times10^{-5}$ degrees, and excess delay by
 $2.5094\times10^{-13}$ s. No reference MODCOD selections differ between the two
 atmospheric grids. These are model-derived results for the declared example,
 not measured throughput or general evidence of discretization error bounds.
-The study command above regenerates the table and
-[comparison figure](images/reference-propagation-ablation.svg).
 
 The path tests compare the following literal official-workbook cases, using the
 normalized equation-(16) grid, 28 GHz, lower height 1.3 km AMSL, and apparent
@@ -292,8 +278,8 @@ relative tolerance `5e-13`; temperature and total/dry pressure also allow an
 absolute floor of `1e-12` in their respective units. Density and vapour pressure
 have no absolute tolerance floor, and refractive index uses absolute tolerance
 `3e-16`. The executable references are
-[`test_reference_atmosphere.py`](../tests/test_reference_atmosphere.py) and
-[`test_atmospheric_path.py`](../tests/test_atmospheric_path.py).
+[`test_reference_atmosphere.py`](../tests/physics/test_reference_atmosphere.py) and
+[`test_atmospheric_path.py`](../tests/physics/test_atmospheric_path.py).
 
 The official workbook is
 [`CG-3M3J-13-ValEx-Rev8.3.0.xlsx`](https://www.itu.int/en/ITU-R/study-groups/rsg3/rwp3m/Validation%20Example/CG-3M3J-13-ValEx-Rev8.3.0.xlsx),

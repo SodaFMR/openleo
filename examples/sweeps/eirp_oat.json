@@ -1,0 +1,9 @@
+{
+  "schema": "openleo.sweep/2",
+  "name": "ISS pass: one-at-a-time EIRP sensitivity",
+  "base_scenario": "../scenarios/iss_cartagena.json",
+  "mode": "oat",
+  "parameters": [
+    {"path": "/radio/eirp_dbw", "values": [7.0, 10.0, 13.0], "nominal": 10.0}
+  ]
+}

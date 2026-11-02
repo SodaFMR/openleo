@@ -1,20 +1,16 @@
 # Coupled declared hydrometeors
 
 An optional `propagation.hydrometeors` object couples fixed, explicitly declared
-cloud and rain losses into the constellation radio budget. Omission preserves
-gas-only schema 2; omission of propagation preserves free-space schema 1.
-Hydrometeors produce schema 3. This is a deterministic sensitivity experiment,
+cloud and rain losses into the link budget of every station. It requires
+`propagation.model = "itu_reference"`. This is a deterministic sensitivity experiment,
 not inferred local weather, measured link performance or P.618 exceedance statistics.
-
-The legacy `propagation-study` and `fidelity-study` workflows retain their gas-only
-reference/refinement scope and reject declared hydrometeors before computing
-cases or creating output. Use an integrated experiment for coupled hydrometeor
-comparisons, including declarations with zero rain and cloud amounts.
+Compare it with the gas-only and free-space cases in one sweep, for example
+`examples/sweeps/propagation_cases.json`; declarations with zero rain and cloud amounts are
+allowed.
 
 ```json
 {
   "model": "itu_reference",
-  "station_heights_amsl_m": {"Source": 650.0, "Target": 0.0},
   "refinement": 1,
   "hydrometeors": {
     "model": "declared_uniform_layers",
@@ -28,15 +24,16 @@ comparisons, including declarations with zero rain and cloud amounts.
 }
 ```
 
-Every configured station must appear exactly once. Unknown or missing keys,
+Every ground station must appear exactly once in `hydrometeors.stations`, and its
+`height_amsl_m` (in `ground_segment.stations`) is the station height the layer geometry uses. Unknown or missing keys,
 duplicate JSON names, non-numeric or non-finite values, booleans and out-of-domain
 inputs are rejected. Public configuration dataclasses and their station tuples
 are immutable. States stay constant throughout the run.
 
 The supported intersection of the gaseous and cloud domains is 1–200 GHz and
 geometric elevation 5–90 degrees. Liquid water and rain rate are non-negative;
-polarization tilt is 0–180 degrees. Station heights use the existing independent
-AMSL map, 0–10000 m, rather than station WGS84 ellipsoid height. Rain-top height is
+polarization tilt is 0–180 degrees. Station heights are the stations' `height_amsl_m`,
+0–10000 m, not their WGS84 `height_ellipsoid_m`. Rain-top height is
 between the station AMSL height and 20000 m inclusive. Arithmetic overflow is an
 error. No rain-top height or water amount is inferred.
 
@@ -73,11 +70,11 @@ Es/N0, Shannon upper-bound calculation and MODCOD selection. Zero declared
 hydrometeors exactly reproduce all legacy gas-only link values. Receiver noise
 temperature stays fixed; atmospheric emission is omitted. Delay retains the
 existing geometric and reference gaseous excess delays. Hydrometeors do not
-change visibility, Doppler, apparent elevation or contact sampling.
+change visibility, Doppler, apparent elevation or contact boundaries.
 
-## Portable schema 3
+## Result fields
 
-Schema 3 retains every schema 2 field and appends:
+With hydrometeors, the `samples` table carries, after the gas fields:
 
 | Field | Unit |
 | --- | --- |
@@ -88,14 +85,9 @@ Schema 3 retains every schema 2 field and appends:
 | `hydrometeor_attenuation_db` | dB |
 | `total_atmospheric_attenuation_db` | dB |
 
-Propagation metadata declares state, sources, pinned source hashes, domain,
-geometry, units and coupling assumptions. Python bundle readers validate the
-schema/configuration pairing, metadata, shell path, attenuation sums, dB/km to dB
-conversion, CN0/SNR/EsN0 and delay relations, along with existing bundle hashes
-and canonical scenario hashes when supplied. These are artifact consistency
-checks; readers do not rerun orbit or atmospheric models. CSV exports carry all
-schema 3 fields. Snapshot network routing consumes the corrected rate and
-unchanged delay using its existing algorithms.
+`results.json` records the P.838-3 and P.840-9 sources and pinned hashes under `models`, and the
+declared states in the normalised scenario. The MODCOD state machine, the Shannon integrand and
+snapshot routing all use the corrected budget; delays are unchanged by hydrometeors.
 
 `examples/constellations/iridium_global_hydrometeors.json` declares synthetic
 conditions, including a dry station, for the archived global geometry. Its

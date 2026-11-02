@@ -1,0 +1,43 @@
+{
+  "name": "Global LEO reference experiment",
+  "orbit": {
+    "path": "../data/iridium_next_2026-09-10.csv",
+    "source_url": "https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-NEXT&FORMAT=CSV",
+    "retrieved_at_utc": "2026-09-10T22:00:25Z",
+    "terms_url": "https://celestrak.org/usage-policy.php",
+    "sha256": "e9dac20f80bb4d0ae0090996619827aab1abf16d448ed8b0edf47b965abf6273"
+  },
+  "stations": [
+    {"name": "Madrid", "latitude_deg": 40.4168, "longitude_deg": -3.7038, "height_m": 650.0},
+    {"name": "Tromso", "latitude_deg": 69.6492, "longitude_deg": 18.9553, "height_m": 0.0},
+    {"name": "Singapore", "latitude_deg": 1.3521, "longitude_deg": 103.8198, "height_m": 0.0},
+    {"name": "Quito", "latitude_deg": -0.1807, "longitude_deg": -78.4678, "height_m": 2850.0}
+  ],
+  "time_window": {
+    "start_utc": "2026-09-10T12:00:00Z",
+    "stop_utc": "2026-09-10T14:00:00Z",
+    "step_s": 60.0,
+    "minimum_elevation_deg": 10.0
+  },
+  "radio_link": {
+    "carrier_frequency_hz": 12000000000.0,
+    "channel_bandwidth_hz": 1200000.0,
+    "eirp_dbw": 15.0,
+    "receiver_gain_dbi": 20.0,
+    "system_noise_temperature_k": 300.0,
+    "miscellaneous_loss_db": 2.0
+  },
+  "adaptation": {
+    "symbol_rate_baud": 1000000.0,
+    "rolloff": 0.2,
+    "implementation_margin_db": 2.0,
+    "hysteresis_db": 0.5
+  },
+  "network": {
+    "source_station": "Madrid",
+    "target_station": "Tromso",
+    "isl_max_range_m": 5000000.0,
+    "isl_capacity_bps": 1000000000.0,
+    "fixed_capacity_bps": 2228124.0
+  }
+}
